@@ -2,23 +2,23 @@
 // Run `./scripts/rebrand.sh <NEW_NAME>` to regenerate.
 
 export const BRAND = {
-  name: "MATERIA",
-  slug: "materia",
-  display: "MATERIA",
+  name: "GAMBIT",
+  slug: "gambit",
+  display: "GAMBIT",
   tagline: "The ControlCenter where you equip the Eidolons.",
   ffOrigin: "FF7 — orbs slotted into equipment for abilities and summons",
   github: {
     org: "Rynaro",
-    repo: "MATERIA",
-    url: "https://github.com/Rynaro/MATERIA",
+    repo: "GAMBIT",
+    url: "https://github.com/Rynaro/GAMBIT",
   },
-  bundleId: "dev.eidolons.materia",
-  homebrewTap: "rynaro/materia",
-  domain: "materia.eidolons.dev",
+  bundleId: "dev.eidolons.gambit",
+  homebrewTap: "rynaro/gambit",
+  domain: "gambit.eidolons.dev",
   lineage: {
     agents: "Eidolons",
     harness: "Junction",
-    controlCenter: "MATERIA",
+    controlCenter: "GAMBIT",
   },
 } as const;
 

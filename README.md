@@ -1,22 +1,22 @@
-# MATERIA
+# GAMBIT
 
 **The ControlCenter where you equip the Eidolons.**
 
-MATERIA completes the Final Fantasy lineage in the Eidolons ecosystem:
+GAMBIT completes the Final Fantasy lineage in the Eidolons ecosystem:
 
 | Layer | Name | FF source | What it does |
 |---|---|---|---|
 | **Agents** | [Eidolons](https://github.com/Rynaro/eidolons) | FF4/9/13/16 — summoned spirits | The roster of AI agents (ATLAS, SPECTRA, APIVR-Δ, IDG, FORGE, VIGIL) |
 | **Runtime harness** | [Junction](https://github.com/Rynaro/Junction) | FF8 — GF junction system | In-process MCP harness for plans, reasoning, verification |
-| **ControlCenter** | **MATERIA** | FF7 — orbs slotted into equipment for abilities and summons | Desktop app that equips Eidolons into projects, watches drift, streams sync |
+| **ControlCenter** | **GAMBIT** | FF7 — orbs slotted into equipment for abilities and summons | Desktop app that equips Eidolons into projects, watches drift, streams sync |
 
-*Eidolons answer the call. Junction is where they bind. MATERIA is where you equip them.*
+*Eidolons answer the call. Junction is where they bind. GAMBIT is where you equip them.*
 
 ---
 
-## What MATERIA does
+## What GAMBIT does
 
-MATERIA is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + Vite. It reads your `eidolons.yaml` / `eidolons.lock` / `.eidolons/*/install.manifest.json`, watches them for drift, streams `sync` / `upgrade` / `doctor` output into polished log panes, and stays out of your way with a ⌘K-spined power surface.
+GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + Vite. It reads your `eidolons.yaml` / `eidolons.lock` / `.eidolons/*/install.manifest.json`, watches them for drift, streams `sync` / `upgrade` / `doctor` output into polished log panes, and stays out of your way with a ⌘K-spined power surface.
 
 The primary verb is **equip** — slot Eidolons into your project the way FF7's materia menu is where you slot summon orbs into your party's equipment.
 

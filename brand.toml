@@ -5,24 +5,24 @@
 # this one and run the rebrand script.
 
 [identity]
-name = "MATERIA"                    # marque, all-caps, used in display
-slug = "materia"                    # lowercase, used in paths and binary names
-display = "MATERIA"                 # user-facing label (may differ from name later)
+name = "GAMBIT"                    # marque, all-caps, used in display
+slug = "gambit"                    # lowercase, used in paths and binary names
+display = "GAMBIT"                 # user-facing label (may differ from name later)
 tagline = "The ControlCenter where you equip the Eidolons."
 ff_origin = "FF7 — orbs slotted into equipment for abilities and summons"
 
 [publishing]
 github_org = "Rynaro"
-github_repo = "MATERIA"
-bundle_id = "dev.eidolons.materia"
-homebrew_tap = "rynaro/materia"
-domain = "materia.eidolons.dev"
+github_repo = "GAMBIT"
+bundle_id = "dev.eidolons.gambit"
+homebrew_tap = "rynaro/gambit"
+domain = "gambit.eidolons.dev"
 
 [lineage]
 agents_layer = "Eidolons"
 harness_layer = "Junction"
-controlcenter_layer = "MATERIA"
+controlcenter_layer = "GAMBIT"
 
 [fallback]
-runner_up = "MAGICITE"
+runner_up = "MATERIA"  # previous: MAGICITE
 runner_up_origin = "FF6 — Esper shards equipped to characters"

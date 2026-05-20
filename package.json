@@ -1,7 +1,7 @@
 {
-  "name": "materia",
+  "name": "gambit",
   "version": "0.0.1",
-  "productName": "MATERIA",
+  "productName": "GAMBIT",
   "private": true,
   "packageManager": "pnpm@10.11.0",
   "scripts": {

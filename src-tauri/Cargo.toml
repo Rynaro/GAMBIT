@@ -1,5 +1,5 @@
 [package]
-name = "materia"
+name = "gambit"
 version = "0.0.1"
 edition = "2021"
 description = "MATERIA — The ControlCenter where you equip the Eidolons."
