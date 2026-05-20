@@ -162,11 +162,12 @@ else
 fi
 
 # ---- Patch src-tauri/tauri.conf.json ----
+# Updates productName, identifier, mainBinaryName, and every app.windows[].title.
 if command -v jq > /dev/null 2>&1; then
   jq --arg product "$NEW_NAME" \
      --arg identifier "$new_bundle_id" \
      --arg binary "$new_slug" \
-    '.productName = $product | .identifier = $identifier | .mainBinaryName = $binary' \
+    '.productName = $product | .identifier = $identifier | .mainBinaryName = $binary | (.app.windows // []) |= (map(.title = $product))' \
     src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
   mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
 else
@@ -174,8 +175,17 @@ else
     -e "s/\"productName\": *\"${OLD_NAME}\"/\"productName\": \"${NEW_NAME}\"/" \
     -e "s/\"identifier\": *\"dev\.eidolons\.${old_slug}\"/\"identifier\": \"${new_bundle_id}\"/" \
     -e "s/\"mainBinaryName\": *\"${old_slug}\"/\"mainBinaryName\": \"${new_slug}\"/" \
+    -e "s/\"title\": *\"${OLD_NAME}\"/\"title\": \"${NEW_NAME}\"/g" \
     src-tauri/tauri.conf.json
   rm -f src-tauri/tauri.conf.json.bak
+fi
+
+# ---- Patch index.html <title> ----
+if [ -f index.html ]; then
+  sed -i.bak \
+    -e "s/<title>${OLD_NAME}/<title>${NEW_NAME}/g" \
+    index.html
+  rm -f index.html.bak
 fi
 
 # ---- Patch src-tauri/Cargo.toml ----
@@ -209,7 +219,8 @@ git add \
   src-tauri/tauri.conf.json \
   src-tauri/Cargo.toml \
   README.md \
-  CHANGELOG.md
+  CHANGELOG.md \
+  index.html
 
 printf '[rebrand] done. Review with `git diff --staged` and commit when satisfied.\n'
 git diff --stat --staged
