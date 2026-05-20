@@ -19,9 +19,6 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false
-        // TODO(v0.1): add vibrancy once tauri-plugin-window-vibrancy is wired:
-        // "vibrancy": "sidebar"  — macOS .sidebar NSVisualEffectView material
-        // "transparent": true    — required for vibrancy to render correctly
       }
     ]
   },
