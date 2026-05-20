@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MATERIA",
+  "identifier": "dev.eidolons.materia",
+  "mainBinaryName": "materia",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MATERIA",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+        // TODO(v0.1): add vibrancy once tauri-plugin-window-vibrancy is wired:
+        // "vibrancy": "sidebar"  — macOS .sidebar NSVisualEffectView material
+        // "transparent": true    — required for vibrancy to render correctly
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": ["resources/*"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null,
+      "targets": ["dmg", "app"]
+    },
+    "linux": {
+      "targets": ["appimage", "deb"]
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "targets": ["msi"]
+    }
+  }
+}

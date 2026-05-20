@@ -1,0 +1,7 @@
+# cli.pin.toml — pinned eidolons CLI version bundled inside MATERIA.
+# This file is read by scripts/fetch-cli.sh (build-time) and verified by
+# the Rust extractor on first launch. The SHA must match the downloaded tarball.
+# Update this file in lockstep with nexus CLI releases.
+[eidolons-cli]
+version = "1.3.0"
+sha256 = "PLACEHOLDER_FILL_AT_FIRST_RELEASE"

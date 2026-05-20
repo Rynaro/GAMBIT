@@ -1,0 +1,28 @@
+# brand.toml — the single source of truth for project identity.
+# All other identity-bearing files (tauri.conf.json, package.json, Cargo.toml,
+# src/lib/brand.ts, src-tauri/src/brand.rs, README.md headings) derive from
+# this file via scripts/rebrand.sh. Do not edit those files by hand; edit
+# this one and run the rebrand script.
+
+[identity]
+name = "MATERIA"                    # marque, all-caps, used in display
+slug = "materia"                    # lowercase, used in paths and binary names
+display = "MATERIA"                 # user-facing label (may differ from name later)
+tagline = "The ControlCenter where you equip the Eidolons."
+ff_origin = "FF7 — orbs slotted into equipment for abilities and summons"
+
+[publishing]
+github_org = "Rynaro"
+github_repo = "MATERIA"
+bundle_id = "dev.eidolons.materia"
+homebrew_tap = "rynaro/materia"
+domain = "materia.eidolons.dev"
+
+[lineage]
+agents_layer = "Eidolons"
+harness_layer = "Junction"
+controlcenter_layer = "MATERIA"
+
+[fallback]
+runner_up = "MAGICITE"
+runner_up_origin = "FF6 — Esper shards equipped to characters"

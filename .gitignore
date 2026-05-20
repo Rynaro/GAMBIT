@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.DS_Store
+src-tauri/target/
+src-tauri/gen/
+.env
+.env.*
+!.env.example
+*.log
+/coverage/
+/.vite/

@@ -1,0 +1,40 @@
+name: CLI pin check
+
+on:
+  push:
+    paths:
+      - "src-tauri/cli.pin.toml"
+  pull_request:
+    paths:
+      - "src-tauri/cli.pin.toml"
+
+jobs:
+  verify-pin:
+    name: Verify CLI pin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read pin
+        id: pin
+        run: |
+          version=$(grep '^version' src-tauri/cli.pin.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+          sha=$(grep '^sha256' src-tauri/cli.pin.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Check pin is not placeholder
+        run: |
+          sha="${{ steps.pin.outputs.sha256 }}"
+          if [ "$sha" = "PLACEHOLDER_FILL_AT_FIRST_RELEASE" ]; then
+            echo "INFO: cli.pin.toml SHA is still a placeholder — skipping download verification."
+            echo "TODO: once the first real release is cut, replace PLACEHOLDER_FILL_AT_FIRST_RELEASE"
+            echo "      with the actual SHA-256 of the eidolons CLI tarball at version ${{ steps.pin.outputs.version }}."
+            exit 0
+          fi
+          # TODO(v0.1): download the tarball and verify SHA
+          # curl -fsSL "https://github.com/Rynaro/eidolons/releases/download/v${version}/eidolons-linux-x86_64.tar.gz" -o /tmp/eidolons.tar.gz
+          # actual_sha=$(sha256sum /tmp/eidolons.tar.gz | awk '{print $1}')
+          # if [ "$actual_sha" != "$sha" ]; then echo "SHA mismatch!"; exit 1; fi
+          echo "TODO: verify pin matches downloaded tarball SHA (logic ships with bundled-CLI feature in v0.1)"

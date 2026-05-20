@@ -1,0 +1,247 @@
+/* global.css — MATERIA design system.
+   Dark-mode-first. All token values mirror src/lib/theme.ts.
+   Do not hard-code colors in components; use these variables. */
+
+/* ---- CSS Reset ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ---- Design tokens — dark mode (default) ---- */
+:root {
+  /* Background */
+  --bg-canvas: #15131a;
+  --bg-surface: #1c1a22;
+  --bg-surface-raised: #241f2c;
+
+  /* Border */
+  --border-subtle: #2e2937;
+
+  /* Text */
+  --text-primary: #eee9f3;
+  --text-secondary: #a39bae;
+  --text-muted: #6e6679;
+
+  /* Accent */
+  --accent-primary: #a87cff;
+  --accent-gradient: linear-gradient(135deg, #a87cff 0%, #5ee3d1 100%);
+  --accent-secondary-amber: #ffb86b;
+
+  /* Status */
+  --status-ok: #5ee3d1;
+  --status-warn: #f2c879;
+  --status-error: #ff7a8a;
+
+  /* Sidebar */
+  --sidebar-bg: #1a1722;
+  --sidebar-width: 220px;
+
+  /* Typography */
+  --font-ui: -apple-system, ui-sans-serif, Inter, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* Spacing */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+
+  /* Radii */
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-sheet: 14px;
+  --radius-modal: 20px;
+  --radius-pill: 999px;
+
+  /* Motion */
+  --motion-entry: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-micro: 120ms;
+  --duration-panel: 220ms;
+  --duration-sheet: 320ms;
+}
+
+/* ---- Light mode ---- */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-canvas: #fbf7f2;
+    --bg-surface: #ffffff;
+    --bg-surface-raised: #f0ebe6;
+    --border-subtle: #ddd8d0;
+    --text-primary: #1a1520;
+    --text-secondary: #5a5060;
+    --text-muted: #9a95a0;
+    --sidebar-bg: #f4efe8;
+  }
+}
+
+/* ---- Base ---- */
+html,
+body {
+  height: 100%;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+}
+
+/* ---- App shell layout ---- */
+.app-shell {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100%;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sidebar-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.sidebar-tagline {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5) 0;
+}
+
+.sidebar-destinations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background-color: var(--border-subtle);
+  margin: var(--space-4) 0;
+}
+
+.sidebar-destination {
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-destination:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.sidebar-destination[data-active="true"] {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+  border-left: 2px solid var(--accent-primary);
+  padding-left: calc(var(--space-5) - 2px);
+}
+
+/* ---- Main pane ---- */
+.main-pane {
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+  background-color: var(--bg-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-9);
+}
+
+/* ---- Welcome state ---- */
+.welcome-state {
+  max-width: 520px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.welcome-heading {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.welcome-lineage {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.welcome-footer {
+  margin-top: var(--space-4);
+}
+
+.welcome-ff-origin {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  display: inline-block;
+}
