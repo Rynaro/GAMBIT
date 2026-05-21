@@ -3,8 +3,14 @@
   "message_id": "c8a645f9-c37c-4508-a22d-ee808e0f4a18",
   "thread_id": "f9b16f50-bc88-436f-b7ba-8b0f0643af4a",
   "parent_id": null,
-  "from": {"eidolon": "apivr", "version": "3.1.2"},
-  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
   "performative": "PROPOSE",
   "edge_origin": "roster",
   "objective": "Hand off the GAMBIT v0.1 Doctor dashboard (Rust IPC + 9-check parser + grid UI) so IDG can chronicle alongside the parallel routes branch.",
@@ -15,7 +21,9 @@
     "sha256": "8cfdcaeea4df67fc0c432d653ff87078d7b212ad381162e41221eb2bf2273665",
     "size_bytes": 4882
   },
-  "constraints": {"trust_level": "standard"},
+  "constraints": {
+    "trust_level": "standard"
+  },
   "confidence": 0.85,
   "integrity": {
     "method": "sha256",
