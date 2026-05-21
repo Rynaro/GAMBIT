@@ -3,7 +3,8 @@
 // Three commands are exposed:
 //
 //   check_upgrades(project_path: String) → Result<UpgradePlan, String>
-//     1. Locates the `eidolons` binary (PATH first, then ~/.eidolons/nexus/cli/eidolons).
+//     1. Locates the `eidolons` binary via binary::find_eidolons() (bundled
+//        extraction first, then PATH, then ~/.eidolons/nexus/cli/eidolons).
 //     2. Spawns `eidolons upgrade --check --json` with cwd = project_path.
 //     3. Captures full stdout and parses it as UpgradePlan JSON.
 //     4. Returns the parsed plan to the TS caller.
@@ -24,6 +25,7 @@
 // A proper SIGINT path requires `nix::sys::signal::kill(pid, Signal::SIGINT)`.
 // This is tracked as a v0.2 follow-up.
 
+use crate::binary;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -126,38 +128,6 @@ struct CompletePayload {
 }
 
 // ---------------------------------------------------------------------------
-// Binary discovery (mirrors sync.rs / doctor.rs)
-// ---------------------------------------------------------------------------
-
-/// Locate the `eidolons` CLI binary.
-///
-/// Order:
-///   1. `which eidolons` — honours the user's $PATH.
-///   2. `~/.eidolons/nexus/cli/eidolons` — conventional install location.
-///
-/// Returns an error string if neither is found.
-fn find_eidolons_binary() -> Result<PathBuf, String> {
-    // 1. PATH lookup via `which`
-    if let Ok(path) = which::which("eidolons") {
-        return Ok(path);
-    }
-
-    // 2. Conventional fallback
-    let home = std::env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|_| "$HOME is not set; cannot resolve fallback eidolons path".to_string())?;
-    let fallback = home.join(".eidolons").join("nexus").join("cli").join("eidolons");
-    if fallback.exists() {
-        return Ok(fallback);
-    }
-
-    Err("eidolons CLI not found on PATH and not present at ~/.eidolons/nexus/cli/eidolons. \
-         Run the curl-pipe installer: \
-         curl -fsSL https://raw.githubusercontent.com/Rynaro/eidolons/main/cli/install.sh | bash"
-        .to_string())
-}
-
-// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -169,9 +139,10 @@ fn find_eidolons_binary() -> Result<PathBuf, String> {
 #[tauri::command]
 pub async fn check_upgrades(
     _state: State<'_, UpgradeState>,
+    app: AppHandle,
     project_path: String,
 ) -> Result<UpgradePlan, String> {
-    let binary = find_eidolons_binary()?;
+    let binary = binary::find_eidolons(&app)?;
 
     let project_dir = PathBuf::from(&project_path);
     if !project_dir.exists() {
@@ -231,7 +202,7 @@ pub async fn start_upgrade_apply(
     app: AppHandle,
     project_path: String,
 ) -> Result<(), String> {
-    let binary = find_eidolons_binary()?;
+    let binary = binary::find_eidolons(&app)?;
 
     let project_dir = PathBuf::from(&project_path);
     if !project_dir.exists() {
@@ -356,7 +327,7 @@ pub async fn start_nexus_upgrade(
     app: AppHandle,
     project_path: String,
 ) -> Result<(), String> {
-    let binary = find_eidolons_binary()?;
+    let binary = binary::find_eidolons(&app)?;
 
     let project_dir = PathBuf::from(&project_path);
     if !project_dir.exists() {

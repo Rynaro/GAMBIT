@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "a3f82c11-7e14-4d85-b9c0-2e6d1f3a5b47",
+  "thread_id": "90b29d6b-5058-4286-bd7d-d7bb076b98c7",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT bundled-CLI extraction infrastructure (shared binary discovery + first-launch tarball extraction with SHA verify + Settings binary_status panel).",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "f1185373d0ab5233bd359ff417e721a2a929abec98992fd97d92c6773a7e0edc",
+    "size_bytes": 5315
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "f1185373d0ab5233bd359ff417e721a2a929abec98992fd97d92c6773a7e0edc"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
