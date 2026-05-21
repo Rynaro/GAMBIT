@@ -20,6 +20,18 @@ GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + V
 
 The primary verb is **equip** — slot Eidolons into your project the way FF7's materia menu is where you slot summon orbs into your party's equipment.
 
+### Commands
+
+Press **⌘K** (macOS) or **Ctrl K** (Linux / Windows) anywhere in GAMBIT to open the command palette. The palette provides:
+
+| Group | Commands |
+|---|---|
+| **Navigate** | Roster, Project, MCP Store, Harness, Doctor, Methodology, Settings |
+| **Actions** | Sync project, Doctor, Check upgrades |
+| **About** | About GAMBIT |
+
+Type a 3-letter prefix to fuzzy-filter. ↑/↓ to move, Enter to execute, Esc to close. A small pill at the bottom of the sidebar also toggles the palette.
+
 ---
 
 ## Status

@@ -1,4 +1,6 @@
 import { BRAND } from "@/lib/brand";
+import { isMacOS } from "@/lib/platform";
+import type { CommandPaletteState } from "@/lib/useCommandPalette";
 
 const DESTINATIONS = [
   { id: "roster", label: "Roster" },
@@ -11,7 +13,13 @@ const DESTINATIONS = [
   { id: "settings", label: "Settings" },
 ] as const;
 
-export function Sidebar() {
+interface SidebarProps {
+  palette: CommandPaletteState;
+}
+
+export function Sidebar({ palette }: SidebarProps) {
+  const hotkey = isMacOS() ? "⌘K" : "Ctrl K";
+
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
@@ -21,7 +29,7 @@ export function Sidebar() {
 
       <nav className="sidebar-nav" aria-label="Main navigation">
         <ul className="sidebar-destinations">
-          {DESTINATIONS.map((dest, i) => (
+          {DESTINATIONS.map((dest) => (
             <>
               {dest.id === "settings" && (
                 <li key="divider" aria-hidden="true" className="sidebar-divider" />
@@ -40,6 +48,18 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+
+      <footer className="sidebar-palette-hint">
+        <button
+          type="button"
+          className="sidebar-palette-pill"
+          onClick={() => palette.setOpen(true)}
+          aria-label="Open command palette"
+        >
+          <span className="sidebar-palette-key">{hotkey}</span>
+          <span className="sidebar-palette-label">Open palette</span>
+        </button>
+      </footer>
     </aside>
   );
 }

@@ -1,0 +1,146 @@
+/* CommandPalette.css — ⌘K command palette, MATERIA design system. */
+/* No Tailwind, no shadcn — vanilla CSS + design tokens from global.css.  */
+
+/* ---- Backdrop ---- */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(15, 13, 20, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  animation: palette-backdrop-in var(--duration-micro) var(--motion-entry) both;
+}
+
+@keyframes palette-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---- Sheet ---- */
+.palette-sheet {
+  width: 100%;
+  max-width: 640px;
+  max-height: 60vh;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sheet);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.6),
+    0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: palette-sheet-in var(--duration-panel) var(--motion-entry) both;
+}
+
+@keyframes palette-sheet-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+/* ---- Input row ---- */
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: var(--space-5) 0;
+  caret-color: var(--accent-primary);
+}
+
+.palette-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Gradient focus ring on the input row bottom border */
+.palette-input-row:focus-within {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--bg-surface-raised), var(--bg-surface-raised)),
+                    var(--accent-gradient);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border-bottom: 1px solid transparent;
+}
+
+/* ---- Results list ---- */
+.palette-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: var(--space-3) 0;
+}
+
+/* ---- Group label ---- */
+.palette-group-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: var(--space-4) var(--space-6) var(--space-2);
+}
+
+/* ---- Command item ---- */
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-6);
+  cursor: pointer;
+  position: relative;
+  border-left: 3px solid transparent;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    border-left-color var(--duration-micro) var(--motion-entry);
+}
+
+.palette-item:hover,
+.palette-item[data-selected="true"],
+[cmdk-item][data-selected="true"] .palette-item,
+[data-selected="true"] {
+  background-color: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+/* Accent left-edge strip on selected */
+[cmdk-item][data-selected="true"] {
+  border-left: 3px solid transparent;
+  border-image: var(--accent-gradient) 1;
+  background-color: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.palette-item-label {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.palette-item-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* ---- Empty state ---- */
+.palette-empty {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
