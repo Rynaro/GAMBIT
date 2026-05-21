@@ -1,4 +1,5 @@
 import { BRAND } from "@/lib/brand";
+import { basename } from "@/lib/pathUtils";
 
 const DESTINATIONS = [
   { id: "roster", label: "Roster" },
@@ -11,7 +12,14 @@ const DESTINATIONS = [
   { id: "settings", label: "Settings" },
 ] as const;
 
-export function Sidebar() {
+interface SidebarProps {
+  projectPath: string | null;
+  onPickProject: () => void;
+}
+
+export function Sidebar({ projectPath, onPickProject }: SidebarProps) {
+  const projectBasename = projectPath ? basename(projectPath) : null;
+
   return (
     <aside className="sidebar">
       <header className="sidebar-header">
@@ -21,7 +29,7 @@ export function Sidebar() {
 
       <nav className="sidebar-nav" aria-label="Main navigation">
         <ul className="sidebar-destinations">
-          {DESTINATIONS.map((dest, i) => (
+          {DESTINATIONS.map((dest) => (
             <>
               {dest.id === "settings" && (
                 <li key="divider" aria-hidden="true" className="sidebar-divider" />
@@ -40,6 +48,33 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+
+      {/* Project picker footer */}
+      <footer className="sidebar-footer">
+        {projectBasename ? (
+          <div className="sidebar-project-row">
+            <span className="sidebar-project-name" title={projectPath ?? ""}>
+              {projectBasename}
+            </span>
+            <button
+              type="button"
+              className="sidebar-project-switch"
+              onClick={onPickProject}
+              aria-label="Switch project"
+            >
+              Switch
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="sidebar-pick-project"
+            onClick={onPickProject}
+          >
+            Pick project…
+          </button>
+        )}
+      </footer>
     </aside>
   );
 }

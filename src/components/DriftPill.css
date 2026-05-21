@@ -1,0 +1,132 @@
+/* DriftPill.css — sticky title-bar drift indicator.
+   Three states: idle, watching, drift.
+   220ms fade via the design-token entry curve. */
+
+.drift-pill-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 32px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  transition:
+    background-color var(--duration-panel) var(--motion-entry),
+    border-color var(--duration-panel) var(--motion-entry);
+  user-select: none;
+}
+
+/* ---- idle state ---- */
+.drift-pill-header[data-state="idle"] {
+  /* Hidden visually but keeps layout height */
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- watching state ---- */
+.drift-pill-header[data-state="watching"] {
+  opacity: 1;
+  pointer-events: none; /* no interaction when calm */
+  background-color: var(--bg-surface);
+}
+
+/* ---- drift state ---- */
+.drift-pill-header[data-state="drift"] {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: color-mix(
+    in srgb,
+    var(--status-warn) 8%,
+    var(--bg-surface) 92%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--status-warn) 25%,
+    var(--border-subtle) 75%
+  );
+}
+
+.drift-pill-header[data-state="drift"]:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--status-warn) 14%,
+    var(--bg-surface) 86%
+  );
+}
+
+/* ---- Left cluster: dot + project name ---- */
+.drift-pill-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+/* Status dot */
+.drift-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color var(--duration-panel) var(--motion-entry);
+}
+
+.drift-pill-header[data-state="watching"] .drift-pill-dot {
+  background-color: var(--status-ok);
+}
+
+.drift-pill-header[data-state="drift"] .drift-pill-dot {
+  background-color: var(--status-warn);
+  animation: drift-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes drift-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Project basename */
+.drift-pill-basename {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--duration-panel) var(--motion-entry);
+}
+
+.drift-pill-header[data-state="drift"] .drift-pill-basename {
+  color: var(--status-warn);
+}
+
+/* ---- Right cluster: tagline / hint ---- */
+.drift-pill-right {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition:
+    color var(--duration-panel) var(--motion-entry),
+    opacity var(--duration-panel) var(--motion-entry);
+}
+
+.drift-pill-header[data-state="watching"] .drift-pill-right {
+  opacity: 0;
+}
+
+.drift-pill-header[data-state="drift"] .drift-pill-right {
+  opacity: 1;
+  color: var(--status-warn);
+}

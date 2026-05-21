@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema/capabilities/schema.json",
+  "identifier": "default",
+  "description": "Default capability set for GAMBIT.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "dialog:default",
+    "fs:default"
+  ]
+}

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `eidolons.lock` file watcher + drift pill (smoke-test c). 250ms debounce in Rust via notify-debouncer-mini. Minimal project picker via @tauri-apps/plugin-dialog.
+
 ### v0.0.1 → v0.1 follow-ups
 
 The following items are scoped for the v0.1 MVP (smoke-test-driven):
