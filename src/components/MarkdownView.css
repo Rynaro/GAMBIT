@@ -211,6 +211,86 @@
   margin: var(--space-9) 0;
 }
 
+/* ---- Syntax highlighting (.hljs tokens via rehype-highlight) ---- */
+
+/* Base: transparent bg so .md-code-block bg shows through */
+.markdown-view .md-code-block .hljs {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+/* Keywords + built-ins → accent-primary (purple) */
+.markdown-view .md-code-block .hljs-keyword,
+.markdown-view .md-code-block .hljs-built_in,
+.markdown-view .md-code-block .hljs-selector-tag {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Strings + attributes → status-ok (mint/green) */
+.markdown-view .md-code-block .hljs-string,
+.markdown-view .md-code-block .hljs-attr,
+.markdown-view .md-code-block .hljs-selector-attr,
+.markdown-view .md-code-block .hljs-addition {
+  color: var(--status-ok);
+}
+
+/* Numbers + literals → accent-secondary-amber */
+.markdown-view .md-code-block .hljs-number,
+.markdown-view .md-code-block .hljs-literal {
+  color: var(--accent-secondary-amber);
+}
+
+/* Comments + quotes → text-muted, italic */
+.markdown-view .md-code-block .hljs-comment,
+.markdown-view .md-code-block .hljs-quote {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Function names → accent-secondary-amber */
+.markdown-view .md-code-block .hljs-function .hljs-title,
+.markdown-view .md-code-block .hljs-title.function_ {
+  color: var(--accent-secondary-amber);
+}
+
+/* Symbols, meta, tags, names → accent-primary */
+.markdown-view .md-code-block .hljs-symbol,
+.markdown-view .md-code-block .hljs-meta,
+.markdown-view .md-code-block .hljs-tag,
+.markdown-view .md-code-block .hljs-name {
+  color: var(--accent-primary);
+}
+
+/* Variables + template variables → status-warn */
+.markdown-view .md-code-block .hljs-variable,
+.markdown-view .md-code-block .hljs-template-variable {
+  color: var(--status-warn);
+}
+
+/* Types + class titles → status-warn */
+.markdown-view .md-code-block .hljs-type,
+.markdown-view .md-code-block .hljs-class .hljs-title {
+  color: var(--status-warn);
+}
+
+/* Deletions (diff) → status-error */
+.markdown-view .md-code-block .hljs-deletion {
+  color: var(--status-error);
+}
+
+/* Sections + headings (e.g. YAML document markers) → text-primary */
+.markdown-view .md-code-block .hljs-section,
+.markdown-view .md-code-block .hljs-bullet {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: light) {
+  /* Token variables already swap via design tokens; no overrides needed
+     unless a specific token reads poorly in light mode. */
+}
+
 /* ---- Strong / em ---- */
 .markdown-view strong {
   color: var(--text-primary);
