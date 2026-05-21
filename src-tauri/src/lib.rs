@@ -54,6 +54,7 @@ pub fn run() {
             doctor::cancel_doctor,
             upgrade::check_upgrades,
             upgrade::start_upgrade_apply,
+            upgrade::start_nexus_upgrade,
             upgrade::cancel_upgrade,
             mcp::mcp_list,
             mcp::mcp_install,

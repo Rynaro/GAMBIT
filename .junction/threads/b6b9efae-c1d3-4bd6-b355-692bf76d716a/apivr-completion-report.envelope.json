@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "45a8badd-0372-46f5-89d9-9250774ef9b1",
+  "thread_id": "b6b9efae-c1d3-4bd6-b355-692bf76d716a",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT nexus self-upgrade feature (eidolons upgrade --system --yes via new Rust command + useUpgrade.nexusUpgrade + UpgradePane button).",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "4e67cbbb8046f941c77ceb066e3dd9f5a42e75fd290856e1442f95ab19eb6e7a",
+    "size_bytes": 3534
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "4e67cbbb8046f941c77ceb066e3dd9f5a42e75fd290856e1442f95ab19eb6e7a"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

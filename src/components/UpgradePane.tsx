@@ -58,7 +58,7 @@ const STATE_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
-  const { state, plan, lines, exitCode, apply, cancel, dismiss } = upgrade;
+  const { state, plan, lines, exitCode, apply, nexusUpgrade, cancel, dismiss } = upgrade;
 
   const projectName = projectPath ? basename(projectPath) : "project";
   const isActive = state === "checking" || state === "applying";
@@ -237,6 +237,20 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
             >
               Dismiss
             </button>
+            {plan.nexus.status === "upgrade available" && (
+              <button
+                type="button"
+                className="upgrade-action-btn upgrade-nexus-btn"
+                onClick={() => projectPath && void nexusUpgrade(projectPath)}
+                disabled={state !== "reviewing" || !projectPath}
+                aria-label={`Upgrade nexus from ${plan.nexus.current.tag} to ${plan.nexus.latest.tag}`}
+              >
+                Upgrade nexus ({plan.nexus.current.tag} → {plan.nexus.latest.tag})
+              </button>
+            )}
+            {plan.nexus.status === "up-to-date" && (
+              <span className="upgrade-nexus-uptodate-pill">Nexus up-to-date</span>
+            )}
             <button
               type="button"
               className="upgrade-pane-btn upgrade-pane-btn--primary"

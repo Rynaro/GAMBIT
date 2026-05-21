@@ -343,6 +343,132 @@ pub async fn start_upgrade_apply(
     Ok(())
 }
 
+/// Tauri command: start `eidolons upgrade --system --yes` in project_path.
+///
+/// Upgrades only the nexus at $EIDOLONS_HOME/nexus (not member Eidolons).
+/// Streams stdout/stderr line-by-line as `upgrade-stdout` / `upgrade-stderr` events.
+/// Emits `upgrade-complete` on exit. Uses the same UpgradeState mutex so
+/// cancel_upgrade can reach it. Same event names as start_upgrade_apply so
+/// the React hook's single listener pair covers both.
+#[tauri::command]
+pub async fn start_nexus_upgrade(
+    state: State<'_, UpgradeState>,
+    app: AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    let binary = find_eidolons_binary()?;
+
+    let project_dir = PathBuf::from(&project_path);
+    if !project_dir.exists() {
+        return Err(format!(
+            "project path does not exist: {}",
+            project_dir.display()
+        ));
+    }
+
+    // Kill any running child before starting a new one.
+    {
+        let mut guard = state.child.lock().await;
+        if let Some(ref mut old_child) = *guard {
+            let _ = old_child.kill().await;
+        }
+        *guard = None;
+    }
+
+    // Spawn `eidolons upgrade --system --yes`.
+    let mut cmd = Command::new(&binary);
+    cmd.arg("upgrade")
+        .arg("--system")
+        .arg("--yes")
+        .current_dir(&project_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = cmd.spawn().map_err(|e| {
+        format!(
+            "failed to spawn eidolons at {}: {e}",
+            binary.display()
+        )
+    })?;
+
+    // Extract pipe handles before moving child into state.
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to capture stdout".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture stderr".to_string())?;
+
+    // Store the child handle so cancel_upgrade can reach it.
+    let child_arc = state.child.clone();
+    {
+        let mut guard = child_arc.lock().await;
+        *guard = Some(child);
+    }
+
+    // Clone app handle for each task.
+    let app_stdout = app.clone();
+    let app_stderr = app.clone();
+    let app_complete = app.clone();
+
+    // Spawn stdout reader task.
+    let stdout_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            let payload = LinePayload {
+                line,
+                ts: chrono::Utc::now().to_rfc3339(),
+            };
+            let _ = app_stdout.emit("upgrade-stdout", payload);
+        }
+    });
+
+    // Spawn stderr reader task.
+    let stderr_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            let payload = LinePayload {
+                line,
+                ts: chrono::Utc::now().to_rfc3339(),
+            };
+            let _ = app_stderr.emit("upgrade-stderr", payload);
+        }
+    });
+
+    // Spawn wait task — awaits child exit, then emits upgrade-complete.
+    let child_arc_wait = state.child.clone();
+    tokio::spawn(async move {
+        // Wait for both pipe-reading tasks to drain first.
+        let _ = tokio::join!(stdout_task, stderr_task);
+
+        // Wait for the child to exit.
+        let exit_code = {
+            let mut guard = child_arc_wait.lock().await;
+            if let Some(ref mut child) = *guard {
+                match child.wait().await {
+                    Ok(status) => status.code().unwrap_or(-1),
+                    Err(_) => -1,
+                }
+            } else {
+                // Child was cancelled between drain and wait — treat as cancelled.
+                -2
+            }
+        };
+
+        let payload = CompletePayload { exit_code };
+        let _ = app_complete.emit("upgrade-complete", payload);
+
+        // Clear the child handle now that we're done.
+        let mut guard = child_arc_wait.lock().await;
+        *guard = None;
+    });
+
+    Ok(())
+}
+
 /// Tauri command: kill the running upgrade apply child.
 ///
 /// V0.1 KNOWN GAP: `child.kill()` sends SIGKILL on macOS, not SIGINT.

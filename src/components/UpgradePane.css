@@ -316,3 +316,54 @@
 .upgrade-pane-footer-spacer {
   flex: 1;
 }
+
+/* ---- Nexus upgrade button (muted secondary, distinct from Apply all primary) ---- */
+.upgrade-action-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    border-color var(--duration-micro) var(--motion-entry);
+  background: none;
+  flex-shrink: 0;
+}
+
+.upgrade-action-btn:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.upgrade-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.upgrade-nexus-btn {
+  border-color: color-mix(in srgb, var(--status-warn) 50%, var(--border-subtle) 50%);
+  color: var(--status-warn);
+}
+
+.upgrade-nexus-btn:hover {
+  background-color: color-mix(in srgb, var(--status-warn) 10%, transparent 90%);
+  color: var(--status-warn);
+  border-color: var(--status-warn);
+}
+
+/* ---- Nexus up-to-date pill ---- */
+.upgrade-nexus-uptodate-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent 88%);
+  color: var(--status-ok);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
