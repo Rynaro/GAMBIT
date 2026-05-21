@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-21
+
+The "daily-driver" release. GAMBIT goes from scaffold to a real ControlCenter — three core verbs (sync / doctor / upgrade), an actionable MCP Store, a markdown methodology browser with syntax highlighting, soft toasts, and the bundled-CLI extraction skeleton. Built across nine APIVR-Δ delegations routed through TRANCE (VIGIL was called twice to root-cause user-visible regressions; every emitted ECL envelope `harness_verify` ok).
+
 ### Fixed
 
 - `McpStoreRoute`: corrected `eidolons.mcp.lock` schema — top-level key is `mcps` (array of `{name, kind, version, source, target, hosts_wired, installed_at}`), not `servers: Record<string,_>`. Route now iterates `mcps[]` and renders name, kind badge, version, source repo, target path, installed-at, and hosts-wired list. Live fixture pinned at `tests/parsers/eidolons-mcp-lock.fixture.yaml`.
