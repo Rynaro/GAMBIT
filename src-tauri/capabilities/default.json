@@ -7,7 +7,35 @@
     "core:default",
     "core:event:default",
     "dialog:default",
+    "shell:default",
     "fs:default",
-    "shell:default"
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "$HOME/.eidolons/**" },
+        { "path": "$HOME/**/eidolons.yaml" },
+        { "path": "$HOME/**/eidolons.lock" },
+        { "path": "$HOME/**/eidolons.mcp.lock" },
+        { "path": "$HOME/**/.eidolons/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        { "path": "$HOME/.eidolons/**" },
+        { "path": "$HOME/**/.eidolons" },
+        { "path": "$HOME/**/.eidolons/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        { "path": "$HOME/.eidolons/**" },
+        { "path": "$HOME/**/eidolons.yaml" },
+        { "path": "$HOME/**/eidolons.lock" },
+        { "path": "$HOME/**/eidolons.mcp.lock" },
+        { "path": "$HOME/**/.eidolons/**" }
+      ]
+    }
   ]
 }

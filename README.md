@@ -20,6 +20,8 @@ GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + V
 
 Watches `eidolons.lock` and surfaces drift within a second. Streams `eidolons sync` output live with ANSI colour and a cancel hotkey.
 
+The fs capability scope is intentionally limited to `$HOME` subtrees matching Eidolons-shaped paths (`$HOME/.eidolons/**`, `$HOME/**/eidolons.{yaml,lock,mcp.lock}`, `$HOME/**/.eidolons/**`) — arbitrary disk access is not granted.
+
 The primary verb is **equip** — slot Eidolons into your project the way FF7's materia menu is where you slot summon orbs into your party's equipment.
 
 ### Commands

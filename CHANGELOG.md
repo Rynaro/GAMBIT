@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Tauri 2 fs capability scope now allows route components to read user-picked project files and the `$HOME/.eidolons` subtree (P1-B from VIGIL's blank-pane root-cause-report). Routes affected: Roster (`nexus/roster/index.yaml`), Project + MCP Store (`eidolons.{yaml,lock,mcp.lock}` in picked project), Harness (`.eidolons/harness/manifest.json`), Methodology (`.eidolons/*` directory listing + `agent.md` reads).
 - Doctor route now renders the live `eidolons doctor` check grid. Three independent bugs fixed together:
   parser regex updated to match category-grouped output (`=== Foo ===` headings, glyph at line start, no
   `[N/M]` badges); stdout listener wired up (real check rows are on stdout, only the banner + summary on
