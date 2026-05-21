@@ -42,7 +42,11 @@ The following P1/P2 items are deferred from this round:
 
 ### Added
 
+<<<<<<< HEAD
 - Nexus self-upgrade button in the Upgrade pane. Wires `eidolons upgrade --system --yes` (streaming). Member-level selection still blocked on upstream CLI `--members` flag — deferred to v1.0.
+=======
+- Syntax highlighting in methodology fenced code blocks via rehype-highlight. Supports rust/bash/ts/json/yaml/diff out of the box. Theme uses GAMBIT design tokens for keyword/string/comment colors.
+>>>>>>> origin/feat/v0.2-syntax-highlight
 - MCP Store now supports Install / Uninstall / Upgrade actions per row. Uses `eidolons mcp list --json` as the primary catalogue + install-state source (replaces the older eidolons.mcp.lock-only read). Streaming output via McpInstallPane; auto-refresh after completion. Closes v0.2 DoD §7.1 'MCP Store install/uninstall end-to-end'.
 - Methodology route now renders agent.md files as proper markdown (react-markdown + remark-gfm) — headings, fenced code, GFM tables, lists, blockquotes, inline code. YAML front-matter is stripped before render. Replaces the previous `<pre>`-text fallback.
 - Upgrade flow: ⌘K palette "Check upgrades" runs `eidolons upgrade --check --json`, renders a plan-review table (nexus + 6 Eidolon members with status badges), Apply-all button streams `eidolons upgrade --yes` with cancel support. Mirrors Sync + Doctor patterns. Per-member selection deferred to v0.2.

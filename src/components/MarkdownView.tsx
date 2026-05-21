@@ -3,6 +3,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { Components } from "react-markdown";
 import { stripFrontMatter } from "@/lib/stripFrontMatter";
 import "./MarkdownView.css";
@@ -111,7 +112,11 @@ export function MarkdownView({
 
   return (
     <div className="markdown-view">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+        components={components}
+      >
         {rendered}
       </ReactMarkdown>
     </div>

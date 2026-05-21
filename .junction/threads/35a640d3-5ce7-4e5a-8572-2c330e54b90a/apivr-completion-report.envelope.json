@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "c3f2a1b7-9e04-4d8a-b562-7f3e1a0d5c91",
+  "thread_id": "35a640d3-5ce7-4e5a-8572-2c330e54b90a",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT markdown syntax-highlighting feature (rehype-highlight + design-token .hljs theme + smoke test).",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "7e837bbf9255c9f57e2afc39ed37e2be64184bb53dbb49104d52f162cb08aa06",
+    "size_bytes": 2284
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "7e837bbf9255c9f57e2afc39ed37e2be64184bb53dbb49104d52f162cb08aa06"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
