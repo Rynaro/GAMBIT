@@ -105,10 +105,10 @@ pub async fn start_watching(
                         let _ = app.emit("drift-detected", payload);
                     }
                 }
-                Err(errs) => {
-                    for e in errs {
-                        eprintln!("[watcher] notify error: {e:?}");
-                    }
+                Err(err) => {
+                    // notify-debouncer-mini v0.7 emits a single Error (not Vec<Error>
+                    // as in v0.4). Log and move on; the watcher itself stays alive.
+                    eprintln!("[watcher] notify error: {err:?}");
                 }
             }
         },
