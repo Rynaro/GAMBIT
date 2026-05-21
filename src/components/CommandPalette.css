@@ -6,7 +6,7 @@
   position: fixed;
   inset: 0;
   z-index: 9000;
-  background: rgba(15, 13, 20, 0.65);
+  background: var(--palette-backdrop-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -33,8 +33,8 @@
   display: flex;
   flex-direction: column;
   box-shadow:
-    0 24px 64px rgba(0, 0, 0, 0.6),
-    0 4px 16px rgba(0, 0, 0, 0.4);
+    0 24px 64px var(--shadow-overlay-60),
+    0 4px 16px var(--shadow-overlay-40);
   animation: palette-sheet-in var(--duration-panel) var(--motion-entry) both;
 }
 

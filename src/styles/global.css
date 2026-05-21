@@ -83,17 +83,48 @@ button {
   --duration-sheet: 320ms;
 }
 
+/* ---- Overlay / shadow tokens (used by CommandPalette backdrop + sheet shadow) ---- */
+:root {
+  --palette-backdrop-bg: rgba(15, 13, 20, 0.65);
+  --shadow-overlay-60: rgba(0, 0, 0, 0.6);
+  --shadow-overlay-40: rgba(0, 0, 0, 0.4);
+  --shadow-pane-lift: rgba(0, 0, 0, 0.45);
+}
+
 /* ---- Light mode ---- */
 @media (prefers-color-scheme: light) {
   :root {
+    /* Background */
     --bg-canvas: #fbf7f2;
     --bg-surface: #ffffff;
     --bg-surface-raised: #f0ebe6;
+
+    /* Border */
     --border-subtle: #ddd8d0;
+
+    /* Text */
     --text-primary: #1a1520;
     --text-secondary: #5a5060;
     --text-muted: #9a95a0;
+
+    /* Accent — softer purple + amber for light backgrounds */
+    --accent-primary: #7c4fd4;
+    --accent-gradient: linear-gradient(135deg, #7c4fd4 0%, #2bb8a4 100%);
+    --accent-secondary-amber: #c07a20;
+
+    /* Status — darker shades for legibility on white surfaces */
+    --status-ok: #1e9e8c;
+    --status-warn: #b87700;
+    --status-error: #d63048;
+
+    /* Sidebar */
     --sidebar-bg: #f4efe8;
+
+    /* Overlay / shadow — lighter for light mode */
+    --palette-backdrop-bg: rgba(60, 50, 80, 0.45);
+    --shadow-overlay-60: rgba(0, 0, 0, 0.22);
+    --shadow-overlay-40: rgba(0, 0, 0, 0.14);
+    --shadow-pane-lift: rgba(0, 0, 0, 0.12);
   }
 }
 
