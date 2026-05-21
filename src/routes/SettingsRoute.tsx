@@ -1,7 +1,8 @@
-// SettingsRoute.tsx — Project picker, appearance info, and About.
-// Three sections: Project, Appearance, About.
-// Pure state — no file reads needed.
+// SettingsRoute.tsx — Project picker, appearance info, About, and CLI Binary status.
+// Four sections: Project, Appearance, CLI Binary, About.
 
+import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import { BRAND } from "@/lib/brand";
 import { RouteHeader } from "@/components/RouteHeader";
 import { getRoute } from "@/routes/index";
@@ -16,6 +17,15 @@ interface SettingsRouteProps {
   onClearProject: () => void;
 }
 
+interface BinaryStatus {
+  resolvedPath: string | null;
+  bundledExtracted: boolean;
+  bundledPath: string | null;
+  pathLookup: string | null;
+  nexusFallbackExists: boolean;
+  nexusFallbackPath: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -27,6 +37,14 @@ export function SettingsRoute({
   onPickProject,
   onClearProject,
 }: SettingsRouteProps) {
+  const [binaryStatus, setBinaryStatus] = useState<BinaryStatus | null>(null);
+
+  useEffect(() => {
+    invoke<BinaryStatus>("binary_status")
+      .then(setBinaryStatus)
+      .catch((e) => console.error("[settings] binary_status failed:", e));
+  }, []);
+
   return (
     <div className="route-pane">
       <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
@@ -105,6 +123,78 @@ export function SettingsRoute({
               />
               <span className="settings-row-muted">#A87CFF → #5EE3D1</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CLI Binary section */}
+      <div className="route-card">
+        <p className="settings-section-title">CLI Binary</p>
+
+        <div className="settings-section">
+          <div className="settings-row">
+            <span className="settings-row-label">Resolved path</span>
+            {binaryStatus?.resolvedPath ? (
+              <span className="settings-row-value" title={binaryStatus.resolvedPath}>
+                {binaryStatus.resolvedPath}
+              </span>
+            ) : (
+              <span className="settings-row-muted" style={{ color: "var(--status-error)" }}>
+                Not found
+              </span>
+            )}
+          </div>
+
+          <div className="settings-row">
+            <span className="settings-row-label">Bundled (extracted)</span>
+            <span
+              className="settings-row-muted"
+              style={{
+                color: binaryStatus?.bundledExtracted
+                  ? "var(--status-ok)"
+                  : "var(--text-muted)",
+              }}
+            >
+              {binaryStatus === null
+                ? "Checking…"
+                : binaryStatus.bundledExtracted
+                ? binaryStatus.bundledPath ?? "present"
+                : "Not extracted"}
+            </span>
+          </div>
+
+          <div className="settings-row">
+            <span className="settings-row-label">PATH lookup</span>
+            <span
+              className="settings-row-muted"
+              style={{
+                color: binaryStatus?.pathLookup
+                  ? "var(--status-ok)"
+                  : "var(--text-muted)",
+              }}
+            >
+              {binaryStatus === null
+                ? "Checking…"
+                : binaryStatus.pathLookup ?? "Not found"}
+            </span>
+          </div>
+
+          <div className="settings-row">
+            <span className="settings-row-label">Nexus fallback</span>
+            <span
+              className="settings-row-muted"
+              style={{
+                color: binaryStatus?.nexusFallbackExists
+                  ? "var(--status-ok)"
+                  : "var(--text-muted)",
+              }}
+            >
+              {binaryStatus === null
+                ? "Checking…"
+                : binaryStatus.nexusFallbackExists
+                ? binaryStatus.nexusFallbackPath ?? "present"
+                : "Not installed"}
+            </span>
           </div>
         </div>
       </div>
