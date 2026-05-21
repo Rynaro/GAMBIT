@@ -85,12 +85,12 @@ export interface CommandHandlers {
    * Should switch the active route and close the palette.
    */
   onNavigate: (routeId: RouteId) => void;
-  /** Called when the user selects "Doctor" from the palette. Optional; no-op if omitted. */
-  onRunDoctor?: () => void;
+  /** Called when the user selects "Doctor" from the palette. */
+  onRunDoctor: () => void;
   /** Called when the user selects "Check upgrades" from the palette. Optional; no-op if omitted. */
   onCheckUpgrades?: () => void;
-  /** Called when the user selects "Refresh MCP Store" from the palette. Optional; no-op if omitted. */
-  onRefreshMcpStore?: () => void;
+  /** Called when the user selects "Refresh MCP Store" from the palette. */
+  onRefreshMcpStore: () => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
@@ -103,7 +103,12 @@ let handlers: CommandHandlers = {
   onNavigate: (routeId: RouteId) => {
     console.info("[palette] navigate →", routeId);
   },
-  onRunDoctor: undefined,
+  onRunDoctor: () => {
+    console.warn("[palette] Doctor: no handler injected yet");
+  },
+  onRefreshMcpStore: () => {
+    console.warn("[palette] Refresh MCP Store: no handler injected yet");
+  },
 };
 
 /**
@@ -135,11 +140,7 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
   }
 
   if (id === "action:doctor") {
-    if (handlers.onRunDoctor) {
-      handlers.onRunDoctor();
-    } else {
-      console.warn("[palette] Doctor: no handler injected yet");
-    }
+    handlers.onRunDoctor();
     return;
   }
 
@@ -153,11 +154,7 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
   }
 
   if (id === "action:mcp-refresh") {
-    if (handlers.onRefreshMcpStore) {
-      handlers.onRefreshMcpStore();
-    } else {
-      console.warn("[palette] Refresh MCP Store: no handler injected yet");
-    }
+    handlers.onRefreshMcpStore();
     return;
   }
 

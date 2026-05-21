@@ -12,6 +12,8 @@ import { DoctorRoute } from "@/routes/DoctorRoute";
 import { MethodologyRoute } from "@/routes/MethodologyRoute";
 import { SettingsRoute } from "@/routes/SettingsRoute";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import type { DoctorResult } from "@/lib/useDoctor";
+import type { UseMcpStoreResult } from "@/lib/useMcpStore";
 
 // ---------------------------------------------------------------------------
 // RouteRenderer — maps activeRoute → component
@@ -22,9 +24,11 @@ interface RouteRendererProps {
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
   onCheckUpgrades?: () => void;
+  doctor: DoctorResult;
+  mcpStore: UseMcpStoreResult;
 }
 
-function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgrades }: RouteRendererProps) {
+function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: RouteRendererProps) {
   const { activeRoute } = useRouteContext();
 
   switch (activeRoute) {
@@ -39,11 +43,11 @@ function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgr
         />
       );
     case "mcp-store":
-      return <McpStoreRoute projectPath={projectPath} />;
+      return <McpStoreRoute projectPath={projectPath} mcpStore={mcpStore} />;
     case "harness":
       return <HarnessRoute projectPath={projectPath} />;
     case "doctor":
-      return <DoctorRoute projectPath={projectPath} />;
+      return <DoctorRoute projectPath={projectPath} doctor={doctor} />;
     case "methodology":
       return <MethodologyRoute projectPath={projectPath} />;
     case "settings":
@@ -75,9 +79,11 @@ interface MainPaneProps {
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
   onCheckUpgrades?: () => void;
+  doctor: DoctorResult;
+  mcpStore: UseMcpStoreResult;
 }
 
-export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUpgrades }: MainPaneProps) {
+export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: MainPaneProps) {
   const { activeRoute } = useRouteContext();
 
   return (
@@ -88,6 +94,8 @@ export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUp
           onPickProject={onPickProject}
           onClearProject={onClearProject}
           onCheckUpgrades={onCheckUpgrades}
+          doctor={doctor}
+          mcpStore={mcpStore}
         />
       </RouteErrorBoundary>
     </main>

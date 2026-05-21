@@ -11,6 +11,8 @@ import { useCommandPalette } from "./lib/useCommandPalette";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
 import { useSync } from "./lib/useSync";
 import { useUpgrade } from "./lib/useUpgrade";
+import { useDoctor } from "./lib/useDoctor";
+import { useMcpStore } from "./lib/useMcpStore";
 import { setCommandHandlers } from "./lib/commands";
 import { getProjectPath, setProjectPath, clearProjectPath } from "./lib/projectStore";
 import { RouteProvider, useRouteContext } from "./lib/RouteContext";
@@ -35,8 +37,15 @@ function AppShell() {
   // Upgrade hook — manages the check + apply two-phase flow.
   const upgrade = useUpgrade();
 
+  // Doctor hook — lifted to App shell so the palette can trigger runs.
+  const doctor = useDoctor();
+
+  // MCP Store hook — lifted to App shell so the palette can trigger refresh.
+  const mcpStore = useMcpStore(projectPath);
+
   // Inject the command handlers into commands.ts once on mount.
-  // Re-inject when projectPath, sync.start, upgrade.check, or setActiveRoute changes.
+  // Re-inject when projectPath, sync.start, upgrade.check, doctor.start,
+  // mcpStore.refresh, or setActiveRoute changes.
   useEffect(() => {
     setCommandHandlers({
       onSyncProject: () => {
@@ -56,8 +65,18 @@ function AppShell() {
         }
         void upgrade.check(projectPath);
       },
+      onRunDoctor: () => {
+        if (!projectPath) {
+          console.warn("[App] Doctor: no project picked — pick a project first");
+          return;
+        }
+        doctor.start(projectPath);
+      },
+      onRefreshMcpStore: () => {
+        void mcpStore.refresh();
+      },
     });
-  }, [projectPath, sync.start, upgrade.check, setActiveRoute]);
+  }, [projectPath, sync.start, upgrade.check, doctor.start, mcpStore.refresh, setActiveRoute]);
 
   async function handlePickProject() {
     try {
@@ -105,6 +124,8 @@ function AppShell() {
                 ? () => { void upgrade.check(projectPath); }
                 : undefined
             }
+            doctor={doctor}
+            mcpStore={mcpStore}
           />
       </div>
       <CommandPalette open={palette.open} setOpen={palette.setOpen} />

@@ -21,7 +21,7 @@
 
 import { RouteHeader } from "@/components/RouteHeader";
 import { McpInstallPane } from "@/components/McpInstallPane";
-import { useMcpStore } from "@/lib/useMcpStore";
+import type { UseMcpStoreResult } from "@/lib/useMcpStore";
 import { getRoute } from "@/routes/index";
 import type { McpListEntry } from "@/lib/mcp.types";
 
@@ -195,6 +195,7 @@ function ActionCell({
 
 interface McpStoreRouteProps {
   projectPath: string | null;
+  mcpStore: UseMcpStoreResult;
 }
 
 const ROUTE = getRoute("mcp-store");
@@ -207,8 +208,8 @@ const PANE_STATES = new Set([
   "cancelled",
 ]);
 
-export function McpStoreRoute({ projectPath }: McpStoreRouteProps) {
-  const mcp = useMcpStore(projectPath);
+export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
+  const mcp = mcpStore;
   const { state, entries, error, refresh, install, uninstall, activeMcp } = mcp;
 
   const isOperating =

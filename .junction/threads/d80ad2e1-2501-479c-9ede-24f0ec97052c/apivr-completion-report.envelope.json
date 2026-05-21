@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "b3c7e412-9f84-4d51-a2e3-8f6d1c05b7a9",
+  "thread_id": "d80ad2e1-2501-479c-9ede-24f0ec97052c",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT useDoctor + useMcpStore App-shell lift (eliminates 'no handler injected' warnings on action:doctor + action:mcp-refresh).",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "b61a8f42ef60b78e5bbb5bf174af62de1bc3e3143832a5dbb99a48c06561435b",
+    "size_bytes": 2888
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "b61a8f42ef60b78e5bbb5bf174af62de1bc3e3143832a5dbb99a48c06561435b"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
