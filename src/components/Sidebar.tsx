@@ -3,6 +3,7 @@ import { BRAND } from "@/lib/brand";
 import { isMacOS } from "@/lib/platform";
 import { basename } from "@/lib/pathUtils";
 import type { CommandPaletteState } from "@/lib/useCommandPalette";
+import { useRouteContext, type RouteId } from "@/lib/RouteContext";
 
 const DESTINATIONS = [
   { id: "roster", label: "Roster" },
@@ -24,6 +25,7 @@ interface SidebarProps {
 export function Sidebar({ palette, projectPath, onPickProject }: SidebarProps) {
   const hotkey = isMacOS() ? "⌘K" : "Ctrl K";
   const projectBasename = projectPath ? basename(projectPath) : null;
+  const { activeRoute, setActiveRoute } = useRouteContext();
 
   return (
     // background is transparent — NSVisualEffectView .sidebar vibrancy shows
@@ -38,23 +40,29 @@ export function Sidebar({ palette, projectPath, onPickProject }: SidebarProps) {
 
       <nav className="sidebar-nav" aria-label="Main navigation">
         <ul className="sidebar-destinations">
-          {DESTINATIONS.map((dest) => (
-            <Fragment key={dest.id}>
-              {dest.id === "settings" && (
-                <li aria-hidden="true" className="sidebar-divider" />
-              )}
-              <li>
-                <button
-                  type="button"
-                  className="sidebar-destination"
-                  data-destination={dest.id}
-                  aria-label={dest.label}
-                >
-                  {dest.label}
-                </button>
-              </li>
-            </Fragment>
-          ))}
+          {DESTINATIONS.map((dest) => {
+            const isActive = activeRoute === dest.id;
+            return (
+              <Fragment key={dest.id}>
+                {dest.id === "settings" && (
+                  <li aria-hidden="true" className="sidebar-divider" />
+                )}
+                <li>
+                  <button
+                    type="button"
+                    className="sidebar-destination"
+                    data-destination={dest.id}
+                    data-active={isActive ? "true" : "false"}
+                    aria-label={dest.label}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => setActiveRoute(dest.id as RouteId)}
+                  >
+                    {dest.label}
+                  </button>
+                </li>
+              </Fragment>
+            );
+          })}
         </ul>
       </nav>
 

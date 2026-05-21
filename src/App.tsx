@@ -11,9 +11,15 @@ import { useDriftWatcher } from "./lib/useDriftWatcher";
 import { useSync } from "./lib/useSync";
 import { setCommandHandlers } from "./lib/commands";
 import { getProjectPath, setProjectPath } from "./lib/projectStore";
+import { RouteProvider, useRouteContext } from "./lib/RouteContext";
 
-export function App() {
+// ---------------------------------------------------------------------------
+// AppShell — inner shell, can call useRouteContext (inside <RouteProvider>)
+// ---------------------------------------------------------------------------
+
+function AppShell() {
   const palette = useCommandPalette();
+  const { setActiveRoute } = useRouteContext();
 
   const [projectPath, setProjectPathState] = useState<string | null>(
     () => getProjectPath()
@@ -24,8 +30,8 @@ export function App() {
   // Sync hook — manages live eidolons sync streaming state.
   const sync = useSync();
 
-  // Inject the "Sync project" handler into commands.ts once on mount.
-  // Using useEffect so the reference is stable after the first render.
+  // Inject the command handlers into commands.ts once on mount.
+  // Re-inject when projectPath, sync.start, or setActiveRoute changes.
   useEffect(() => {
     setCommandHandlers({
       onSyncProject: () => {
@@ -35,9 +41,11 @@ export function App() {
         }
         sync.start(projectPath);
       },
+      onNavigate: (routeId) => {
+        setActiveRoute(routeId);
+      },
     });
-    // Re-inject when projectPath or sync.start changes so the closure is fresh.
-  }, [projectPath, sync.start]);
+  }, [projectPath, sync.start, setActiveRoute]);
 
   async function handlePickProject() {
     try {
@@ -87,5 +95,17 @@ export function App() {
         />
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// App — outer root, mounts <RouteProvider> then renders <AppShell>
+// ---------------------------------------------------------------------------
+
+export function App() {
+  return (
+    <RouteProvider>
+      <AppShell />
+    </RouteProvider>
   );
 }
