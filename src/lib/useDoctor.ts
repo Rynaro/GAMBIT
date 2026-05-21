@@ -48,7 +48,7 @@ interface LinePayload {
 }
 
 interface CompletePayload {
-  exit_code: number;
+  exitCode: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,25 +96,30 @@ export function useDoctor(): DoctorResult {
     // Attach event listeners before invoking start_doctor to avoid a race
     // where events arrive before we register.
     async function attach() {
-      // stdout lines: not parsed, but could be surfaced in a raw view.
-      const unlistenStdout = await listen<LinePayload>("doctor-stdout", (_ev) => {
-        // stdout from doctor is mostly section headers — ignore for check parsing.
-        // We could accumulate for a raw view if needed in the future.
-      });
-
-      const unlistenStderr = await listen<LinePayload>("doctor-stderr", (ev) => {
+      // Both stdout and stderr are fed into the same buffer so the parser sees
+      // the full combined output. Check rows are on stdout; banner + summary
+      // are on stderr.
+      const appendLine = (text: string) => {
         rawStderrRef.current = rawStderrRef.current
-          ? `${rawStderrRef.current}\n${ev.payload.line}`
-          : ev.payload.line;
+          ? `${rawStderrRef.current}\n${text}`
+          : text;
         setRawStderr(rawStderrRef.current);
         // Re-parse on every line for incremental dashboard updates.
         setChecks(parseDoctorStderr(rawStderrRef.current));
+      };
+
+      const unlistenStdout = await listen<LinePayload>("doctor-stdout", (ev) => {
+        appendLine(ev.payload.line);
+      });
+
+      const unlistenStderr = await listen<LinePayload>("doctor-stderr", (ev) => {
+        appendLine(ev.payload.line);
       });
 
       const unlistenComplete = await listen<CompletePayload>(
         "doctor-complete",
         (ev) => {
-          const code = ev.payload.exit_code;
+          const code = ev.payload.exitCode;
           setExitCode(code);
           // Final parse to ensure we didn't miss anything.
           setChecks(parseDoctorStderr(rawStderrRef.current));
