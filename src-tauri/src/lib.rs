@@ -1,6 +1,8 @@
 pub mod brand;
+pub mod sync;
 pub mod watcher;
 
+use sync::SyncState;
 use watcher::WatcherState;
 
 #[cfg(target_os = "macos")]
@@ -11,7 +13,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(WatcherState::new())
+        .manage(SyncState::new())
         .setup(|app| {
             // Apply NSVisualEffectView .sidebar vibrancy on macOS.
             // On Linux and Windows this block is compiled out entirely —
@@ -35,6 +39,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             watcher::start_watching,
             watcher::stop_watching,
+            sync::start_sync,
+            sync::cancel_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
