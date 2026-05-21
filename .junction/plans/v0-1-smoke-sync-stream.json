@@ -1,0 +1,24 @@
+{
+  "thread_id": "185766f9-3c21-4501-8845-b72dba6afdc8",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Implement FORGE smoke-test sync-stream for GAMBIT v0.1 — live `eidolons sync` stdout/stderr streaming into a virtualized log pane with ANSI rendering and SIGINT-on-cancel. Wire it to the existing palette `Sync project` command and the project-picker state established by smoke-test (c). Spec position: smoke_b_sync_stream per §7.1. Work directly on feat/v0.1-integration (current vibrancy fix is shipped + visually validated).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64",
+        "dev_environment": "docker-first-with-host-gui-fallback"
+      }
+    }
+  ]
+}
