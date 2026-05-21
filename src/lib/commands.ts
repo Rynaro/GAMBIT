@@ -1,5 +1,9 @@
 // commands.ts — Static command list and action runner for the ⌘K palette.
 // Pure TS (no React) so vitest can import and test it directly.
+//
+// Design note: palette commands are pure data; side-effecting handlers (like
+// startSync) must be injected via `setCommandHandlers()` from App.tsx.
+// This avoids circular imports and keeps commands.ts testable without Tauri.
 
 import { BRAND } from "@/lib/brand";
 
@@ -67,6 +71,30 @@ export const GROUP_LABELS: Record<CommandGroup, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Injected handlers (set once by App.tsx via setCommandHandlers)
+// ---------------------------------------------------------------------------
+
+export interface CommandHandlers {
+  /** Called when the user selects "Sync project" from the palette. */
+  onSyncProject: () => void;
+}
+
+// Default no-op handlers — safe if App.tsx hasn't injected yet.
+let handlers: CommandHandlers = {
+  onSyncProject: () => {
+    console.warn("[palette] Sync project: no handler injected yet");
+  },
+};
+
+/**
+ * Called once from App.tsx after the sync hook is initialised.
+ * Injects live handlers so palette commands can trigger side-effects.
+ */
+export function setCommandHandlers(h: CommandHandlers): void {
+  handlers = h;
+}
+
+// ---------------------------------------------------------------------------
 // Action runner
 // ---------------------------------------------------------------------------
 
@@ -77,6 +105,11 @@ export function resolveCommand(id: CommandId): void {
   if (id.startsWith("nav:")) {
     const destinationId = id.replace("nav:", "");
     console.info("[palette] navigate →", destinationId);
+    return;
+  }
+
+  if (id === "action:sync") {
+    handlers.onSyncProject();
     return;
   }
 
