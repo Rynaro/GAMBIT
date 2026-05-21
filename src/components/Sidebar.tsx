@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { BRAND } from "@/lib/brand";
 import { isMacOS } from "@/lib/platform";
+import { basename } from "@/lib/pathUtils";
 import type { CommandPaletteState } from "@/lib/useCommandPalette";
 
 const DESTINATIONS = [
@@ -16,10 +17,13 @@ const DESTINATIONS = [
 
 interface SidebarProps {
   palette: CommandPaletteState;
+  projectPath: string | null;
+  onPickProject: () => void;
 }
 
-export function Sidebar({ palette }: SidebarProps) {
+export function Sidebar({ palette, projectPath, onPickProject }: SidebarProps) {
   const hotkey = isMacOS() ? "⌘K" : "Ctrl K";
+  const projectBasename = projectPath ? basename(projectPath) : null;
 
   return (
     // background is transparent — NSVisualEffectView .sidebar vibrancy shows
@@ -54,7 +58,31 @@ export function Sidebar({ palette }: SidebarProps) {
         </ul>
       </nav>
 
-      <footer className="sidebar-palette-hint">
+      <footer className="sidebar-footer">
+        {projectBasename ? (
+          <div className="sidebar-project-row">
+            <span className="sidebar-project-name" title={projectPath ?? ""}>
+              {projectBasename}
+            </span>
+            <button
+              type="button"
+              className="sidebar-project-switch"
+              onClick={onPickProject}
+              aria-label="Switch project"
+            >
+              Switch
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="sidebar-pick-project"
+            onClick={onPickProject}
+          >
+            Pick project…
+          </button>
+        )}
+
         <button
           type="button"
           className="sidebar-palette-pill"

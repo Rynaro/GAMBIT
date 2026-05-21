@@ -213,11 +213,76 @@ body {
   padding-left: calc(var(--space-5) - 2px);
 }
 
-/* ---- Sidebar palette hint footer ---- */
-.sidebar-palette-hint {
-  padding: var(--space-5) var(--space-4) var(--space-5);
+/* ---- Sidebar footer (project picker + palette hint) ---- */
+.sidebar-footer {
+  padding: var(--space-5) var(--space-6);
   border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sidebar-pick-project {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  transition:
+    border-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    background-color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-pick-project:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-primary) 6%,
+    transparent 94%
+  );
+}
+
+.sidebar-project-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sidebar-project-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-project-switch {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+  transition:
+    color var(--duration-micro) var(--motion-entry),
+    background-color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-project-switch:hover {
+  color: var(--accent-primary);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-primary) 8%,
+    transparent 92%
+  );
 }
 
 .sidebar-palette-pill {
@@ -249,6 +314,16 @@ body {
 
 .sidebar-palette-label {
   font-size: 11px;
+}
+
+/* ---- Main content area (DriftPill + MainPane) ---- */
+.main-content-area {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-canvas);
 }
 
 /* ---- Main pane ---- */

@@ -2,18 +2,23 @@
 name = "gambit"
 version = "0.0.1"
 edition = "2021"
-description = "MATERIA — The ControlCenter where you equip the Eidolons."
+description = "GAMBIT — The ControlCenter where you compose the Eidolons."
 license = "MIT"
-repository = "https://github.com/Rynaro/MATERIA"
+repository = "https://github.com/Rynaro/GAMBIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-window-vibrancy = "~0.7"
+notify = "6"
+notify-debouncer-mini = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-window-vibrancy = "~0.7"
+chrono = { version = "0.4", features = ["serde"] }
 
 [profile.release]
 panic = "abort"

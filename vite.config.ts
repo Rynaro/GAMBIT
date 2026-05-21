@@ -10,6 +10,12 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx", "src/**/*.test.ts", "src/**/*.test.tsx"],
+    setupFiles: [],
+  },
   server: {
     port: 5173,
     // Required for Tauri: prevents vite from obscuring rust errors
