@@ -20,6 +20,7 @@
 // upgrade/mcp).
 
 use std::path::PathBuf;
+use serde::Serialize;
 use tauri::Manager;
 
 /// Locate the `eidolons` CLI binary to spawn.
@@ -125,5 +126,39 @@ pub fn probe_all(app: &tauri::AppHandle) -> BinaryProbe {
         path_lookup,
         nexus_fallback_exists,
         nexus_fallback_path,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// binary_status IPC command — moved out of lib.rs to dodge the Tauri 2
+// duplicate-macro pitfall when #[tauri::command] lives next to
+// tauri::generate_handler! in the same module.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryStatus {
+    pub resolved_path: Option<String>,
+    pub bundled_extracted: bool,
+    pub bundled_path: Option<String>,
+    pub path_lookup: Option<String>,
+    pub nexus_fallback_exists: bool,
+    pub nexus_fallback_path: Option<String>,
+}
+
+#[tauri::command]
+pub fn binary_status(app: tauri::AppHandle) -> BinaryStatus {
+    let probe = probe_all(&app);
+    let resolved_path = find_eidolons(&app)
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned());
+
+    BinaryStatus {
+        resolved_path,
+        bundled_extracted: probe.bundled_extracted,
+        bundled_path: probe.bundled_path.map(|p| p.to_string_lossy().into_owned()),
+        path_lookup: probe.path_lookup.map(|p| p.to_string_lossy().into_owned()),
+        nexus_fallback_exists: probe.nexus_fallback_exists,
+        nexus_fallback_path: probe.nexus_fallback_path.map(|p| p.to_string_lossy().into_owned()),
     }
 }

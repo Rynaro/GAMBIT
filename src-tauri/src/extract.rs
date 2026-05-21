@@ -25,7 +25,7 @@
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::Manager;
 
 // ---------------------------------------------------------------------------

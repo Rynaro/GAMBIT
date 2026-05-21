@@ -16,59 +16,7 @@ use watcher::WatcherState;
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
-// ---------------------------------------------------------------------------
-// binary_status IPC command
-// ---------------------------------------------------------------------------
-
-use serde::Serialize;
-
-/// Snapshot of all three binary discovery levels.
-///
-/// Returned by the `binary_status` Tauri command and consumed by the
-/// Settings route's "CLI Binary" panel.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BinaryStatus {
-    /// The path that `find_eidolons` would resolve to (first winning level).
-    pub resolved_path: Option<String>,
-    /// True when the bundled-extracted binary exists at <app_data_dir>/cli/eidolons.
-    pub bundled_extracted: bool,
-    /// Path of the bundled-extraction slot (exists or not).
-    pub bundled_path: Option<String>,
-    /// Path found via PATH lookup, if present.
-    pub path_lookup: Option<String>,
-    /// True when ~/.eidolons/nexus/cli/eidolons exists.
-    pub nexus_fallback_exists: bool,
-    /// The conventional nexus fallback path.
-    pub nexus_fallback_path: Option<String>,
-}
-
-/// Tauri command: probe all three binary discovery levels and return a status snapshot.
-///
-/// Called by SettingsRoute on mount to render the "CLI Binary" panel.
-/// Does not spawn any process — pure filesystem checks.
-#[tauri::command]
-pub fn binary_status(app: tauri::AppHandle) -> BinaryStatus {
-    let probe = binary::probe_all(&app);
-    let resolved_path = binary::find_eidolons(&app)
-        .ok()
-        .map(|p| p.to_string_lossy().into_owned());
-
-    BinaryStatus {
-        resolved_path,
-        bundled_extracted: probe.bundled_extracted,
-        bundled_path: probe
-            .bundled_path
-            .map(|p| p.to_string_lossy().into_owned()),
-        path_lookup: probe
-            .path_lookup
-            .map(|p| p.to_string_lossy().into_owned()),
-        nexus_fallback_exists: probe.nexus_fallback_exists,
-        nexus_fallback_path: probe
-            .nexus_fallback_path
-            .map(|p| p.to_string_lossy().into_owned()),
-    }
-}
+// binary_status command lives in binary.rs (see binary::binary_status).
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -123,7 +71,7 @@ pub fn run() {
             mcp::mcp_install,
             mcp::mcp_uninstall,
             mcp::mcp_cancel,
-            binary_status,
+            binary::binary_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
