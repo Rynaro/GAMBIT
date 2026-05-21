@@ -1,0 +1,24 @@
+{
+  "thread_id": "ae4a95ee-df35-467a-b926-31f6b7866036",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Implement FORGE smoke-test (file watcher) for GAMBIT v0.1 — notify-debouncer-mini watcher on the user-selected project's eidolons.lock, 250ms debounce, drift-pill state machine, idle→watching→drift transitions, <1s end-to-end. User sequencing: smoke-test (c). Spec position: smoke_c_fs_watch per §7.1. Branch off main; do not depend on smoke-a-vibrancy or smoke-b-palette in-flight branches.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-smoke-c-watcher",
+        "host_platform": "darwin-arm64",
+        "dev_environment": "docker-first-with-host-gui-fallback"
+      }
+    }
+  ]
+}

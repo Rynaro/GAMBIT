@@ -3,8 +3,14 @@
   "message_id": "c3f82b1e-7d4a-4e9f-a831-2e5f0d9c1b47",
   "thread_id": "ae4a95ee-df35-467a-b926-31f6b7866036",
   "parent_id": null,
-  "from": {"eidolon": "apivr", "version": "3.1.2"},
-  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
   "performative": "PROPOSE",
   "edge_origin": "roster",
   "objective": "Hand off the GAMBIT v0.1 smoke-test (c) completion record (eidolons.lock file watcher + drift pill + minimal project picker) so IDG can chronicle the milestone.",
@@ -12,14 +18,16 @@
     "kind": "apivr-completion-report",
     "schema_version": "1.0",
     "path": "apivr-completion-report.md",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "size_bytes": 0
+    "sha256": "05c051dbcd591d56930032ef0d6f8e7531fdbb9aa56613e7fbf385a0bf379443",
+    "size_bytes": 4976
   },
-  "constraints": {"trust_level": "standard"},
+  "constraints": {
+    "trust_level": "standard"
+  },
   "confidence": 0.85,
   "integrity": {
     "method": "sha256",
-    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+    "value": "05c051dbcd591d56930032ef0d6f8e7531fdbb9aa56613e7fbf385a0bf379443"
   },
   "trace": {
     "ts": "2026-05-21T02:15:00Z",
