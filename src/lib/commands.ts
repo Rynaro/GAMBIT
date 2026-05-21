@@ -77,6 +77,8 @@ export const GROUP_LABELS: Record<CommandGroup, string> = {
 export interface CommandHandlers {
   /** Called when the user selects "Sync project" from the palette. */
   onSyncProject: () => void;
+  /** Called when the user selects "Doctor" from the palette. Optional; no-op if omitted. */
+  onRunDoctor?: () => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
@@ -84,10 +86,11 @@ let handlers: CommandHandlers = {
   onSyncProject: () => {
     console.warn("[palette] Sync project: no handler injected yet");
   },
+  onRunDoctor: undefined,
 };
 
 /**
- * Called once from App.tsx after the sync hook is initialised.
+ * Called once from App.tsx after the sync and doctor hooks are initialised.
  * Injects live handlers so palette commands can trigger side-effects.
  */
 export function setCommandHandlers(h: CommandHandlers): void {
@@ -110,6 +113,15 @@ export function resolveCommand(id: CommandId): void {
 
   if (id === "action:sync") {
     handlers.onSyncProject();
+    return;
+  }
+
+  if (id === "action:doctor") {
+    if (handlers.onRunDoctor) {
+      handlers.onRunDoctor();
+    } else {
+      console.warn("[palette] Doctor: no handler injected yet");
+    }
     return;
   }
 

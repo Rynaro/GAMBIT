@@ -1,0 +1,326 @@
+/* DoctorDashboard.css — Styles for the 9-check doctor health grid. */
+
+/* ---- Container ---- */
+.doctor-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-8) var(--space-9);
+  max-width: 780px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---- Header ---- */
+.doctor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.doctor-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+
+.doctor-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ---- Run / Cancel button ---- */
+.doctor-run-btn {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--accent-primary);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent 92%);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+  flex-shrink: 0;
+}
+
+.doctor-run-btn:hover {
+  background-color: color-mix(in srgb, var(--accent-primary) 16%, transparent 84%);
+}
+
+.doctor-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doctor-cancel-btn {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--status-error);
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 8%, transparent 92%);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+  flex-shrink: 0;
+}
+
+.doctor-cancel-btn:hover {
+  background-color: color-mix(in srgb, var(--status-error) 16%, transparent 84%);
+}
+
+/* ---- Empty / running state ---- */
+.doctor-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-10) var(--space-9);
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.doctor-empty-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.doctor-empty-heading {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.doctor-empty-body {
+  font-size: 12px;
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+/* ---- Rollup bar ---- */
+.doctor-rollup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.doctor-rollup[data-outcome="pass"] {
+  border-color: color-mix(in srgb, var(--status-ok) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-ok) 6%, var(--bg-surface) 94%);
+}
+
+.doctor-rollup[data-outcome="fail"] {
+  border-color: color-mix(in srgb, var(--status-error) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-error) 6%, var(--bg-surface) 94%);
+}
+
+.doctor-rollup[data-outcome="warn"] {
+  border-color: color-mix(in srgb, var(--status-warn) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-warn) 6%, var(--bg-surface) 94%);
+}
+
+.doctor-rollup-label {
+  color: var(--text-secondary);
+}
+
+.doctor-rollup-count {
+  margin-left: var(--space-2);
+  font-weight: 700;
+}
+
+.doctor-rollup-count--pass { color: var(--status-ok); }
+.doctor-rollup-count--warn { color: var(--status-warn); }
+.doctor-rollup-count--fail { color: var(--status-error); }
+
+/* ---- Check grid ---- */
+.doctor-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---- Individual check row ---- */
+.doctor-check {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  overflow: hidden;
+  transition:
+    border-color var(--duration-micro) var(--motion-entry),
+    background-color var(--duration-micro) var(--motion-entry);
+}
+
+.doctor-check:hover {
+  background: var(--bg-surface-raised);
+}
+
+.doctor-check[data-status="fail"] {
+  border-color: color-mix(in srgb, var(--status-error) 35%, var(--border-subtle) 65%);
+}
+
+.doctor-check[data-status="warn"] {
+  border-color: color-mix(in srgb, var(--status-warn) 25%, var(--border-subtle) 75%);
+}
+
+/* ---- Check row header (always visible) ---- */
+.doctor-check-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  user-select: none;
+}
+
+.doctor-check-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.doctor-check-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Status pill ---- */
+.doctor-status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.doctor-status-pill[data-status="pass"] {
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+.doctor-status-pill[data-status="warn"] {
+  background: color-mix(in srgb, var(--status-warn) 15%, transparent 85%);
+  color: var(--status-warn);
+  /* Subtle pulse while running to indicate pending state. */
+}
+
+.doctor-status-pill[data-status="fail"] {
+  background: color-mix(in srgb, var(--status-error) 15%, transparent 85%);
+  color: var(--status-error);
+}
+
+/* ---- Details toggle chevron ---- */
+.doctor-check-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.doctor-check-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+/* ---- Detail body (collapsed by default) ---- */
+.doctor-check-details {
+  padding: 0 var(--space-5) var(--space-5) calc(var(--space-5) + 36px + var(--space-4));
+  border-top: 1px solid var(--border-subtle);
+  /* Slide-in transition */
+  animation: doctor-details-enter var(--duration-panel) var(--motion-entry) both;
+}
+
+@keyframes doctor-details-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.doctor-check-message {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-top: var(--space-4);
+}
+
+.doctor-check-message[data-status="fail"] {
+  color: var(--status-error);
+}
+
+.doctor-check-message[data-status="warn"] {
+  color: var(--status-warn);
+}
+
+/* ---- Raw stderr drawer ---- */
+.doctor-raw-section {
+  margin-top: var(--space-4);
+}
+
+.doctor-raw-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  background: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.doctor-raw-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.doctor-raw-body {
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
+  animation: doctor-details-enter var(--duration-panel) var(--motion-entry) both;
+}

@@ -1,0 +1,31 @@
+==> eidolons doctor — checking /Users/dev/my-project
+
+==> Manifest + lock
+  [1/9] eidolons.yaml present              ✓
+  [2/9] eidolons.lock present              ✓
+
+==> Installed members
+  [3/9] atlas installed with valid manifest ✓
+  [4/9] spectra installed with valid manifest ✓
+
+==> Host wiring
+  [5/9] host wiring complete               ✗
+        → CLAUDE.md missing eidolon:spectra block
+        → Re-run 'eidolons sync --force' to repair
+
+==> Dispatch freshness
+  [6/9] CLAUDE.md clean (no stale pointers) ·
+        → 1 legacy agents/ pointer detected — consider re-syncing
+
+==> Release integrity
+  [7/9] atlas@1.5.0 release integrity verified ✓
+
+==> Cache hygiene
+  [8/9] atlas@1.5.0 cache fresh            ✓
+
+==> Pending upgrades
+  [9/9] spectra@4.2.1 upgrade available    ·
+        → spectra: 4.2.1 → 4.3.2 (within ^4.0.0)
+        → Run `eidolons upgrade` to apply.
+
+==> 1 ERROR, 2 WARN
