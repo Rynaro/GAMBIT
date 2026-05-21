@@ -35,8 +35,6 @@ function parseRosterYaml(raw: string): RosterMember[] {
   let current: Partial<RosterMember> | null = null;
 
   for (const line of lines) {
-    const trimmed = line.trimStart();
-
     // Detect `eidolons:` top-level key
     if (/^eidolons\s*:/.test(line)) {
       inEidolons = true;
