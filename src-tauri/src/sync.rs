@@ -3,7 +3,8 @@
 // Two commands are exposed:
 //
 //   start_sync(project_path: String) → Result<(), String>
-//     1. Locates the `eidolons` binary (PATH first, then ~/.eidolons/nexus/cli/eidolons).
+//     1. Locates the `eidolons` binary via binary::find_eidolons() (bundled
+//        extraction first, then PATH, then ~/.eidolons/nexus/cli/eidolons).
 //     2. Spawns `eidolons sync --non-interactive --yes` with cwd = project_path.
 //     3. Pipes stdout + stderr line-by-line as Tauri events:
 //          sync-stdout  { line: String, ts: String }  (one event per line)
@@ -19,6 +20,7 @@
 // This is tracked as a v0.2 follow-up; the current behaviour terminates the
 // subprocess but does not allow it to perform a clean shutdown.
 
+use crate::binary;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -69,40 +71,6 @@ struct CompletePayload {
 }
 
 // ---------------------------------------------------------------------------
-// Binary discovery
-// ---------------------------------------------------------------------------
-
-/// Locate the `eidolons` CLI binary.
-///
-/// Order:
-///   1. `which eidolons` — honours the user's $PATH.
-///   2. `~/.eidolons/nexus/cli/eidolons` — conventional install location.
-///
-/// Returns an error string if neither is found.
-fn find_eidolons_binary() -> Result<PathBuf, String> {
-    // 1. PATH lookup via `which`
-    if let Ok(path) = which::which("eidolons") {
-        return Ok(path);
-    }
-
-    // 2. Conventional fallback
-    let home = dirs_fallback_home()?;
-    let fallback = home.join(".eidolons").join("nexus").join("cli").join("eidolons");
-    if fallback.exists() {
-        return Ok(fallback);
-    }
-
-    Err("eidolons CLI not found on PATH and not present at ~/.eidolons/nexus/cli/eidolons. Run the curl-pipe installer: curl -fsSL https://raw.githubusercontent.com/Rynaro/eidolons/main/cli/install.sh | bash".to_string())
-}
-
-/// Best-effort $HOME resolution without pulling the full `dirs` crate.
-fn dirs_fallback_home() -> Result<PathBuf, String> {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|_| "$HOME is not set; cannot resolve fallback eidolons path".to_string())
-}
-
-// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -116,7 +84,7 @@ pub async fn start_sync(
     app: AppHandle,
     project_path: String,
 ) -> Result<(), String> {
-    let binary = find_eidolons_binary()?;
+    let binary = binary::find_eidolons(&app)?;
 
     let project_dir = PathBuf::from(&project_path);
     if !project_dir.exists() {

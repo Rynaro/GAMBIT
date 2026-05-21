@@ -1,0 +1,129 @@
+// binary.rs — Shared eidolons binary discovery.
+//
+// All Rust modules that need to spawn `eidolons` call `find_eidolons(&app)`
+// from this module.  The discovery chain has three levels:
+//
+//   1. Bundled-extracted  — <app_data_dir>/cli/eidolons
+//      Populated by extract::extract_bundled_cli_if_present() on first launch.
+//      On macOS the data dir is ~/Library/Application Support/dev.eidolons.gambit/
+//      Tauri 2 API reference: tauri::Manager::path().app_data_dir()
+//      https://docs.rs/tauri/2/tauri/trait.Manager.html#method.path
+//
+//   2. PATH lookup — which::which("eidolons")
+//      Honours the user's $PATH; covers standard nexus curl-pipe installs.
+//
+//   3. Conventional fallback — $HOME/.eidolons/nexus/cli/eidolons
+//      Hard-coded nexus install location for when $PATH is not wired.
+//
+// Returns Err only when all three levels fail.  Callers should surface the
+// message via their own Err propagation (already the pattern in sync/doctor/
+// upgrade/mcp).
+
+use std::path::PathBuf;
+use tauri::Manager;
+
+/// Locate the `eidolons` CLI binary to spawn.
+///
+/// Discovery order:
+///   1. Bundled-extracted: `<app_data_dir>/cli/eidolons`
+///      (`app_data_dir` is resolved via Tauri 2's `app.path().app_data_dir()`).
+///      On macOS this resolves to
+///      `~/Library/Application Support/dev.eidolons.gambit/`.
+///   2. PATH lookup via `which::which("eidolons")`.
+///   3. Fallback to `$HOME/.eidolons/nexus/cli/eidolons`.
+///
+/// Returns an error string if all three levels fail.
+pub fn find_eidolons(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    // --- Level 1: bundled-extracted binary ---
+    // Tauri 2 resolves the app-specific data directory via the path API.
+    // On macOS: ~/Library/Application Support/<bundle-id>/
+    // Ref: https://docs.rs/tauri/2/tauri/trait.Manager.html
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        let bundled = data_dir.join("cli").join("eidolons");
+        if bundled.exists() {
+            return Ok(bundled);
+        }
+    }
+
+    // --- Level 2: PATH lookup ---
+    if let Ok(path) = which::which("eidolons") {
+        return Ok(path);
+    }
+
+    // --- Level 3: conventional fallback ---
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| "$HOME is not set; cannot resolve fallback eidolons path".to_string())?;
+    let fallback = home
+        .join(".eidolons")
+        .join("nexus")
+        .join("cli")
+        .join("eidolons");
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    Err(
+        "eidolons CLI not found (bundled, PATH, ~/.eidolons/nexus/cli/eidolons). \
+         Run the curl-pipe installer: \
+         curl -fsSL https://raw.githubusercontent.com/Rynaro/eidolons/main/cli/install.sh | bash"
+            .to_string(),
+    )
+}
+
+/// Probe all three discovery levels and return a status snapshot.
+///
+/// Used by the `binary_status` IPC command so the Settings panel can
+/// display which discovery source is active without actually spawning anything.
+pub struct BinaryProbe {
+    /// Path returned by the bundled-extracted check (level 1), if it exists.
+    pub bundled_path: Option<PathBuf>,
+    /// Whether the bundled binary file actually exists on disk.
+    pub bundled_extracted: bool,
+    /// Path found via PATH lookup (level 2), if present.
+    pub path_lookup: Option<PathBuf>,
+    /// Whether the conventional nexus fallback exists (level 3).
+    pub nexus_fallback_exists: bool,
+    /// The nexus fallback path (whether or not it exists).
+    pub nexus_fallback_path: Option<PathBuf>,
+}
+
+/// Probe all three discovery levels without short-circuiting.
+///
+/// Unlike `find_eidolons` this always checks all three levels, so the
+/// Settings panel can show the full picture.
+pub fn probe_all(app: &tauri::AppHandle) -> BinaryProbe {
+    // Level 1 — bundled extraction dir
+    let (bundled_path, bundled_extracted) = if let Ok(data_dir) = app.path().app_data_dir() {
+        let p = data_dir.join("cli").join("eidolons");
+        let exists = p.exists();
+        (Some(p), exists)
+    } else {
+        (None, false)
+    };
+
+    // Level 2 — PATH
+    let path_lookup = which::which("eidolons").ok();
+
+    // Level 3 — conventional fallback
+    let (nexus_fallback_path, nexus_fallback_exists) =
+        if let Ok(home) = std::env::var("HOME").map(PathBuf::from) {
+            let p = home
+                .join(".eidolons")
+                .join("nexus")
+                .join("cli")
+                .join("eidolons");
+            let exists = p.exists();
+            (Some(p), exists)
+        } else {
+            (None, false)
+        };
+
+    BinaryProbe {
+        bundled_path,
+        bundled_extracted,
+        path_lookup,
+        nexus_fallback_exists,
+        nexus_fallback_path,
+    }
+}
