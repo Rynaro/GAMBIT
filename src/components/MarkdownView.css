@@ -1,0 +1,223 @@
+/* MarkdownView.css — design-token-driven markdown rendering for GAMBIT.
+   All colours use CSS variables from global.css — no hard-coded values.
+   Scoped to .markdown-view to prevent bleed into other route styles. */
+
+/* ---- Article wrapper ---- */
+.methodology-article {
+  width: 100%;
+}
+
+/* ---- Headings ---- */
+.markdown-view .md-h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  margin-top: 0;
+  margin-bottom: var(--space-6);
+}
+
+.markdown-view .md-h2 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin-top: var(--space-9);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.markdown-view .md-h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-top: var(--space-7);
+  margin-bottom: var(--space-4);
+}
+
+.markdown-view .md-h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Paragraphs ---- */
+.markdown-view .md-p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: 0;
+  margin-bottom: var(--space-5);
+  max-width: 72ch;
+}
+
+/* ---- Links ---- */
+.markdown-view .md-a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  transition: border-color var(--duration-micro) var(--motion-entry),
+              color var(--duration-micro) var(--motion-entry);
+}
+
+.markdown-view .md-a:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* ---- Inline code ---- */
+.markdown-view .md-code-inline {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px var(--space-2);
+  color: var(--accent-secondary-amber);
+}
+
+/* ---- Code blocks ---- */
+.markdown-view .md-code-block {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  padding: var(--space-6);
+  margin: var(--space-5) 0;
+  overflow-x: auto;
+  max-width: 100%;
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
+/* Code element nested inside pre — no extra chrome */
+.markdown-view .md-code-block code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  border-radius: 0;
+}
+
+/* ---- Blockquotes ---- */
+.markdown-view .md-blockquote {
+  border-left: 3px solid var(--accent-primary);
+  margin: var(--space-5) 0;
+  padding: var(--space-3) var(--space-6);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.markdown-view .md-blockquote p {
+  margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* ---- Lists ---- */
+/* Restore list-style zeroed by the global reset */
+.markdown-view .md-ul {
+  list-style: disc;
+  padding-left: var(--space-8);
+  margin: var(--space-3) 0 var(--space-5);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdown-view .md-ol {
+  list-style: decimal;
+  padding-left: var(--space-8);
+  margin: var(--space-3) 0 var(--space-5);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdown-view .md-li {
+  margin-bottom: var(--space-2);
+}
+
+/* GFM task-list items */
+.markdown-view .md-li input[type="checkbox"] {
+  accent-color: var(--accent-primary);
+  margin-right: var(--space-2);
+  cursor: default;
+}
+
+/* Bold labels inside list items */
+.markdown-view .md-li strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ---- Tables (GFM) ---- */
+.markdown-view .md-table-wrapper {
+  overflow-x: auto;
+  margin: var(--space-5) 0;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+}
+
+.markdown-view .md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.markdown-view .md-th {
+  text-align: left;
+  padding: var(--space-3) var(--space-5);
+  color: var(--text-muted);
+  font-weight: 600;
+  background-color: var(--bg-surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.markdown-view .md-td {
+  padding: var(--space-3) var(--space-5);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.markdown-view .md-tr:last-child .md-td {
+  border-bottom: none;
+}
+
+.markdown-view .md-tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--bg-surface-raised) 50%, transparent);
+}
+
+/* ---- Horizontal rule ---- */
+.markdown-view .md-hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-9) 0;
+}
+
+/* ---- Strong / em ---- */
+.markdown-view strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.markdown-view em {
+  color: var(--text-secondary);
+  font-style: italic;
+}

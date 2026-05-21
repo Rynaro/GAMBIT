@@ -38,6 +38,7 @@ The following P1/P2 items are deferred from this round:
 
 ### Added
 
+- Methodology route now renders agent.md files as proper markdown (react-markdown + remark-gfm) — headings, fenced code, GFM tables, lists, blockquotes, inline code. YAML front-matter is stripped before render. Replaces the previous `<pre>`-text fallback.
 - Upgrade flow: ⌘K palette "Check upgrades" runs `eidolons upgrade --check --json`, renders a plan-review table (nexus + 6 Eidolon members with status badges), Apply-all button streams `eidolons upgrade --yes` with cancel support. Mirrors Sync + Doctor patterns. Per-member selection deferred to v0.2.
 - NSVisualEffectView `.sidebar` vibrancy on macOS with graceful solid fallback on Linux/Windows (smoke-test a).
 - Docker-first dev workflow — `Dockerfile.dev`, `docker-compose.yml`, `Makefile` (install/lint/typecheck/cargo-check/ci/shell containerised; `make dev` host-only for the GUI).

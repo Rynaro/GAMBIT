@@ -1,10 +1,12 @@
 // MethodologyRoute.tsx — Browse installed Eidolon agent.md files.
 // Left nav: list of installed Eidolons (discovered via .eidolons/*/agent.md).
-// Right pane: plain <pre> render of the active Eidolon's agent.md.
+// Right pane: full markdown render of the active Eidolon's agent.md
+//             (react-markdown + remark-gfm; YAML front-matter stripped).
 
 import { useState, useEffect } from "react";
 import { readTextFile, readDir } from "@tauri-apps/plugin-fs";
 import { RouteHeader } from "@/components/RouteHeader";
+import { MarkdownView } from "@/components/MarkdownView";
 import { getRoute } from "@/routes/index";
 
 // ---------------------------------------------------------------------------
@@ -189,7 +191,9 @@ export function MethodologyRoute({ projectPath }: MethodologyRouteProps) {
               </p>
             </div>
           ) : content ? (
-            <pre className="methodology-pre">{content}</pre>
+            <article className="methodology-article">
+              <MarkdownView source={content} />
+            </article>
           ) : (
             <div className="route-empty" style={{ padding: "var(--space-7) 0" }}>
               <p className="route-empty-body">Select an Eidolon to read its methodology.</p>
