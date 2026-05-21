@@ -83,6 +83,8 @@ export interface CommandHandlers {
    * Should switch the active route and close the palette.
    */
   onNavigate: (routeId: RouteId) => void;
+  /** Called when the user selects "Doctor" from the palette. Optional; no-op if omitted. */
+  onRunDoctor?: () => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
@@ -95,10 +97,11 @@ let handlers: CommandHandlers = {
   onNavigate: (routeId: RouteId) => {
     console.info("[palette] navigate →", routeId);
   },
+  onRunDoctor: undefined,
 };
 
 /**
- * Called once from App.tsx after the sync hook is initialised.
+ * Called once from App.tsx after the sync and doctor hooks are initialised.
  * Injects live handlers so palette commands can trigger side-effects.
  */
 export function setCommandHandlers(h: CommandHandlers): void {
@@ -122,6 +125,15 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
 
   if (id === "action:sync") {
     handlers.onSyncProject();
+    return;
+  }
+
+  if (id === "action:doctor") {
+    if (handlers.onRunDoctor) {
+      handlers.onRunDoctor();
+    } else {
+      console.warn("[palette] Doctor: no handler injected yet");
+    }
     return;
   }
 

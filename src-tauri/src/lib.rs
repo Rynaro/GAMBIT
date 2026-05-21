@@ -1,7 +1,9 @@
 pub mod brand;
+pub mod doctor;
 pub mod sync;
 pub mod watcher;
 
+use doctor::DoctorState;
 use sync::SyncState;
 use watcher::WatcherState;
 
@@ -16,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(WatcherState::new())
         .manage(SyncState::new())
+        .manage(DoctorState::new())
         .setup(|app| {
             // Apply NSVisualEffectView .sidebar vibrancy on macOS.
             // On Linux and Windows this block is compiled out entirely —
@@ -41,6 +44,8 @@ pub fn run() {
             watcher::stop_watching,
             sync::start_sync,
             sync::cancel_sync,
+            doctor::start_doctor,
+            doctor::cancel_doctor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
