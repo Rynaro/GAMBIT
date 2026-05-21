@@ -1,10 +1,12 @@
 pub mod brand;
 pub mod doctor;
+pub mod mcp;
 pub mod sync;
 pub mod upgrade;
 pub mod watcher;
 
 use doctor::DoctorState;
+use mcp::McpStoreState;
 use sync::SyncState;
 use upgrade::UpgradeState;
 use watcher::WatcherState;
@@ -22,6 +24,7 @@ pub fn run() {
         .manage(SyncState::new())
         .manage(DoctorState::new())
         .manage(UpgradeState::new())
+        .manage(McpStoreState::new())
         .setup(|app| {
             // Apply NSVisualEffectView .sidebar vibrancy on macOS.
             // On Linux and Windows this block is compiled out entirely —
@@ -52,6 +55,10 @@ pub fn run() {
             upgrade::check_upgrades,
             upgrade::start_upgrade_apply,
             upgrade::cancel_upgrade,
+            mcp::mcp_list,
+            mcp::mcp_install,
+            mcp::mcp_uninstall,
+            mcp::mcp_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
