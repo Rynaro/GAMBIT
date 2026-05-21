@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "11f44e30-861a-4692-b1a3-956eb8ca9726",
+  "thread_id": "904039f7-0699-46e8-8ccc-f587b2c04caa",
+  "parent_id": null,
+  "from": {"eidolon": "vigil", "version": "1.1.2"},
+  "to": {"eidolon": "apivr", "version": "3.1.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Propose root-cause attribution for GAMBIT Doctor 'Run checks' producing a red badge with no rows — three independent bugs (parser shape + stdout listener no-op + exit_code snake/camel mismatch) — and ranked interventions for APIVR-Δ.",
+  "artifact": {
+    "kind": "root-cause-report",
+    "schema_version": "1.0",
+    "path": "root-cause-report.md",
+    "sha256": "89a607361286203dd287db880476ed3427b2617b4bb825563b5798599a4bee2c",
+    "size_bytes": 11359
+  },
+  "constraints": {"trust_level": "high"},
+  "confidence": 0.97,
+  "integrity": {
+    "method": "sha256",
+    "value": "89a607361286203dd287db880476ed3427b2617b4bb825563b5798599a4bee2c"
+  },
+  "trace": {
+    "ts": "2026-05-21T16:44:26Z",
+    "host": "claude-code",
+    "model": "claude-opus-4-7",
+    "tier": "trance"
+  }
+}

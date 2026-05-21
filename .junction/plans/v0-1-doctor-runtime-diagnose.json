@@ -1,0 +1,41 @@
+{
+  "thread_id": "904039f7-0699-46e8-8ccc-f587b2c04caa",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "human", "version": "n/a"},
+      "to": {"eidolon": "vigil", "version": "1.1.2"},
+      "performative": "REQUEST",
+      "edge_origin": "roster",
+      "objective": "Diagnose why GAMBIT's Doctor dashboard 'Run checks' flashes briefly and then settles into a red/failed last-run badge with no checks rendered. Two confirmed evidence anchors pre-supplied: (1) real `eidolons doctor` output uses a category-grouped format (=== Foo ===) with the status glyph at the START of each line and ~30 checks total — NOT the [N/M]-prefixed 9-check shape the existing parser expects; (2) macOS GUI apps inherit a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin) that does not include ~/.local/bin where the user's `eidolons` lives. Determine which is the primary trigger, and whether both fixes are required.",
+      "artifact": {
+        "kind": "prompt",
+        "schema_version": "1.0",
+        "path": "input/diagnose-prompt.md"
+      },
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    },
+    {
+      "step_id": "S1",
+      "from": {"eidolon": "vigil", "version": "1.1.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "PROPOSE",
+      "edge_origin": "roster",
+      "objective": "Apply the patch identified in VIGIL's root-cause-report so the Doctor 'Run checks' button produces a populated, accurate health grid.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "high",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    }
+  ]
+}
