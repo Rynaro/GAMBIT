@@ -4,7 +4,7 @@ pub mod watcher;
 use watcher::WatcherState;
 
 #[cfg(target_os = "macos")]
-use tauri_plugin_window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
