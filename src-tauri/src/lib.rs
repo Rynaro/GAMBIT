@@ -1,10 +1,12 @@
 pub mod brand;
 pub mod doctor;
 pub mod sync;
+pub mod upgrade;
 pub mod watcher;
 
 use doctor::DoctorState;
 use sync::SyncState;
+use upgrade::UpgradeState;
 use watcher::WatcherState;
 
 #[cfg(target_os = "macos")]
@@ -19,6 +21,7 @@ pub fn run() {
         .manage(WatcherState::new())
         .manage(SyncState::new())
         .manage(DoctorState::new())
+        .manage(UpgradeState::new())
         .setup(|app| {
             // Apply NSVisualEffectView .sidebar vibrancy on macOS.
             // On Linux and Windows this block is compiled out entirely —
@@ -46,6 +49,9 @@ pub fn run() {
             sync::cancel_sync,
             doctor::start_doctor,
             doctor::cancel_doctor,
+            upgrade::check_upgrades,
+            upgrade::start_upgrade_apply,
+            upgrade::cancel_upgrade,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
