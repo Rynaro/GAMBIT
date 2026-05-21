@@ -4,7 +4,7 @@
 //   idle       — no upgrade operation in flight
 //   checking   — running `eidolons upgrade --check --json` (one-shot invoke)
 //   reviewing  — plan received; user is reviewing the table
-//   applying   — streaming `eidolons upgrade --yes` output
+//   applying   — streaming `eidolons upgrade --yes` or `eidolons upgrade --system --yes` output
 //   done       — apply exited with code 0
 //   failed     — apply exited with code != 0, or check/invoke threw
 //   cancelled  — user called cancel() during applying
@@ -12,6 +12,7 @@
 // IPC contract:
 //   Commands: check_upgrades        (projectPath: string) → UpgradePlan
 //             start_upgrade_apply   (projectPath: string) → void
+//             start_nexus_upgrade   (projectPath: string) → void
 //             cancel_upgrade        ()                    → void
 //   Events  : upgrade-stdout  { line: string; ts: string }
 //             upgrade-stderr  { line: string; ts: string }
@@ -42,8 +43,10 @@ export interface UseUpgradeResult {
   lines: SyncLine[];
   exitCode: number | null;
   error: string | null;
+  lastAction: "members" | "nexus" | null;
   check: (projectPath: string) => Promise<void>;
   apply: (projectPath: string) => Promise<void>;
+  nexusUpgrade: (projectPath: string) => Promise<void>;
   cancel: () => void;
   dismiss: () => void;
 }
@@ -71,6 +74,7 @@ export function useUpgrade(): UseUpgradeResult {
   const [lines, setLines] = useState<SyncLine[]>([]);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastAction, setLastAction] = useState<"members" | "nexus" | null>(null);
 
   // Unlisten refs — cleaned up when a new apply starts or on unmount.
   const unlistenRefs = useRef<UnlistenFn[]>([]);
@@ -123,6 +127,7 @@ export function useUpgrade(): UseUpgradeResult {
     detachListeners();
 
     setState("applying");
+    setLastAction("members");
     setLines([]);
     setExitCode(null);
     setError(null);
@@ -179,6 +184,75 @@ export function useUpgrade(): UseUpgradeResult {
     }
   }, []);
 
+  /**
+   * nexusUpgrade — stream `eidolons upgrade --system --yes`.
+   * Upgrades only the nexus; member Eidolons are untouched.
+   * Transitions: reviewing → applying → done | failed | cancelled.
+   * Uses the same event names (upgrade-stdout/stderr/complete) so the
+   * existing listener pair registered above is reused without changes.
+   */
+  const nexusUpgrade = useCallback(async (projectPath: string) => {
+    // Tear down any previous listeners before attaching new ones.
+    detachListeners();
+
+    setState("applying");
+    setLastAction("nexus");
+    setLines([]);
+    setExitCode(null);
+    setError(null);
+
+    // Attach event listeners before invoking start_nexus_upgrade to avoid a
+    // race where events arrive before we register.
+    const unlistenStdout = await listen<LinePayload>("upgrade-stdout", (ev) => {
+      setLines((prev) => [
+        ...prev,
+        { text: ev.payload.line, stream: "stdout", ts: ev.payload.ts },
+      ]);
+    });
+
+    const unlistenStderr = await listen<LinePayload>("upgrade-stderr", (ev) => {
+      setLines((prev) => [
+        ...prev,
+        { text: ev.payload.line, stream: "stderr", ts: ev.payload.ts },
+      ]);
+    });
+
+    const unlistenComplete = await listen<CompletePayload>(
+      "upgrade-complete",
+      (ev) => {
+        const code = ev.payload.exitCode;
+        setExitCode(code);
+        if (code === -2) {
+          setState("cancelled");
+        } else {
+          setState(code === 0 ? "done" : "failed");
+        }
+        detachListeners();
+      }
+    );
+
+    unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
+
+    // Invoke the Rust command.
+    try {
+      await invoke("start_nexus_upgrade", { projectPath });
+    } catch (err) {
+      const msg = typeof err === "string" ? err : JSON.stringify(err);
+      setLines((prev) => [
+        ...prev,
+        {
+          text: `[gambit] error: ${msg}`,
+          stream: "stderr",
+          ts: new Date().toISOString(),
+        },
+      ]);
+      setError(msg);
+      setExitCode(1);
+      setState("failed");
+      detachListeners();
+    }
+  }, []);
+
   /** cancel — kill the apply child process. */
   const cancel = useCallback(() => {
     invoke("cancel_upgrade").catch((err) => {
@@ -198,7 +272,8 @@ export function useUpgrade(): UseUpgradeResult {
     setLines([]);
     setExitCode(null);
     setError(null);
+    setLastAction(null);
   }, []);
 
-  return { state, plan, lines, exitCode, error, check, apply, cancel, dismiss };
+  return { state, plan, lines, exitCode, error, lastAction, check, apply, nexusUpgrade, cancel, dismiss };
 }
