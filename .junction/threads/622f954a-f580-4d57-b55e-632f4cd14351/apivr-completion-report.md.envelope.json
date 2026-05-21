@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "a3f7c8d1-2e45-4b69-9c3f-0d8e1a2b3c4d",
+  "thread_id": "622f954a-f580-4d57-b55e-632f4cd14351",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT v0.1 sidebar-routes scaffolding (6 real routes + Doctor stub for parallel branch overwrite) so IDG can chronicle it together with the parallel Doctor PR.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "4eccf0dc8fa1cde90b41dd3e44fd9f0fa91bcdc66d13d87d669863b002b4d502",
+    "size_bytes": 4718
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "4eccf0dc8fa1cde90b41dd3e44fd9f0fa91bcdc66d13d87d669863b002b4d502"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

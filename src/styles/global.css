@@ -374,3 +374,287 @@ body {
   border-radius: var(--radius-pill);
   display: inline-block;
 }
+
+/* ---- Route pane shell ---- */
+.route-pane {
+  padding: var(--space-9);
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---- Route cards (content blocks) ---- */
+.route-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-7);
+  margin-bottom: var(--space-6);
+}
+
+.route-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-5);
+}
+
+/* ---- Route verb buttons ---- */
+.route-verb-btn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+}
+
+.route-verb-btn:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.route-verb-btn.primary {
+  background-color: var(--accent-primary);
+  color: var(--bg-canvas);
+  border-color: var(--accent-primary);
+}
+
+.route-verb-btn.primary:hover {
+  opacity: 0.88;
+}
+
+/* ---- Route empty state ---- */
+.route-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-11) var(--space-9);
+  text-align: center;
+}
+
+.route-empty-heading {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.route-empty-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+.route-empty-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-4);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  display: inline-block;
+}
+
+/* ---- Route table ---- */
+.route-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.route-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.route-table td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.route-table tr:last-child td {
+  border-bottom: none;
+}
+
+.route-table td.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ---- Status badges ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-ok {
+  background-color: color-mix(in srgb, var(--status-ok) 14%, transparent);
+  color: var(--status-ok);
+}
+
+.badge-warn {
+  background-color: color-mix(in srgb, var(--status-warn) 14%, transparent);
+  color: var(--status-warn);
+}
+
+.badge-error {
+  background-color: color-mix(in srgb, var(--status-error) 14%, transparent);
+  color: var(--status-error);
+}
+
+.badge-muted {
+  background-color: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
+
+/* ---- Stub pill (used by DoctorRoute stub) ---- */
+.stub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-warn);
+  background-color: color-mix(in srgb, var(--status-warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+}
+
+/* ---- Methodology two-pane layout ---- */
+.methodology-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.methodology-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  position: sticky;
+  top: 0;
+}
+
+.methodology-nav-item {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: left;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+}
+
+.methodology-nav-item:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.methodology-nav-item[data-active="true"] {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+  border-left: 2px solid var(--accent-primary);
+  padding-left: calc(var(--space-4) - 2px);
+}
+
+.methodology-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-7);
+  min-height: 300px;
+}
+
+.methodology-pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ---- Settings sections ---- */
+.settings-section {
+  margin-bottom: var(--space-7);
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-5);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-6);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.settings-row-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row-muted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- Loading spinner ---- */
+.route-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-11) var(--space-9);
+  color: var(--text-muted);
+  font-size: 13px;
+}

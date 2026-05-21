@@ -6,6 +6,7 @@
 // This avoids circular imports and keeps commands.ts testable without Tauri.
 
 import { BRAND } from "@/lib/brand";
+import type { RouteId } from "@/lib/useRoute";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,12 +78,22 @@ export const GROUP_LABELS: Record<CommandGroup, string> = {
 export interface CommandHandlers {
   /** Called when the user selects "Sync project" from the palette. */
   onSyncProject: () => void;
+  /**
+   * Called when the user selects a Navigate command from the palette.
+   * Should switch the active route and close the palette.
+   */
+  onNavigate: (routeId: RouteId) => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
+// The console.info calls here intentionally match the test expectations in
+// tests/unit/commands.test.ts so that pre-injection calls are observable.
 let handlers: CommandHandlers = {
   onSyncProject: () => {
-    console.warn("[palette] Sync project: no handler injected yet");
+    console.info("[palette] action →", "sync");
+  },
+  onNavigate: (routeId: RouteId) => {
+    console.info("[palette] navigate →", routeId);
   },
 };
 
@@ -101,10 +112,11 @@ export function setCommandHandlers(h: CommandHandlers): void {
 const FF_LINEAGE =
   "Eidolons answer the call. Junction is where they bind. GAMBIT is where you compose them.";
 
-export function resolveCommand(id: CommandId): void {
+export function resolveCommand(id: CommandId, closePalette?: () => void): void {
   if (id.startsWith("nav:")) {
-    const destinationId = id.replace("nav:", "");
-    console.info("[palette] navigate →", destinationId);
+    const routeId = id.replace("nav:", "") as RouteId;
+    handlers.onNavigate(routeId);
+    closePalette?.();
     return;
   }
 
