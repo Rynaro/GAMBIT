@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Doctor route now renders the live `eidolons doctor` check grid. Three independent bugs fixed together:
+  parser regex updated to match category-grouped output (`=== Foo ===` headings, glyph at line start, no
+  `[N/M]` badges); stdout listener wired up (real check rows are on stdout, only the banner + summary on
+  stderr); `exit_code` wire field renamed to `exitCode` to match the Rust `serde rename_all = "camelCase"`
+  output (also applied to `useSync.ts`). See VIGIL root-cause-report at
+  `.junction/threads/904039f7-0699-46e8-8ccc-f587b2c04caa/root-cause-report.md`.
+
+### v0.1 → v0.2 Doctor follow-ups
+
+The following P1/P2 items are deferred from this round:
+
+- **P1-A** — Defensive "done-but-empty" render branch in `DoctorDashboard.tsx`: surface "Doctor ran but
+  produced no parseable output" + "View raw" when `state === "done" && checks.length === 0`.
+- **P1-B** — Render `category` headings in the dashboard grid: group rows by `check.category`, emit an
+  `<h3>` between groups; drop the now-meaningless `[i/n]` badge from `CheckRow`.
+- **P1-C** — Rename `rawStderr` → `rawOutput` in `useDoctor.ts`, `DoctorDashboard.tsx`, `DoctorRoute.tsx`
+  (the combined-stream buffer is no longer stderr-only post-P0-B).
+- **P2-A** — Defensive `typeof doctor.exitCode === "number"` guard in `DoctorRoute.tsx:80`,
+  `DoctorDashboard.tsx:177`, and `LogPane.tsx:124` to belt-and-braces the P0-C fix.
+- **P2-B** — Update the "Parser note (GAP-03)" comment in `doctor.rs:22-24` to reflect that check rows are
+  on stdout and the banner/summary are on stderr.
+
 ### Added
 
 - NSVisualEffectView `.sidebar` vibrancy on macOS with graceful solid fallback on Linux/Windows (smoke-test a).
