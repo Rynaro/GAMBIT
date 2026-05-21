@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "d4de7edc-33e7-4597-a0ce-b1ba925fd26e",
+  "thread_id": "05a53a35-a9e5-46f7-9ee2-7931ac52c700",
+  "parent_id": null,
+  "from": {"eidolon": "vigil", "version": "1.1.2"},
+  "to": {"eidolon": "apivr", "version": "3.1.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Propose root-cause attribution for the GAMBIT blank-pane-after-project-pick symptom and a ranked set of interventions (RouteErrorBoundary infra + collapse-to-single-projectPath fix) for APIVR-Δ to apply.",
+  "artifact": {
+    "kind": "root-cause-report",
+    "schema_version": "1.0",
+    "path": "root-cause-report.md",
+    "sha256": "d0749537dc3667ae0a80135b6d4b9b89447ad6e1369f19f74a93a75b7dc414f2",
+    "size_bytes": 14660
+  },
+  "constraints": {"trust_level": "high"},
+  "confidence": 0.95,
+  "integrity": {
+    "method": "sha256",
+    "value": "d0749537dc3667ae0a80135b6d4b9b89447ad6e1369f19f74a93a75b7dc414f2"
+  },
+  "trace": {
+    "ts": "2026-05-21T15:16:54Z",
+    "host": "claude-code",
+    "model": "claude-opus-4-7",
+    "tier": "trance"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "thread_id": "e9cadae1-ca03-4229-aba2-71096babf139",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Promote MCP Store route from read-only to actionable. Wire `eidolons mcp list --json` as the primary data source (replaces the current eidolons.mcp.lock-only read — list is authoritative because it includes the catalogue + per-row install status). Add per-row Install and Uninstall buttons; both flows stream output via a new McpInstallPane mirroring the LogPane/UpgradePane patterns. Refresh the list after completion. Spec position: §7.1 v0.2 DoD 'MCP Store install/uninstall end-to-end against real Docker daemon'. Live fixtures (mcp list JSON + install/uninstall help) staged in input/ — TS interfaces MUST derive from the JSON shape verbatim (per memory feedback_capture_live_before_parsing).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64"
+      }
+    }
+  ]
+}

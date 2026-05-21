@@ -1,0 +1,35 @@
+{
+  "thread_id": "f9b16f50-bc88-436f-b7ba-8b0f0643af4a",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Build the Doctor dashboard end-to-end for GAMBIT v0.1 — Rust IPC spawning `eidolons doctor` in the selected project's cwd, TS parser converting the glyph-anchored stderr output into a structured check array (✓ pass, ✗ fail, · warn), and a 9-row React dashboard rendering each check with status badge + verbose details on expand. Wire palette 'Doctor' command to invoke. A parallel Agent A branch (feat/v0.1-routes) owns the route scaffolding and ships a DoctorRoute stub — this branch's DoctorRoute.tsx overrides Agent A's stub on merge with the real dashboard content. Per SPECTRA spec GAP-03: `eidolons doctor` has no --json flag; we parse stderr text. Maintain golden-test fixtures in tests/parsers/.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-doctor",
+        "parallel_partner": "feat/v0.1-routes",
+        "owned_files": [
+          "src-tauri/src/doctor.rs",
+          "src-tauri/src/lib.rs (registration of doctor module + start_doctor handler)",
+          "src/lib/parseDoctorStderr.ts",
+          "src/lib/useDoctor.ts",
+          "src/components/DoctorDashboard.tsx",
+          "src/components/DoctorDashboard.css",
+          "src/routes/DoctorRoute.tsx (real content — overrides parallel branch stub)",
+          "src/lib/commands.ts (Actions-group: Doctor handler only)",
+          "tests/parsers/doctor.fixture.txt",
+          "tests/unit/parseDoctorStderr.test.ts"
+        ]
+      }
+    }
+  ]
+}

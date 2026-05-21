@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "2e3e2adc-1829-4739-9654-222dbebfb868",
+  "thread_id": "370b0190-d7a0-45d9-aeba-f1477c4320dd",
+  "parent_id": null,
+  "from": {"eidolon": "vigil", "version": "1.1.2"},
+  "to": {"eidolon": "apivr", "version": "3.1.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Propose a root-cause attribution for the GAMBIT smoke-test (a) vibrancy-not-translucent symptom and a ranked set of interventions for APIVR-Δ to apply.",
+  "artifact": {
+    "kind": "root-cause-report",
+    "schema_version": "1.0",
+    "path": "root-cause-report.md",
+    "sha256": "d40a3ad9f9bddb06ee442cbc5a7f619c3e7b0f64e0ea112ae750f7d22d110d6f",
+    "size_bytes": 10510
+  },
+  "constraints": {"trust_level": "high"},
+  "confidence": 0.95,
+  "integrity": {
+    "method": "sha256",
+    "value": "d40a3ad9f9bddb06ee442cbc5a7f619c3e7b0f64e0ea112ae750f7d22d110d6f"
+  },
+  "trace": {
+    "ts": "2026-05-21T13:38:16Z",
+    "host": "claude-code",
+    "model": "claude-opus-4-7",
+    "tier": "trance"
+  }
+}

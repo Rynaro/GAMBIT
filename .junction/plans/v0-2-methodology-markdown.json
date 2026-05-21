@@ -1,0 +1,23 @@
+{
+  "thread_id": "37bb58c5-455d-4259-ab04-09b03f4c6838",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Replace the MethodologyRoute <pre> renderer with a full markdown view (react-markdown + remark-gfm). Strip the YAML front-matter before rendering. Style headings/code/tables/lists with the existing design tokens. Cozy reading experience — generous line height, mono inline-code chip, subtle accent on links, blockquotes with left accent border. Spec position: §7.1 v0.2 DoD 'Methodology browser renders ATLAS/SPECTRA/FORGE markdowns without overflow'. Live fixture (atlas/agent.md) staged in input/ — confirm your styling against its actual content (YAML front-matter, H1/H2/H3, fenced code, GFM table at line 50, no blockquotes; check other Eidolons for blockquote usage too).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64"
+      }
+    }
+  ]
+}

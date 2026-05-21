@@ -18,7 +18,23 @@ GAMBIT completes the Final Fantasy lineage in the Eidolons ecosystem:
 
 GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + Vite. It reads your `eidolons.yaml` / `eidolons.lock` / `.eidolons/*/install.manifest.json`, watches them for drift, streams `sync` / `upgrade` / `doctor` output into polished log panes, and stays out of your way with a ⌘K-spined power surface.
 
+Watches `eidolons.lock` and surfaces drift within a second. Streams `eidolons sync` output live with ANSI colour and a cancel hotkey. Reviews and applies Eidolons upgrades from a plan-driven sheet. Installs, upgrades, and uninstalls MCP servers from the project's catalogue. Browses Eidolon methodology docs with full markdown rendering — tables, fenced code, blockquotes — straight from each member's `agent.md`.
+
+The fs capability scope is intentionally limited to `$HOME` subtrees matching Eidolons-shaped paths (`$HOME/.eidolons/**`, `$HOME/**/eidolons.{yaml,lock,mcp.lock}`, `$HOME/**/.eidolons/**`) — arbitrary disk access is not granted.
+
 The primary verb is **equip** — slot Eidolons into your project the way FF7's materia menu is where you slot summon orbs into your party's equipment.
+
+### Commands
+
+Press **⌘K** (macOS) or **Ctrl K** (Linux / Windows) anywhere in GAMBIT to open the command palette. The palette provides:
+
+| Group | Commands |
+|---|---|
+| **Navigate** | Roster, Project, MCP Store, Harness, Doctor, Methodology, Settings |
+| **Actions** | Sync project, Doctor, Check upgrades |
+| **About** | About GAMBIT |
+
+Type a 3-letter prefix to fuzzy-filter. ↑/↓ to move, Enter to execute, Esc to close. A small pill at the bottom of the sidebar also toggles the palette.
 
 ---
 
@@ -34,29 +50,47 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history and upcoming miles
 
 ## Getting started
 
-### Prerequisites
+GAMBIT uses a **Docker-first dev workflow** to keep the macOS host clean.
+All build steps (install, lint, typecheck, cargo check) run inside a container.
+The one exception is the live desktop window — `pnpm tauri dev` must run on
+the host because stock Docker cannot render a macOS Cocoa window.
 
-- [Rust](https://rustup.rs/) (stable, 1.77+)
-- [Node.js](https://nodejs.org/) (22+)
-- [pnpm](https://pnpm.io/) (10.x — do not use pnpm 11)
-- [Tauri CLI prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
-
-### Install dependencies
+### 1 — Build the dev container and install dependencies
 
 ```bash
-pnpm install
+make install
 ```
 
-### Development
+This runs `pnpm install` inside the container and populates named volumes for
+pnpm-store, cargo-registry, and the Rust build cache.
+
+### 2 — Lint, typecheck, and cargo-check inside the container
 
 ```bash
-pnpm tauri dev
+make ci
 ```
 
-### Build
+This runs `install → lint → typecheck → cargo-check` sequentially, all inside
+Docker. Individual targets are also available: `make lint`, `make typecheck`,
+`make cargo-check`.
+
+### 3 — Open the desktop window on host
 
 ```bash
-pnpm tauri build
+make dev
+```
+
+This calls `pnpm tauri dev` directly on your macOS host. **One-time prerequisite:**
+install [Tauri 2 host prerequisites](https://v2.tauri.app/start/prerequisites/)
+(Rust stable, Node 22, pnpm 10.x, Tauri CLI v2).
+
+> **Host vs container:** Everything except `make dev` is containerised.
+> If you only want to validate non-GUI logic, `make ci` is all you need.
+
+### Drop into a shell
+
+```bash
+make shell
 ```
 
 ---

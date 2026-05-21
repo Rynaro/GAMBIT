@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "f0e3b5c2-abf9-4af3-80c8-09a084349d58",
+  "thread_id": "370b0190-d7a0-45d9-aeba-f1477c4320dd",
+  "parent_id": "2e3e2adc-1829-4739-9654-222dbebfb868",
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT smoke-test (a) vibrancy fix (macos-private-api + app.macOSPrivateApi + setupPlatform hoist) so IDG can chronicle the milestone.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "7ffabc26182c4d841c65cd34513825595109a1aa36437f9b35c2e720c0dbdbeb",
+    "size_bytes": 2624
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "7ffabc26182c4d841c65cd34513825595109a1aa36437f9b35c2e720c0dbdbeb"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

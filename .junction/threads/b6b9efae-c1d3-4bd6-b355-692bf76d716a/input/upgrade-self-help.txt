@@ -1,0 +1,17 @@
+eidolons upgrade self — atomic nexus self-upgrade
+
+Usage: eidolons upgrade self [--ref <ref>] [--check] [--rollback]
+                              [--force] [--non-interactive]
+
+Flags:
+  --ref <ref>          Upgrade to a specific branch, tag, or SHA.
+  --rollback           Restore the previous nexus from ~/.eidolons/nexus.prev/.
+  --check              Show upgrade plan without modifying anything.
+  --force              Skip dirty-check and proceed without confirmation.
+  --non-interactive    Fail on prompts instead of waiting for input.
+
+Exit codes:
+  0  success / no-op   4  network error
+  1  generic failure   5  integrity check failed
+  2  already current   6  smoke test failed
+  7  no prev to roll back to

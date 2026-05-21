@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "c3b1a2d4-8f5e-4c7a-9b6d-e1f0a2b3c4d5",
+  "thread_id": "f4f54ea4-76c5-4ea7-937d-e82129df8f6f",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT McpStoreRoute + HarnessRoute fix against the real eidolons.mcp.lock shape (no imagined schemas; live fixture pinned).",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "bc6557340a83465e47c78b07cd93f8e84319891bc9c31d424e6329685708e49d",
+    "size_bytes": 3167
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "bc6557340a83465e47c78b07cd93f8e84319891bc9c31d424e6329685708e49d"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

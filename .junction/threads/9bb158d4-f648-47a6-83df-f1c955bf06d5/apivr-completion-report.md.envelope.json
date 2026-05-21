@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "c388aa6b-7bbf-4235-bd10-894467b5db4b",
+  "thread_id": "9bb158d4-f648-47a6-83df-f1c955bf06d5",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT fs-scope fix (capability extended with scoped allow-read-text-file/allow-read-dir/allow-exists for $HOME/.eidolons + project subtrees) so IDG can chronicle.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "5813b2fe42575301b8a8d63b44e1f3ac4ff9857791fadaa8ca74e58dbcc963b3",
+    "size_bytes": 3210
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "5813b2fe42575301b8a8d63b44e1f3ac4ff9857791fadaa8ca74e58dbcc963b3"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

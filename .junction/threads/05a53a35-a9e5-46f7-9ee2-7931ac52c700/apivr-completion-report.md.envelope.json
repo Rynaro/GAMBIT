@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "290fbe64-6451-4a55-8d3d-653be7669e6b",
+  "thread_id": "05a53a35-a9e5-46f7-9ee2-7931ac52c700",
+  "parent_id": "d4de7edc-33e7-4597-a0ce-b1ba925fd26e",
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT blank-pane fix (RouteErrorBoundary + single projectPath store + ProjectRoute shape fix) so IDG can chronicle.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "cc62e124eb67ee43b4180afccae2d6e6653cacb105f3fa9e9ad8e00ecdebfbd4",
+    "size_bytes": 3682
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "cc62e124eb67ee43b4180afccae2d6e6653cacb105f3fa9e9ad8e00ecdebfbd4"
+  },
+  "trace": {
+    "ts": "2026-05-21T15:20:42Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

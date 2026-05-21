@@ -1,0 +1,241 @@
+/* McpInstallPane.css — Styles for the bottom-anchored MCP install/uninstall panel.
+ * Mirrors UpgradePane.css layout; simpler (no plan-review table mode). */
+
+/* ---- Container ---- */
+.mcp-install-pane {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36vh;
+  min-height: 200px;
+  max-height: 55vh;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -8px 32px -8px var(--shadow-pane-lift);
+  animation: mcp-pane-enter var(--duration-panel) var(--motion-entry) both;
+}
+
+@keyframes mcp-pane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Top bar ---- */
+.mcp-install-pane-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: var(--bg-surface-raised);
+}
+
+.mcp-install-pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 160px;
+}
+
+.mcp-install-pane-op {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  flex-shrink: 1;
+}
+
+.mcp-install-pane-op-verb {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.mcp-install-pane-op-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-install-pane-spacer {
+  flex: 1;
+}
+
+/* ---- Status pill ---- */
+.mcp-install-pane-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.mcp-install-pane-status[data-state="installing"],
+.mcp-install-pane-status[data-state="uninstalling"] {
+  background: color-mix(in srgb, var(--status-warn) 15%, transparent 85%);
+  color: var(--status-warn);
+  animation: mcp-status-pulse 1.4s ease-in-out infinite;
+}
+
+.mcp-install-pane-status[data-state="done"] {
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+.mcp-install-pane-status[data-state="failed"] {
+  background: color-mix(in srgb, var(--status-error) 15%, transparent 85%);
+  color: var(--status-error);
+}
+
+.mcp-install-pane-status[data-state="cancelled"] {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent 85%);
+  color: var(--text-muted);
+}
+
+@keyframes mcp-status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ---- Spinner ---- */
+.mcp-install-pane-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--status-warn);
+  border-radius: 50%;
+  animation: mcp-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes mcp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Action buttons ---- */
+.mcp-install-pane-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    border-color var(--duration-micro) var(--motion-entry);
+  background: none;
+  flex-shrink: 0;
+}
+
+.mcp-install-pane-btn:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.mcp-install-pane-btn--cancel {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.mcp-install-pane-btn--cancel:hover {
+  background-color: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}
+
+.mcp-install-pane-btn--close {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+/* ---- Body ---- */
+.mcp-install-pane-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-canvas);
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ---- Terminal state summary strip ---- */
+.mcp-install-pane-terminal-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* ---- Log pre ---- */
+.mcp-install-pane-log {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-primary);
+  background: none;
+  margin: 0;
+  flex: 1;
+}
+
+.mcp-install-pane-log-line--stderr {
+  color: var(--status-warn);
+}
+
+.mcp-install-pane-log-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ---- Exit code badge ---- */
+.mcp-install-pane-exit {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.mcp-install-pane-exit[data-ok="true"] {
+  color: var(--status-ok);
+}
+
+.mcp-install-pane-exit[data-ok="false"] {
+  color: var(--status-error);
+}
+
+/* ---- Footer ---- */
+.mcp-install-pane-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}

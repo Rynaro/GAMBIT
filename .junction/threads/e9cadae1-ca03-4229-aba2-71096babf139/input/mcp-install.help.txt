@@ -1,0 +1,17 @@
+eidolons mcp install — install an MCP into this project
+
+Usage: eidolons mcp install <name>[@<ver>] [--force] [--project-root PATH]
+
+Arguments:
+  name[@ver]    MCP name, optionally with version (e.g. atlas-aci@0.2.2).
+                Defaults to catalogue pins.stable when version is omitted.
+
+Options:
+  --force              Reinstall even if already at the requested version.
+  --project-root PATH  Project directory to install into (default: cwd).
+  -h, --help           Show this help.
+
+Examples:
+  eidolons mcp install atlas-aci
+  eidolons mcp install junction@0.2.0
+  eidolons mcp install atlas-aci --force

@@ -1,0 +1,239 @@
+/* LogPane.css — Styles for the bottom-anchored sync log panel. */
+
+/* ---- Container ---- */
+.log-pane {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40vh;
+  min-height: 200px;
+  max-height: 60vh;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -8px 32px -8px var(--shadow-pane-lift);
+
+  /* 220ms fade-in per spec §3.3 */
+  animation: log-pane-enter var(--duration-panel) var(--motion-entry) both;
+}
+
+@keyframes log-pane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Top bar ---- */
+.log-pane-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: var(--bg-surface-raised);
+}
+
+.log-pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 200px;
+}
+
+.log-pane-spacer {
+  flex: 1;
+}
+
+/* ---- Status pill ---- */
+.log-pane-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.log-pane-status[data-state="running"] {
+  background: color-mix(in srgb, var(--status-warn) 15%, transparent 85%);
+  color: var(--status-warn);
+  /* Amber pulse */
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+.log-pane-status[data-state="done"] {
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+.log-pane-status[data-state="failed"] {
+  background: color-mix(in srgb, var(--status-error) 15%, transparent 85%);
+  color: var(--status-error);
+}
+
+.log-pane-status[data-state="cancelled"] {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent 85%);
+  color: var(--text-muted);
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ---- Spinner (only while running) ---- */
+.log-pane-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--status-warn);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Action buttons ---- */
+.log-pane-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    border-color var(--duration-micro) var(--motion-entry);
+  background: none;
+  flex-shrink: 0;
+}
+
+.log-pane-btn:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.log-pane-btn--cancel {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.log-pane-btn--cancel:hover {
+  background-color: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}
+
+.log-pane-btn--close {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+/* ---- Body (virtualized scroll area) ---- */
+.log-pane-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-canvas);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: var(--space-4) 0;
+}
+
+/* Inner container sized by the virtualizer */
+.log-pane-virtual-inner {
+  position: relative;
+  width: 100%;
+}
+
+/* Individual virtualized row wrapper */
+.log-pane-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0 var(--space-6);
+}
+
+/* ---- Individual log lines ---- */
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-primary);
+}
+
+.log-line--stderr {
+  color: var(--status-warn);
+}
+
+/* anser CSS classes — foreground colours.
+   DESIGN EXCEPTION: these map to the fixed ANSI 16-color terminal palette
+   (standardised by ECMA-48 / ISO 6429). They intentionally use hard-coded
+   hex values rather than design tokens — terminal colors are a display
+   contract, not a theme decision. Do not replace these with var(--…). */
+.ansi-black-fg   { color: #4d4d4d; }
+.ansi-red-fg     { color: var(--status-error); }
+.ansi-green-fg   { color: var(--status-ok); }
+.ansi-yellow-fg  { color: var(--status-warn); }
+.ansi-blue-fg    { color: #7aa2f7; }
+.ansi-magenta-fg { color: #bb9af7; }
+.ansi-cyan-fg    { color: #7dcfff; }
+.ansi-white-fg   { color: var(--text-primary); }
+
+/* Bright variants */
+.ansi-bright-black-fg   { color: var(--text-muted); }
+.ansi-bright-red-fg     { color: #ff9e64; }
+.ansi-bright-green-fg   { color: #9ece6a; }
+.ansi-bright-yellow-fg  { color: #e0af68; }
+.ansi-bright-blue-fg    { color: #a9b1d6; }
+.ansi-bright-magenta-fg { color: #c0caf5; }
+.ansi-bright-cyan-fg    { color: #b4f9f8; }
+.ansi-bright-white-fg   { color: #ffffff; }
+
+/* Text decorations */
+.ansi-bold      { font-weight: 700; }
+.ansi-italic    { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+.ansi-dim       { opacity: 0.6; }
+
+/* ---- Footer ---- */
+.log-pane-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.log-pane-footer-exit {
+  color: var(--text-secondary);
+}
+
+.log-pane-footer-exit[data-ok="true"] {
+  color: var(--status-ok);
+}
+
+.log-pane-footer-exit[data-ok="false"] {
+  color: var(--status-error);
+}

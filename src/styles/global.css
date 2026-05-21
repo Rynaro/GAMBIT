@@ -1,4 +1,4 @@
-/* global.css — MATERIA design system.
+/* global.css — GAMBIT design system.
    Dark-mode-first. All token values mirror src/lib/theme.ts.
    Do not hard-code colors in components; use these variables. */
 
@@ -83,17 +83,48 @@ button {
   --duration-sheet: 320ms;
 }
 
+/* ---- Overlay / shadow tokens (used by CommandPalette backdrop + sheet shadow) ---- */
+:root {
+  --palette-backdrop-bg: rgba(15, 13, 20, 0.65);
+  --shadow-overlay-60: rgba(0, 0, 0, 0.6);
+  --shadow-overlay-40: rgba(0, 0, 0, 0.4);
+  --shadow-pane-lift: rgba(0, 0, 0, 0.45);
+}
+
 /* ---- Light mode ---- */
 @media (prefers-color-scheme: light) {
   :root {
+    /* Background */
     --bg-canvas: #fbf7f2;
     --bg-surface: #ffffff;
     --bg-surface-raised: #f0ebe6;
+
+    /* Border */
     --border-subtle: #ddd8d0;
+
+    /* Text */
     --text-primary: #1a1520;
     --text-secondary: #5a5060;
     --text-muted: #9a95a0;
+
+    /* Accent — softer purple + amber for light backgrounds */
+    --accent-primary: #7c4fd4;
+    --accent-gradient: linear-gradient(135deg, #7c4fd4 0%, #2bb8a4 100%);
+    --accent-secondary-amber: #c07a20;
+
+    /* Status — darker shades for legibility on white surfaces */
+    --status-ok: #1e9e8c;
+    --status-warn: #b87700;
+    --status-error: #d63048;
+
+    /* Sidebar */
     --sidebar-bg: #f4efe8;
+
+    /* Overlay / shadow — lighter for light mode */
+    --palette-backdrop-bg: rgba(60, 50, 80, 0.45);
+    --shadow-overlay-60: rgba(0, 0, 0, 0.22);
+    --shadow-overlay-40: rgba(0, 0, 0, 0.14);
+    --shadow-pane-lift: rgba(0, 0, 0, 0.12);
   }
 }
 
@@ -101,7 +132,10 @@ button {
 html,
 body {
   height: 100%;
-  background-color: var(--bg-canvas);
+  /* Transparent so NSVisualEffectView vibrancy shows through on macOS.
+     On Linux/Windows the sidebar falls back to var(--bg-canvas) via the
+     :root[data-platform] selector below. */
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -112,6 +146,7 @@ body {
 
 #root {
   height: 100%;
+  background: transparent;
 }
 
 /* ---- App shell layout ---- */
@@ -126,11 +161,22 @@ body {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100%;
-  background-color: var(--sidebar-bg);
+  /* Transparent on macOS: vibrancy (NSVisualEffectView .sidebar) carries the
+     surface. On Linux/Windows: :root[data-platform] selector below fills in
+     the solid fallback. */
+  background: transparent;
+  /* Subtle 1px right border keeps the sidebar delineated even without vibrancy */
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* ---- Platform-specific sidebar fallback ---- */
+/* Linux: solid sidebar background (no vibrancy available) */
+:root[data-platform="linux"] .sidebar,
+:root[data-platform="windows"] .sidebar {
+  background: var(--bg-canvas);
 }
 
 .sidebar-header {
@@ -198,11 +244,125 @@ body {
   padding-left: calc(var(--space-5) - 2px);
 }
 
+/* ---- Sidebar footer (project picker + palette hint) ---- */
+.sidebar-footer {
+  padding: var(--space-5) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sidebar-pick-project {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  transition:
+    border-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    background-color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-pick-project:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-primary) 6%,
+    transparent 94%
+  );
+}
+
+.sidebar-project-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sidebar-project-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-project-switch {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+  transition:
+    color var(--duration-micro) var(--motion-entry),
+    background-color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-project-switch:hover {
+  color: var(--accent-primary);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-primary) 8%,
+    transparent 92%
+  );
+}
+
+.sidebar-palette-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color var(--duration-micro) var(--motion-entry);
+}
+
+.sidebar-palette-pill:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-secondary);
+}
+
+.sidebar-palette-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sidebar-palette-label {
+  font-size: 11px;
+}
+
+/* ---- Main content area (DriftPill + MainPane) ---- */
+.main-content-area {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-canvas);
+}
+
 /* ---- Main pane ---- */
 .main-pane {
   flex: 1;
   height: 100%;
   overflow-y: auto;
+  /* Fully opaque — vibrancy is sidebar-only; content area must never bleed through */
   background-color: var(--bg-canvas);
   display: flex;
   align-items: center;
@@ -244,4 +404,288 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
   display: inline-block;
+}
+
+/* ---- Route pane shell ---- */
+.route-pane {
+  padding: var(--space-9);
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---- Route cards (content blocks) ---- */
+.route-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-7);
+  margin-bottom: var(--space-6);
+}
+
+.route-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-5);
+}
+
+/* ---- Route verb buttons ---- */
+.route-verb-btn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+}
+
+.route-verb-btn:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.route-verb-btn.primary {
+  background-color: var(--accent-primary);
+  color: var(--bg-canvas);
+  border-color: var(--accent-primary);
+}
+
+.route-verb-btn.primary:hover {
+  opacity: 0.88;
+}
+
+/* ---- Route empty state ---- */
+.route-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-11) var(--space-9);
+  text-align: center;
+}
+
+.route-empty-heading {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.route-empty-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+.route-empty-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-1) var(--space-4);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  display: inline-block;
+}
+
+/* ---- Route table ---- */
+.route-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.route-table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.route-table td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.route-table tr:last-child td {
+  border-bottom: none;
+}
+
+.route-table td.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ---- Status badges ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge-ok {
+  background-color: color-mix(in srgb, var(--status-ok) 14%, transparent);
+  color: var(--status-ok);
+}
+
+.badge-warn {
+  background-color: color-mix(in srgb, var(--status-warn) 14%, transparent);
+  color: var(--status-warn);
+}
+
+.badge-error {
+  background-color: color-mix(in srgb, var(--status-error) 14%, transparent);
+  color: var(--status-error);
+}
+
+.badge-muted {
+  background-color: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-muted);
+}
+
+/* ---- Stub pill (used by DoctorRoute stub) ---- */
+.stub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-warn);
+  background-color: color-mix(in srgb, var(--status-warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+}
+
+/* ---- Methodology two-pane layout ---- */
+.methodology-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.methodology-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  position: sticky;
+  top: 0;
+}
+
+.methodology-nav-item {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: left;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry);
+}
+
+.methodology-nav-item:hover {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.methodology-nav-item[data-active="true"] {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-primary);
+  border-left: 2px solid var(--accent-primary);
+  padding-left: calc(var(--space-4) - 2px);
+}
+
+.methodology-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-7);
+  min-height: 300px;
+}
+
+.methodology-pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ---- Settings sections ---- */
+.settings-section {
+  margin-bottom: var(--space-7);
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-5);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-6);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.settings-row-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row-muted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- Loading spinner ---- */
+.route-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-11) var(--space-9);
+  color: var(--text-muted);
+  font-size: 13px;
 }

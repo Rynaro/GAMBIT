@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "e44679b9-162e-4cc8-9eae-b19c2239e173",
+  "thread_id": "b5aa18d4-1cae-49b1-a202-333f523b0ced",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT Upgrade flow (Rust IPC + React useUpgrade + UpgradePane + commands wiring) so IDG can chronicle alongside Sync + Doctor.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "d87c449cc25d43cf9f54d777e5c3ccd9cfdf3faf5199eef4aca0c9962f789a60",
+    "size_bytes": 3707
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "d87c449cc25d43cf9f54d777e5c3ccd9cfdf3faf5199eef4aca0c9962f789a60"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

@@ -1,0 +1,15 @@
+eidolons mcp uninstall — remove an MCP from this project
+
+Usage: eidolons mcp uninstall <name> [--project-root PATH]
+
+Arguments:
+  name    MCP name (see: eidolons mcp list)
+
+Options:
+  --project-root PATH  Project directory (default: cwd)
+  -h, --help           Show this help
+
+Note:
+  For oci-image MCPs: the Docker image is NOT removed (may be shared with other
+  projects). The .atlas/memex/codegraph.db is also preserved.
+  For binary MCPs: the binary cache IS removed.

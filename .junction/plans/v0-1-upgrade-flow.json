@@ -1,0 +1,28 @@
+{
+  "thread_id": "b5aa18d4-1cae-49b1-a202-333f523b0ced",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Build the Upgrade flow for GAMBIT v0.1/v0.2 — the third major verb alongside Sync (✓ shipped) and Doctor (✓ shipped). Two phases: (1) check phase invokes `eidolons upgrade --check --json` in the selected project, parses the structured JSON plan, displays a review table of nexus + member upgrades; (2) apply phase invokes `eidolons upgrade --yes` streaming output into a log pane (reusing the sync-stream patterns). Spec position: §7.1 v0.2 DoD 'Upgrade plan accurate against upgrade --check --json'. Live JSON fixture captured by parent and staged at input/upgrade-check.fixture.json — TS interfaces MUST be derived from the fixture, not invented (per memory feedback_capture_live_before_parsing).",
+      "artifact": {
+        "kind": "spec",
+        "schema_version": "1.0",
+        "path": "input/upgrade-check.fixture.json"
+      },
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64"
+      }
+    }
+  ]
+}

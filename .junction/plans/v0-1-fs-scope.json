@@ -1,0 +1,23 @@
+{
+  "thread_id": "9bb158d4-f648-47a6-83df-f1c955bf06d5",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "human", "version": "n/a"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "REQUEST",
+      "edge_origin": "roster",
+      "objective": "Apply VIGIL's previously-deferred P1-B (from the blank-pane root-cause-report 2026-05-21): extend Tauri 2 plugin-fs capability scope so user-picked project paths AND the nexus $HOME/.eidolons subtree can be read. Three runtime errors observed live by user: 'forbidden path: /Users/henrique/.eidolons/nexus/roster/index.yaml', 'No eidolons.yaml found at the selected path' (catch path on same denial), 'forbidden path: /Users/henrique/workspace/oss/agents/eidolons/.eidolons'. Routes affected: Roster (allow-read-text-file on nexus index.yaml), Project + MCP Store (allow-read-text-file on selected project eidolons.{yaml,lock,mcp.lock}), Harness (allow-read-text-file on selected project .eidolons/harness/manifest.json), Methodology (allow-read-dir + allow-read-text-file on selected project .eidolons/**).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64"
+      }
+    }
+  ]
+}
