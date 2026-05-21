@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `McpStoreRoute`: corrected `eidolons.mcp.lock` schema — top-level key is `mcps` (array of `{name, kind, version, source, target, hosts_wired, installed_at}`), not `servers: Record<string,_>`. Route now iterates `mcps[]` and renders name, kind badge, version, source repo, target path, installed-at, and hosts-wired list. Live fixture pinned at `tests/parsers/eidolons-mcp-lock.fixture.yaml`.
+- `HarnessRoute`: primary read now targets `eidolons.mcp.lock` (finds `mcps[name==="junction"]`); `.eidolons/harness/manifest.json` is a fallback sidecar only. Route shows registered status pill, version, binary target path, source repo, installed-at from mcp.lock; sidecar health + features rendered under "Sidecar details" if present.
+- `RosterRoute`: YAML parser corrected from `members:` / `  <name>:` (wrong shape) to `eidolons:` / `  - name: <value>` (real roster/index.yaml shape). Members are now correctly extracted from the array.
+- Shared parsing logic extracted to `src/lib/parseMcpLock.ts` (`parseMcpLock`, `findJunctionEntry`), used by both McpStoreRoute and HarnessRoute.
 - Tauri 2 fs capability scope now allows route components to read user-picked project files and the `$HOME/.eidolons` subtree (P1-B from VIGIL's blank-pane root-cause-report). Routes affected: Roster (`nexus/roster/index.yaml`), Project + MCP Store (`eidolons.{yaml,lock,mcp.lock}` in picked project), Harness (`.eidolons/harness/manifest.json`), Methodology (`.eidolons/*` directory listing + `agent.md` reads).
 - Doctor route now renders the live `eidolons doctor` check grid. Three independent bugs fixed together:
   parser regex updated to match category-grouped output (`=== Foo ===` headings, glyph at line start, no

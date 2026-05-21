@@ -9,8 +9,16 @@ import { RouteHeader } from "@/components/RouteHeader";
 import { getRoute } from "@/routes/index";
 
 // ---------------------------------------------------------------------------
-// Minimal YAML line parser — extracts `name:` values under `members:` block
-// without a full YAML library. Good enough for roster/index.yaml structure.
+// Minimal YAML line parser — extracts roster members from roster/index.yaml.
+//
+// Real shape (captured from ~/.eidolons/nexus/roster/index.yaml):
+//   eidolons:             ← top-level array key (NOT `members:`)
+//     - name: atlas       ← array items with `- name:` (NOT `  atlas:`)
+//       status: shipped
+//       source:
+//         repo: Rynaro/ATLAS
+//       versions:
+//         latest: "1.5.3"
 // ---------------------------------------------------------------------------
 
 interface RosterMember {
@@ -23,36 +31,36 @@ interface RosterMember {
 function parseRosterYaml(raw: string): RosterMember[] {
   const members: RosterMember[] = [];
   const lines = raw.split("\n");
-  let inMembers = false;
+  let inEidolons = false;
   let current: Partial<RosterMember> | null = null;
 
   for (const line of lines) {
     const trimmed = line.trimStart();
 
-    // Detect `members:` top-level key
-    if (/^members\s*:/.test(trimmed)) {
-      inMembers = true;
+    // Detect `eidolons:` top-level key
+    if (/^eidolons\s*:/.test(line)) {
+      inEidolons = true;
       continue;
     }
 
-    // Another top-level key ends the members block
-    if (inMembers && /^[a-z_][\w-]*\s*:/.test(trimmed) && !/^\s/.test(line)) {
-      inMembers = false;
+    // Another top-level key (no leading whitespace, not a list item) ends the block
+    if (inEidolons && /^[a-z_][\w-]*\s*:/.test(line)) {
+      inEidolons = false;
     }
 
-    if (!inMembers) continue;
+    if (!inEidolons) continue;
 
-    // A new member entry starts with `  <name>:` (2-space indent)
-    const memberKey = line.match(/^  ([a-z][\w-]*)\s*:/);
-    if (memberKey) {
+    // A new member entry starts with `  - name: <value>`
+    const nameItem = line.match(/^\s+-\s+name\s*:\s*(.+)/);
+    if (nameItem) {
       if (current?.name) members.push(current as RosterMember);
-      current = { name: memberKey[1] };
+      current = { name: nameItem[1].trim().replace(/^['"]|['"]$/g, "") };
       continue;
     }
 
     if (!current) continue;
 
-    // Parse sub-keys within a member
+    // Parse sub-keys within a member (indented, no leading `-`)
     const statusMatch = line.match(/^\s+status\s*:\s*(.+)/);
     if (statusMatch) { current.status = statusMatch[1].trim().replace(/^['"]|['"]$/g, ""); }
 
