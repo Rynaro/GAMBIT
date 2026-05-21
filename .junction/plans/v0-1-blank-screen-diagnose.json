@@ -1,0 +1,41 @@
+{
+  "thread_id": "05a53a35-a9e5-46f7-9ee2-7931ac52c700",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "human", "version": "n/a"},
+      "to": {"eidolon": "vigil", "version": "1.1.2"},
+      "performative": "REQUEST",
+      "edge_origin": "roster",
+      "objective": "Diagnose why GAMBIT shows a blank screen after the user picks a project folder via the sidebar. Window renders cleanly with no project picked; routes navigate fine before picking; immediately after the folder dialog returns and projectPath is set, the entire main pane goes blank.",
+      "artifact": {
+        "kind": "prompt",
+        "schema_version": "1.0",
+        "path": "input/diagnose-prompt.md"
+      },
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    },
+    {
+      "step_id": "S1",
+      "from": {"eidolon": "vigil", "version": "1.1.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "PROPOSE",
+      "edge_origin": "roster",
+      "objective": "Apply the patch identified in VIGIL's root-cause-report so the app survives a project-folder selection without blanking.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "high",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    }
+  ]
+}
