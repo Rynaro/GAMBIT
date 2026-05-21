@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "b2f7e3a1-c841-4d09-9e56-0f3a8b2c7d4e",
+  "thread_id": "44a3e427-b6bd-4c98-9982-0ce602d95cf4",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT v0.1 smoke-test (b) completion record (⌘K command palette) so IDG can chronicle the milestone.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size_bytes": 0
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "trace": {
+    "ts": "2026-05-21T01:45:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
