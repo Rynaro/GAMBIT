@@ -1,0 +1,23 @@
+{
+  "thread_id": "c21e46cf-d48b-463f-82b3-43d7dba3ef10",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Implement FORGE smoke-test (a) for GAMBIT v0.1 — NSVisualEffectView .sidebar vibrancy on macOS with graceful solid fallback on Linux/Windows. Docker-first dev workflow per user directive: pnpm install / lint / tsc / cargo check run inside container; pnpm tauri dev runs on host (macOS GUI cannot render from stock Docker). Target repo: Rynaro/GAMBIT at /Users/henrique/workspace/oss/agents/gambit/. SPECTRA spec source: /Users/henrique/workspace/oss/agents/eidolons/.spectra/plans/2026-05-20-controlcenter-spec.md (see §3.7 vibrancy fallback table, §7.1 v0.1 DoD smoke-test (a)).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "host_platform": "darwin-arm64",
+        "dev_environment": "docker-first-with-host-gui-fallback"
+      }
+    }
+  ]
+}
