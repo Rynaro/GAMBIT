@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { Command } from "cmdk";
 import { COMMANDS, GROUP_LABELS, resolveCommand } from "@/lib/commands";
 import type { CommandGroup, CommandId } from "@/lib/commands";
@@ -14,7 +15,7 @@ export function CommandPalette({ open, setOpen }: CommandPaletteState) {
     setOpen(false);
   }
 
-  function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+  function handleBackdropClick(e: MouseEvent<HTMLDivElement>) {
     if (e.target === e.currentTarget) setOpen(false);
   }
 
