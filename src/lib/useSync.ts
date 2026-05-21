@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,6 +118,18 @@ export function useSync(): SyncResult {
           setExitCode(code);
           setState(code === 0 ? "done" : "failed");
           detachListeners();
+
+          const basename = path.split("/").filter(Boolean).pop() ?? path;
+          if (code === 0) {
+            toast.success("Sync complete", {
+              description: `${basename} · exit 0`,
+            });
+          } else {
+            toast.error("Sync failed", {
+              description: `exit ${code}`,
+              duration: Infinity,
+            });
+          }
         }
       );
 
@@ -155,6 +168,7 @@ export function useSync(): SyncResult {
     setState("cancelled");
     setExitCode(null);
     detachListeners();
+    toast.info("Sync cancelled");
   }, []);
 
   const clear = useCallback(() => {

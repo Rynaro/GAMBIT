@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import { parseDoctorStderr, type DoctorCheck } from "./parseDoctorStderr";
 
 // ---------------------------------------------------------------------------
@@ -122,12 +123,32 @@ export function useDoctor(): DoctorResult {
           const code = ev.payload.exitCode;
           setExitCode(code);
           // Final parse to ensure we didn't miss anything.
-          setChecks(parseDoctorStderr(rawStderrRef.current));
+          const finalChecks = parseDoctorStderr(rawStderrRef.current);
+          setChecks(finalChecks);
           // doctor exits 1 when there are errors, 0 when all pass.
           // Both are valid "done" states from the UI perspective — the checks
           // themselves carry the pass/fail semantics.
           setState(code === -2 ? "cancelled" : "done");
           detachListeners();
+
+          if (code === -2) {
+            toast.info("Doctor cancelled");
+          } else if (code === 0 || code !== null) {
+            const failedCount = finalChecks.filter(c => c.status === "fail").length;
+            const warnCount = finalChecks.filter(c => c.status === "warn").length;
+            if (failedCount > 0) {
+              toast.error(
+                `Doctor found ${failedCount} failed check${failedCount > 1 ? "s" : ""}`,
+                { duration: Infinity },
+              );
+            } else if (warnCount > 0) {
+              toast.info(
+                `Doctor found ${warnCount} warning${warnCount > 1 ? "s" : ""}`,
+              );
+            } else {
+              toast.success(`Doctor passed all ${finalChecks.length} checks`);
+            }
+          }
         },
       );
 

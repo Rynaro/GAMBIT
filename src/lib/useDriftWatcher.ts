@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import { basename } from "@/lib/pathUtils";
 
 export type DriftState = "idle" | "watching" | "drift";
@@ -75,7 +76,21 @@ export function useDriftWatcher(
         (event) => {
           if (!active) return;
           setLastEventAt(event.payload.timestamp);
-          setState("drift");
+          // Only toast on the first transition (watching → drift),
+          // not on repeated events within the TTL window.
+          setState((prev) => {
+            if (prev !== "drift") {
+              const projBasename = projectPath
+                ? projectPath.split("/").filter(Boolean).pop() ?? projectPath
+                : null;
+              toast.info("Drift detected", {
+                description: projBasename
+                  ? `${projBasename} · eidolons.lock changed`
+                  : "eidolons.lock changed",
+              });
+            }
+            return "drift";
+          });
 
           // Auto-clear back to watching after TTL
           clearDriftTimer();
