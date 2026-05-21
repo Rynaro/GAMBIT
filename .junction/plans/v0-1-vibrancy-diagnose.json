@@ -1,0 +1,41 @@
+{
+  "thread_id": "370b0190-d7a0-45d9-aeba-f1477c4320dd",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "human", "version": "n/a"},
+      "to": {"eidolon": "vigil", "version": "1.1.2"},
+      "performative": "REQUEST",
+      "edge_origin": "roster",
+      "objective": "Diagnose why the NSVisualEffectView .sidebar vibrancy is not visually translucent on macOS in GAMBIT v0.1 (smoke-test a). The window opens cleanly but the sidebar appears solid. Identify whether the cause is CSS masking, platform-sniff timing, Tauri 2 transparent/titleBarStyle interaction, vibrancy plugin misuse, or a benign macOS-dark-mode subtlety.",
+      "artifact": {
+        "kind": "prompt",
+        "schema_version": "1.0",
+        "path": "input/diagnose-prompt.md"
+      },
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    },
+    {
+      "step_id": "S1",
+      "from": {"eidolon": "vigil", "version": "1.1.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "PROPOSE",
+      "edge_origin": "roster",
+      "objective": "Apply the patch identified in VIGIL's root-cause-report so the macOS NSVisualEffectView .sidebar vibrancy renders visibly translucent.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "high",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration"
+      }
+    }
+  ]
+}
