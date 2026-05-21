@@ -1,0 +1,24 @@
+{
+  "thread_id": "44a3e427-b6bd-4c98-9982-0ce602d95cf4",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Implement FORGE smoke-test (palette) for GAMBIT v0.1 — ⌘K cmdk command palette, cold open under 100ms, fuzzy-matched, over navigation + stub action sources. User is sequencing this as their smoke-test (b); spec position is smoke_d_palette per §7.1. Branch off main; do not depend on the in-flight feat/v0.1-smoke-a-vibrancy branch.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-smoke-b-palette",
+        "host_platform": "darwin-arm64",
+        "dev_environment": "docker-first-with-host-gui-fallback"
+      }
+    }
+  ]
+}
