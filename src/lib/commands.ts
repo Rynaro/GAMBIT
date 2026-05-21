@@ -85,6 +85,8 @@ export interface CommandHandlers {
   onNavigate: (routeId: RouteId) => void;
   /** Called when the user selects "Doctor" from the palette. Optional; no-op if omitted. */
   onRunDoctor?: () => void;
+  /** Called when the user selects "Check upgrades" from the palette. Optional; no-op if omitted. */
+  onCheckUpgrades?: () => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
@@ -133,6 +135,15 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
       handlers.onRunDoctor();
     } else {
       console.warn("[palette] Doctor: no handler injected yet");
+    }
+    return;
+  }
+
+  if (id === "action:upgrades") {
+    if (handlers.onCheckUpgrades) {
+      handlers.onCheckUpgrades();
+    } else {
+      console.warn("[palette] Check upgrades: no handler injected yet");
     }
     return;
   }

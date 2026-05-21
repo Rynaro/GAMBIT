@@ -1,0 +1,318 @@
+/* UpgradePane.css — Styles for the bottom-anchored upgrade panel.
+ * Mirrors LogPane.css layout with an additional plan-review table mode. */
+
+/* ---- Container ---- */
+.upgrade-pane {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40vh;
+  min-height: 220px;
+  max-height: 60vh;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -8px 32px -8px rgb(0 0 0 / 0.45);
+  animation: upgrade-pane-enter var(--duration-panel) var(--motion-entry) both;
+}
+
+@keyframes upgrade-pane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Top bar ---- */
+.upgrade-pane-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: var(--bg-surface-raised);
+}
+
+.upgrade-pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 200px;
+}
+
+.upgrade-pane-spacer {
+  flex: 1;
+}
+
+/* ---- Status pill ---- */
+.upgrade-pane-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.upgrade-pane-status[data-state="checking"],
+.upgrade-pane-status[data-state="applying"] {
+  background: color-mix(in srgb, var(--status-warn) 15%, transparent 85%);
+  color: var(--status-warn);
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+.upgrade-pane-status[data-state="reviewing"] {
+  background: color-mix(in srgb, var(--text-secondary) 15%, transparent 85%);
+  color: var(--text-secondary);
+}
+
+.upgrade-pane-status[data-state="done"] {
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+.upgrade-pane-status[data-state="failed"] {
+  background: color-mix(in srgb, var(--status-error) 15%, transparent 85%);
+  color: var(--status-error);
+}
+
+.upgrade-pane-status[data-state="cancelled"] {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent 85%);
+  color: var(--text-muted);
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ---- Spinner ---- */
+.upgrade-pane-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--status-warn);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Action buttons ---- */
+.upgrade-pane-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-5);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-micro) var(--motion-entry),
+    color var(--duration-micro) var(--motion-entry),
+    border-color var(--duration-micro) var(--motion-entry);
+  background: none;
+  flex-shrink: 0;
+}
+
+.upgrade-pane-btn:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.upgrade-pane-btn--primary {
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  border-color: var(--accent);
+}
+
+.upgrade-pane-btn--primary:hover {
+  opacity: 0.88;
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+}
+
+.upgrade-pane-btn--cancel {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.upgrade-pane-btn--cancel:hover {
+  background-color: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}
+
+.upgrade-pane-btn--close {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+/* ---- Body ---- */
+.upgrade-pane-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-canvas);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: var(--space-4) var(--space-6);
+}
+
+/* ---- Checking state ---- */
+.upgrade-pane-checking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: var(--space-5) 0;
+}
+
+/* ---- Summary row (reviewing) ---- */
+.upgrade-pane-summary {
+  display: flex;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.upgrade-pane-summary-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Plan table ---- */
+.upgrade-pane-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.upgrade-pane-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.upgrade-pane-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent 50%);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.upgrade-pane-table td.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.upgrade-pane-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---- Status badges ---- */
+.upgrade-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.upgrade-badge--available {
+  background: color-mix(in srgb, var(--status-warn) 18%, transparent 82%);
+  color: var(--status-warn);
+}
+
+.upgrade-badge--uptodate {
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent 88%);
+  color: var(--status-ok);
+}
+
+.upgrade-badge--pinned {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent 82%);
+  color: var(--text-muted);
+}
+
+.upgrade-badge--unknown {
+  background: color-mix(in srgb, var(--text-secondary) 15%, transparent 85%);
+  color: var(--text-secondary);
+}
+
+/* ---- Apply-phase log body ---- */
+.upgrade-pane-log {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-primary);
+  background: none;
+}
+
+.upgrade-pane-log-line--stderr {
+  color: var(--status-warn);
+}
+
+/* ---- Terminal state summary strip ---- */
+.upgrade-pane-terminal-strip {
+  margin-bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- Footer ---- */
+.upgrade-pane-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.upgrade-pane-footer-exit {
+  color: var(--text-secondary);
+}
+
+.upgrade-pane-footer-exit[data-ok="true"] {
+  color: var(--status-ok);
+}
+
+.upgrade-pane-footer-exit[data-ok="false"] {
+  color: var(--status-error);
+}
+
+.upgrade-pane-footer-spacer {
+  flex: 1;
+}

@@ -42,6 +42,7 @@ interface EidolonsLock {
 interface ProjectRouteProps {
   projectPath: string | null;
   onPickProject: () => void;
+  onCheckUpgrades?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +51,7 @@ interface ProjectRouteProps {
 
 const ROUTE = getRoute("project");
 
-export function ProjectRoute({ projectPath, onPickProject }: ProjectRouteProps) {
+export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: ProjectRouteProps) {
   const [yamlData, setYamlData] = useState<EidolonsYaml | null>(null);
   const [lockData, setLockData] = useState<EidolonsLock | null>(null);
   const [loading, setLoading] = useState(false);
@@ -176,13 +177,25 @@ export function ProjectRoute({ projectPath, onPickProject }: ProjectRouteProps) 
         title={ROUTE.label}
         subtitle={ROUTE.subtitle}
         actions={
-          <button
-            type="button"
-            className="route-verb-btn"
-            onClick={onPickProject}
-          >
-            Switch project
-          </button>
+          <>
+            {onCheckUpgrades && (
+              <button
+                type="button"
+                className="route-verb-btn"
+                onClick={onCheckUpgrades}
+                style={{ marginRight: "var(--space-2)" }}
+              >
+                Upgrade…
+              </button>
+            )}
+            <button
+              type="button"
+              className="route-verb-btn"
+              onClick={onPickProject}
+            >
+              Switch project
+            </button>
+          </>
         }
       />
 

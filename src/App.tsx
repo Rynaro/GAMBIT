@@ -6,9 +6,11 @@ import { MainPane } from "./components/MainPane";
 import { CommandPalette } from "./components/CommandPalette";
 import { DriftPill } from "./components/DriftPill";
 import { LogPane } from "./components/LogPane";
+import { UpgradePane } from "./components/UpgradePane";
 import { useCommandPalette } from "./lib/useCommandPalette";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
 import { useSync } from "./lib/useSync";
+import { useUpgrade } from "./lib/useUpgrade";
 import { setCommandHandlers } from "./lib/commands";
 import { getProjectPath, setProjectPath, clearProjectPath } from "./lib/projectStore";
 import { RouteProvider, useRouteContext } from "./lib/RouteContext";
@@ -30,8 +32,11 @@ function AppShell() {
   // Sync hook — manages live eidolons sync streaming state.
   const sync = useSync();
 
+  // Upgrade hook — manages the check + apply two-phase flow.
+  const upgrade = useUpgrade();
+
   // Inject the command handlers into commands.ts once on mount.
-  // Re-inject when projectPath, sync.start, or setActiveRoute changes.
+  // Re-inject when projectPath, sync.start, upgrade.check, or setActiveRoute changes.
   useEffect(() => {
     setCommandHandlers({
       onSyncProject: () => {
@@ -44,8 +49,15 @@ function AppShell() {
       onNavigate: (routeId) => {
         setActiveRoute(routeId);
       },
+      onCheckUpgrades: () => {
+        if (!projectPath) {
+          console.warn("[App] Check upgrades: no project picked — pick a project first");
+          return;
+        }
+        void upgrade.check(projectPath);
+      },
     });
-  }, [projectPath, sync.start, setActiveRoute]);
+  }, [projectPath, sync.start, upgrade.check, setActiveRoute]);
 
   async function handlePickProject() {
     try {
@@ -69,6 +81,7 @@ function AppShell() {
   };
 
   const showLogPane = sync.state !== "idle";
+  const showUpgradePane = upgrade.state !== "idle";
 
   return (
     <div className="app-shell">
@@ -87,6 +100,11 @@ function AppShell() {
             projectPath={projectPath}
             onPickProject={handlePickProject}
             onClearProject={handleClearProject}
+            onCheckUpgrades={
+              projectPath
+                ? () => { void upgrade.check(projectPath); }
+                : undefined
+            }
           />
       </div>
       <CommandPalette open={palette.open} setOpen={palette.setOpen} />
@@ -101,6 +119,15 @@ function AppShell() {
           projectPath={sync.projectPath}
           cancel={sync.cancel}
           clear={sync.clear}
+        />
+      )}
+
+      {/* Upgrade pane mounts as a fixed bottom panel whenever an upgrade check
+          or apply is in flight. Dismissed via the Dismiss/Close button. */}
+      {showUpgradePane && (
+        <UpgradePane
+          projectPath={projectPath}
+          upgrade={upgrade}
         />
       )}
     </div>

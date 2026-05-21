@@ -18,7 +18,7 @@ GAMBIT completes the Final Fantasy lineage in the Eidolons ecosystem:
 
 GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + Vite. It reads your `eidolons.yaml` / `eidolons.lock` / `.eidolons/*/install.manifest.json`, watches them for drift, streams `sync` / `upgrade` / `doctor` output into polished log panes, and stays out of your way with a ⌘K-spined power surface.
 
-Watches `eidolons.lock` and surfaces drift within a second. Streams `eidolons sync` output live with ANSI colour and a cancel hotkey.
+Watches `eidolons.lock` and surfaces drift within a second. Streams `eidolons sync` output live with ANSI colour and a cancel hotkey. Reviews and applies Eidolons upgrades from a plan-driven sheet.
 
 The fs capability scope is intentionally limited to `$HOME` subtrees matching Eidolons-shaped paths (`$HOME/.eidolons/**`, `$HOME/**/eidolons.{yaml,lock,mcp.lock}`, `$HOME/**/.eidolons/**`) — arbitrary disk access is not granted.
 

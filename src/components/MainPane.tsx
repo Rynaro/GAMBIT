@@ -21,9 +21,10 @@ interface RouteRendererProps {
   projectPath: string | null;
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
+  onCheckUpgrades?: () => void;
 }
 
-function RouteRenderer({ projectPath, onPickProject, onClearProject }: RouteRendererProps) {
+function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgrades }: RouteRendererProps) {
   const { activeRoute } = useRouteContext();
 
   switch (activeRoute) {
@@ -34,6 +35,7 @@ function RouteRenderer({ projectPath, onPickProject, onClearProject }: RouteRend
         <ProjectRoute
           projectPath={projectPath}
           onPickProject={() => void onPickProject()}
+          onCheckUpgrades={onCheckUpgrades}
         />
       );
     case "mcp-store":
@@ -72,9 +74,10 @@ interface MainPaneProps {
   projectPath: string | null;
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
+  onCheckUpgrades?: () => void;
 }
 
-export function MainPane({ projectPath, onPickProject, onClearProject }: MainPaneProps) {
+export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUpgrades }: MainPaneProps) {
   const { activeRoute } = useRouteContext();
 
   return (
@@ -84,6 +87,7 @@ export function MainPane({ projectPath, onPickProject, onClearProject }: MainPan
           projectPath={projectPath}
           onPickProject={onPickProject}
           onClearProject={onClearProject}
+          onCheckUpgrades={onCheckUpgrades}
         />
       </RouteErrorBoundary>
     </main>
