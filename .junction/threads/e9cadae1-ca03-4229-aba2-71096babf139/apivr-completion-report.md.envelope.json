@@ -3,8 +3,14 @@
   "message_id": "dc1f7904-cb9f-448c-8e4a-bf78710a3608",
   "thread_id": "e9cadae1-ca03-4229-aba2-71096babf139",
   "parent_id": null,
-  "from": {"eidolon": "apivr", "version": "3.1.2"},
-  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
   "performative": "PROPOSE",
   "edge_origin": "roster",
   "objective": "Hand off the GAMBIT MCP Store actionable verb set (list/install/uninstall/cancel via Rust IPC + React useMcpStore + McpInstallPane + route rewrite) so IDG can chronicle.",
@@ -12,14 +18,16 @@
     "kind": "apivr-completion-report",
     "schema_version": "1.0",
     "path": "apivr-completion-report.md",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "size_bytes": 0
+    "sha256": "6eb20102e74a14ebce77c7ce6eeb8b78309372f7b3659ff5536a0b8f4d7f817c",
+    "size_bytes": 5719
   },
-  "constraints": {"trust_level": "standard"},
+  "constraints": {
+    "trust_level": "standard"
+  },
   "confidence": 0.85,
   "integrity": {
     "method": "sha256",
-    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+    "value": "6eb20102e74a14ebce77c7ce6eeb8b78309372f7b3659ff5536a0b8f4d7f817c"
   },
   "trace": {
     "ts": "2026-05-21T17:20:00Z",
