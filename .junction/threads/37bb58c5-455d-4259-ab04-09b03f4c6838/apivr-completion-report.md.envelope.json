@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "c3d7f2a1-8b4e-4f09-9e62-1a5d3c8f0b27",
+  "thread_id": "37bb58c5-455d-4259-ab04-09b03f4c6838",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT Methodology route markdown rendering (react-markdown + remark-gfm + design-token-styled CSS + front-matter strip) so IDG can chronicle.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size_bytes": 0
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.9,
+  "integrity": {
+    "method": "sha256",
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "trace": {
+    "ts": "2026-05-21T15:27:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
