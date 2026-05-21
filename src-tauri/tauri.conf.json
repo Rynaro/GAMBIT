@@ -43,24 +43,12 @@
       "exceptionDomain": "",
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": null,
-      "targets": [
-        "dmg",
-        "app"
-      ]
+      "signingIdentity": null
     },
-    "linux": {
-      "targets": [
-        "appimage",
-        "deb"
-      ]
-    },
+    "linux": {},
     "windows": {
       "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "targets": [
-        "msi"
-      ]
+      "digestAlgorithm": "sha256"
     }
   }
 }
