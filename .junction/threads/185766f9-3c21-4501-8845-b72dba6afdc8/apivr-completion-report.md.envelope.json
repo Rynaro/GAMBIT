@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "b3a4e2f1-7c85-4d9a-a310-f62c9d0e1b47",
+  "thread_id": "185766f9-3c21-4501-8845-b72dba6afdc8",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT v0.1 sync-stream completion record (live eidolons sync streaming + ANSI log pane + cancel) so IDG can chronicle the milestone.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size_bytes": 0
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker-first dev workflow — `Dockerfile.dev`, `docker-compose.yml`, `Makefile` (install/lint/typecheck/cargo-check/ci/shell containerised; `make dev` host-only for the GUI).
 - ⌘K command palette (cmdk) — smoke-test b. Navigate + stub actions + About. Cold-open target <100ms.
 - `eidolons.lock` file watcher + drift pill (smoke-test c). 250ms debounce in Rust via notify-debouncer-mini. Minimal project picker via @tauri-apps/plugin-dialog.
+- Live `eidolons sync` streaming with ANSI-coloured log pane (smoke-test sync-stream). Virtualized via @tanstack/react-virtual; ANSI parsed by anser. Cancel via SIGKILL (SIGINT is a v0.2 follow-up).
 
 ### v0.0.1 → v0.1 follow-ups
 
