@@ -1,0 +1,28 @@
+{
+  "thread_id": "f4f54ea4-76c5-4ea7-937d-e82129df8f6f",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "human", "version": "n/a"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "REQUEST",
+      "edge_origin": "roster",
+      "objective": "Fix McpStoreRoute and HarnessRoute: both render 'nothing installed' on a project where eidolons.mcp.lock contains a Junction entry. Root cause is the same 'imagined shape vs reality' pattern recorded in memory feedback_capture_live_before_parsing: McpStoreRoute expects { servers: Record<string,_> } but the real file has { mcps: Array<{name,kind,version,...}> }; HarnessRoute reads .eidolons/harness/manifest.json which doesn't exist in this project (Junction state lives in eidolons.mcp.lock instead). Live capture of the real eidolons.mcp.lock supplied as the fixture in this thread's input/ dir — use it verbatim.",
+      "artifact": {
+        "kind": "prompt",
+        "schema_version": "1.0",
+        "path": "input/brief.md"
+      },
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-integration",
+        "host_platform": "darwin-arm64"
+      }
+    }
+  ]
+}
