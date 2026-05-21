@@ -3,6 +3,7 @@ pub mod brand;
 pub mod doctor;
 pub mod extract;
 pub mod mcp;
+pub mod spawn_core;
 pub mod sync;
 pub mod upgrade;
 pub mod watcher;
