@@ -9,15 +9,15 @@
 // routes.
 
 import { useState } from "react";
-import { useDoctor } from "@/lib/useDoctor";
+import type { DoctorResult } from "@/lib/useDoctor";
 import { DoctorDashboard } from "@/components/DoctorDashboard";
 
 interface DoctorRouteProps {
   projectPath: string | null;
+  doctor: DoctorResult;
 }
 
-export function DoctorRoute({ projectPath }: DoctorRouteProps) {
-  const doctor = useDoctor();
+export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
   const [lastRunAt, setLastRunAt] = useState<Date | null>(null);
 
   function handleRun() {

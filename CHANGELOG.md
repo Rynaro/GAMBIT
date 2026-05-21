@@ -36,6 +36,10 @@ The following P1/P2 items are deferred from this round:
 - **P2-B** — Update the "Parser note (GAP-03)" comment in `doctor.rs:22-24` to reflect that check rows are
   on stdout and the banner/summary are on stderr.
 
+### Changed
+
+- Lifted `useDoctor` and `useMcpStore` to the App shell so palette `action:doctor` and `action:mcp-refresh` handlers can be injected via `setCommandHandlers`. Eliminates "no handler injected yet" console warning for those actions. `DoctorRoute` and `McpStoreRoute` now receive hook output as props instead of calling the hooks internally.
+
 ### Added
 
 - MCP Store now supports Install / Uninstall / Upgrade actions per row. Uses `eidolons mcp list --json` as the primary catalogue + install-state source (replaces the older eidolons.mcp.lock-only read). Streaming output via McpInstallPane; auto-refresh after completion. Closes v0.2 DoD §7.1 'MCP Store install/uninstall end-to-end'.
