@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./styles/global.css";
 import { Sidebar } from "./components/Sidebar";
@@ -7,14 +7,9 @@ import { CommandPalette } from "./components/CommandPalette";
 import { DriftPill } from "./components/DriftPill";
 import { useCommandPalette } from "./lib/useCommandPalette";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
-import { setupPlatform } from "./lib/platform";
 import { getProjectPath, setProjectPath } from "./lib/projectStore";
 
 export function App() {
-  useEffect(() => {
-    setupPlatform();
-  }, []);
-
   const palette = useCommandPalette();
 
   const [projectPath, setProjectPathState] = useState<string | null>(
