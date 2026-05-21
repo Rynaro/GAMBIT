@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ⌘K command palette (cmdk) — smoke-test b. Navigate + stub actions + About. Cold-open target <100ms.
+
 ### v0.0.1 → v0.1 follow-ups
 
 The following items are scoped for the v0.1 MVP (smoke-test-driven):

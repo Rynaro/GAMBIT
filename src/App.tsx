@@ -2,19 +2,22 @@ import { useEffect } from "react";
 import "./styles/global.css";
 import { Sidebar } from "./components/Sidebar";
 import { MainPane } from "./components/MainPane";
-import { detectAndStampPlatform } from "./lib/platform";
+import { CommandPalette } from "./components/CommandPalette";
+import { useCommandPalette } from "./lib/useCommandPalette";
+import { setupPlatform } from "./lib/platform";
 
 export function App() {
-  // Detect OS and write data-platform to <html> before first meaningful paint.
-  // CSS uses :root[data-platform="..."] to toggle sidebar vibrancy vs solid fill.
   useEffect(() => {
-    detectAndStampPlatform();
+    setupPlatform();
   }, []);
+
+  const palette = useCommandPalette();
 
   return (
     <div className="app-shell">
-      <Sidebar />
+      <Sidebar palette={palette} />
       <MainPane />
+      <CommandPalette open={palette.open} setOpen={palette.setOpen} />
     </div>
   );
 }

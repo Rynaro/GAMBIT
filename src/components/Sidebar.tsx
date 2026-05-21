@@ -1,4 +1,7 @@
+import { Fragment } from "react";
 import { BRAND } from "@/lib/brand";
+import { isMacOS } from "@/lib/platform";
+import type { CommandPaletteState } from "@/lib/useCommandPalette";
 
 const DESTINATIONS = [
   { id: "roster", label: "Roster" },
@@ -11,7 +14,13 @@ const DESTINATIONS = [
   { id: "settings", label: "Settings" },
 ] as const;
 
-export function Sidebar() {
+interface SidebarProps {
+  palette: CommandPaletteState;
+}
+
+export function Sidebar({ palette }: SidebarProps) {
+  const hotkey = isMacOS() ? "⌘K" : "Ctrl K";
+
   return (
     // background is transparent — NSVisualEffectView .sidebar vibrancy shows
     // through on macOS. On Linux/Windows the CSS fallback
@@ -26,7 +35,7 @@ export function Sidebar() {
       <nav className="sidebar-nav" aria-label="Main navigation">
         <ul className="sidebar-destinations">
           {DESTINATIONS.map((dest) => (
-            <span key={dest.id}>
+            <Fragment key={dest.id}>
               {dest.id === "settings" && (
                 <li aria-hidden="true" className="sidebar-divider" />
               )}
@@ -40,10 +49,22 @@ export function Sidebar() {
                   {dest.label}
                 </button>
               </li>
-            </span>
+            </Fragment>
           ))}
         </ul>
       </nav>
+
+      <footer className="sidebar-palette-hint">
+        <button
+          type="button"
+          className="sidebar-palette-pill"
+          onClick={() => palette.setOpen(true)}
+          aria-label="Open command palette"
+        >
+          <span className="sidebar-palette-key">{hotkey}</span>
+          <span className="sidebar-palette-label">Open palette</span>
+        </button>
+      </footer>
     </aside>
   );
 }
