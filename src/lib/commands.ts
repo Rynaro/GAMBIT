@@ -27,6 +27,7 @@ export type CommandId =
   | "action:sync"
   | "action:doctor"
   | "action:upgrades"
+  | "action:mcp-refresh"
   // About
   | "about:gambit";
 
@@ -53,9 +54,10 @@ export const COMMANDS: Command[] = [
   { id: "nav:settings",    group: "navigate", label: "Settings" },
 
   // Actions group
-  { id: "action:sync",     group: "actions",  label: "Sync project",    description: "Run eidolons sync" },
-  { id: "action:doctor",   group: "actions",  label: "Doctor",          description: "Run eidolons doctor" },
-  { id: "action:upgrades", group: "actions",  label: "Check upgrades",  description: "Run eidolons upgrade --check" },
+  { id: "action:sync",        group: "actions",  label: "Sync project",       description: "Run eidolons sync" },
+  { id: "action:doctor",      group: "actions",  label: "Doctor",             description: "Run eidolons doctor" },
+  { id: "action:upgrades",    group: "actions",  label: "Check upgrades",     description: "Run eidolons upgrade --check" },
+  { id: "action:mcp-refresh", group: "actions",  label: "Refresh MCP Store",  description: "Reload eidolons mcp list" },
 
   // About group
   { id: "about:gambit",    group: "about",    label: `About ${BRAND.name}`, description: BRAND.tagline },
@@ -87,6 +89,8 @@ export interface CommandHandlers {
   onRunDoctor?: () => void;
   /** Called when the user selects "Check upgrades" from the palette. Optional; no-op if omitted. */
   onCheckUpgrades?: () => void;
+  /** Called when the user selects "Refresh MCP Store" from the palette. Optional; no-op if omitted. */
+  onRefreshMcpStore?: () => void;
 }
 
 // Default no-op handlers — safe if App.tsx hasn't injected yet.
@@ -144,6 +148,15 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
       handlers.onCheckUpgrades();
     } else {
       console.warn("[palette] Check upgrades: no handler injected yet");
+    }
+    return;
+  }
+
+  if (id === "action:mcp-refresh") {
+    if (handlers.onRefreshMcpStore) {
+      handlers.onRefreshMcpStore();
+    } else {
+      console.warn("[palette] Refresh MCP Store: no handler injected yet");
     }
     return;
   }
