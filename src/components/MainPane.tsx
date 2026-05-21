@@ -1,6 +1,7 @@
 // MainPane.tsx — Host shell that renders the active route's content.
-// Switched from the welcome empty state to a RouteRenderer that maps
-// the active route from RouteContext to the matching route component.
+// projectPath and project handlers are owned by App.tsx and passed in as props.
+// A RouteErrorBoundary keyed by activeRoute prevents route crashes from tearing
+// down the entire shell.
 
 import { useRouteContext } from "@/lib/RouteContext";
 import { RosterRoute } from "@/routes/RosterRoute";
@@ -10,9 +11,7 @@ import { HarnessRoute } from "@/routes/HarnessRoute";
 import { DoctorRoute } from "@/routes/DoctorRoute";
 import { MethodologyRoute } from "@/routes/MethodologyRoute";
 import { SettingsRoute } from "@/routes/SettingsRoute";
-import { getProjectPath, setProjectPath, clearProjectPath } from "@/lib/projectStore";
-import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useState } from "react";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 
 // ---------------------------------------------------------------------------
 // RouteRenderer — maps activeRoute → component
@@ -20,7 +19,7 @@ import { useCallback, useState } from "react";
 
 interface RouteRendererProps {
   projectPath: string | null;
-  onPickProject: () => Promise<void>;
+  onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
 }
 
@@ -42,7 +41,7 @@ function RouteRenderer({ projectPath, onPickProject, onClearProject }: RouteRend
     case "harness":
       return <HarnessRoute projectPath={projectPath} />;
     case "doctor":
-      return <DoctorRoute />;
+      return <DoctorRoute projectPath={projectPath} />;
     case "methodology":
       return <MethodologyRoute projectPath={projectPath} />;
     case "settings":
@@ -65,42 +64,28 @@ function RouteRenderer({ projectPath, onPickProject, onClearProject }: RouteRend
 }
 
 // ---------------------------------------------------------------------------
-// MainPane — manages project state and renders RouteRenderer
+// MainPane — accepts projectPath + handlers from App.tsx; renders RouteRenderer
+// wrapped in an error boundary keyed by the active route.
 // ---------------------------------------------------------------------------
 
-export function MainPane() {
-  const [projectPath, setProjectPathState] = useState<string | null>(
-    () => getProjectPath()
-  );
+interface MainPaneProps {
+  projectPath: string | null;
+  onPickProject: () => Promise<void> | void;
+  onClearProject: () => void;
+}
 
-  const handlePickProject = useCallback(async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Pick an Eidolons project",
-      });
-      if (typeof selected === "string" && selected.trim() !== "") {
-        setProjectPath(selected);
-        setProjectPathState(selected);
-      }
-    } catch (err) {
-      console.warn("[MainPane] folder dialog failed:", err);
-    }
-  }, []);
-
-  const handleClearProject = useCallback(() => {
-    clearProjectPath();
-    setProjectPathState(null);
-  }, []);
+export function MainPane({ projectPath, onPickProject, onClearProject }: MainPaneProps) {
+  const { activeRoute } = useRouteContext();
 
   return (
     <main className="main-pane" style={{ alignItems: "flex-start", justifyContent: "flex-start" }}>
-      <RouteRenderer
-        projectPath={projectPath}
-        onPickProject={handlePickProject}
-        onClearProject={handleClearProject}
-      />
+      <RouteErrorBoundary key={activeRoute} routeId={activeRoute}>
+        <RouteRenderer
+          projectPath={projectPath}
+          onPickProject={onPickProject}
+          onClearProject={onClearProject}
+        />
+      </RouteErrorBoundary>
     </main>
   );
 }

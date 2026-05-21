@@ -4,21 +4,19 @@
 // Header: "Doctor" title · Run/Cancel button · "Last run" timestamp + exit code.
 // Empty state (no project): friendly message with a prompt to pick a project.
 //
-// NOTE: This file overrides the stub produced by the parallel feat/v0.1-routes
-// branch. On merge, this content takes precedence.
+// projectPath is passed in from MainPane (owned by App.tsx) so there is no
+// duplicate localStorage read at mount. Matches the prop pattern of all other
+// routes.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDoctor } from "@/lib/useDoctor";
 import { DoctorDashboard } from "@/components/DoctorDashboard";
-import { getProjectPath } from "@/lib/projectStore";
 
-export function DoctorRoute() {
-  const [projectPath, setProjectPath] = useState<string | null>(getProjectPath);
+interface DoctorRouteProps {
+  projectPath: string | null;
+}
 
-  // Re-read localStorage whenever the route mounts, in case it changed.
-  useEffect(() => {
-    setProjectPath(getProjectPath());
-  }, []);
+export function DoctorRoute({ projectPath }: DoctorRouteProps) {
   const doctor = useDoctor();
   const [lastRunAt, setLastRunAt] = useState<Date | null>(null);
 

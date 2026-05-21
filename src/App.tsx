@@ -10,7 +10,7 @@ import { useCommandPalette } from "./lib/useCommandPalette";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
 import { useSync } from "./lib/useSync";
 import { setCommandHandlers } from "./lib/commands";
-import { getProjectPath, setProjectPath } from "./lib/projectStore";
+import { getProjectPath, setProjectPath, clearProjectPath } from "./lib/projectStore";
 import { RouteProvider, useRouteContext } from "./lib/RouteContext";
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,11 @@ function AppShell() {
     }
   }
 
+  const handleClearProject = () => {
+    clearProjectPath();
+    setProjectPathState(null);
+  };
+
   const showLogPane = sync.state !== "idle";
 
   return (
@@ -78,7 +83,11 @@ function AppShell() {
           projectBasename={projectBasename}
           clearDrift={clearDrift}
         />
-        <MainPane />
+        <MainPane
+            projectPath={projectPath}
+            onPickProject={handlePickProject}
+            onClearProject={handleClearProject}
+          />
       </div>
       <CommandPalette open={palette.open} setOpen={palette.setOpen} />
 
