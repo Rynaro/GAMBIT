@@ -9,10 +9,13 @@
 // The 250ms debounce is handled entirely inside notify-debouncer-mini; we do
 // not implement our own debounce layer.
 
+// Use the notify version that notify-debouncer-mini re-exports — avoids the
+// two-versions-of-notify trait-mismatch (v6 direct dep + v8 pulled by debouncer).
 use notify_debouncer_mini::{
-    new_debouncer, notify::RecursiveMode, DebounceEventResult, Debouncer,
+    new_debouncer,
+    notify::{RecommendedWatcher, RecursiveMode},
+    DebounceEventResult, Debouncer,
 };
-use notify::RecommendedWatcher;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -88,7 +91,7 @@ pub async fn start_watching(
     let watch_dir = project_dir.clone();
 
     // Build the debouncer. The closure runs on the notify watcher thread.
-    let debouncer = new_debouncer(
+    let mut debouncer = new_debouncer(
         Duration::from_millis(DEBOUNCE_MS),
         move |result: DebounceEventResult| {
             match result {
