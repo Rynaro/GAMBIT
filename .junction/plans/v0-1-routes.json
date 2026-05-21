@@ -1,0 +1,39 @@
+{
+  "thread_id": "622f954a-f580-4d57-b55e-632f4cd14351",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "steps": [
+    {
+      "step_id": "S0",
+      "from": {"eidolon": "spectra", "version": "4.3.2"},
+      "to": {"eidolon": "apivr", "version": "3.1.2"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Build the real sidebar route components for GAMBIT v0.1 — replace the destination-button stubs with a small client-side router, render distinct route panes for Roster, Project, MCP Store, Harness, Methodology, Settings. DoctorRoute ships as a stub placeholder only — a parallel Agent B branch (feat/v0.1-doctor) owns the real Doctor dashboard and will overwrite the stub on merge. No URL syncing (Tauri 2 desktop, no browser history needs). Active route persists to localStorage so the user comes back to the same view after restart. Wire palette Navigate-group commands to switch routes.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {
+        "trust_level": "standard",
+        "target_repo": "Rynaro/GAMBIT",
+        "branch": "feat/v0.1-routes",
+        "parallel_partner": "feat/v0.1-doctor",
+        "owned_files": [
+          "src/lib/useRoute.ts",
+          "src/lib/RouteContext.tsx",
+          "src/routes/index.ts",
+          "src/routes/RosterRoute.tsx",
+          "src/routes/ProjectRoute.tsx",
+          "src/routes/McpStoreRoute.tsx",
+          "src/routes/HarnessRoute.tsx",
+          "src/routes/MethodologyRoute.tsx",
+          "src/routes/SettingsRoute.tsx",
+          "src/routes/DoctorRoute.tsx (stub only)",
+          "src/components/MainPane.tsx (modified)",
+          "src/components/Sidebar.tsx (modified)",
+          "src/App.tsx (modified)",
+          "src/lib/commands.ts (Navigate-group handlers only)"
+        ]
+      }
+    }
+  ]
+}
