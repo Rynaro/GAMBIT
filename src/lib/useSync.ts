@@ -53,7 +53,7 @@ interface LinePayload {
 }
 
 interface CompletePayload {
-  exit_code: number;
+  exitCode: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ export function useSync(): SyncResult {
       const unlistenComplete = await listen<CompletePayload>(
         "sync-complete",
         (ev) => {
-          const code = ev.payload.exit_code;
+          const code = ev.payload.exitCode;
           setExitCode(code);
           setState(code === 0 ? "done" : "failed");
           detachListeners();
