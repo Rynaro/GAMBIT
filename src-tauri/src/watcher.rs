@@ -14,10 +14,10 @@ use notify_debouncer_mini::{
 };
 use notify::RecommendedWatcher;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 /// Duration for the notify-debouncer-mini debounce window (250ms per spec).
 const DEBOUNCE_MS: u64 = 250;
@@ -94,9 +94,7 @@ pub async fn start_watching(
             match result {
                 Ok(events) => {
                     // Filter for events that touched eidolons.lock specifically.
-                    let relevant = events.iter().any(|ev| {
-                        ev.path == lock_path || paths_match(&ev.path, &lock_path)
-                    });
+                    let relevant = events.iter().any(|ev| ev.path == lock_path);
 
                     if relevant {
                         let payload = DriftPayload {
@@ -148,9 +146,3 @@ pub async fn stop_watching(state: State<'_, WatcherState>) -> Result<(), String>
     Ok(())
 }
 
-/// Platform-normalised path comparison: checks that `candidate` matches
-/// `target`, handling trailing separators and case-insensitive file systems
-/// (best-effort; notify already resolves canonicals on most platforms).
-fn paths_match(candidate: &Path, target: &Path) -> bool {
-    candidate == target
-}
