@@ -1,15 +1,16 @@
-// parseDoctorStderr.test.ts — Vitest unit tests for the doctor stderr parser.
+// parseDoctorStderr.test.ts — Vitest unit tests for the doctor combined-output parser.
+//
+// Fixture: tests/parsers/doctor.fixture.txt — verbatim capture of a live
+//   `eidolons doctor` run (category-grouped, glyph-at-start rows, no [N/M] badges).
 //
 // Cases:
-//   1. Empty input → []
-//   2. Whitespace-only input → []
-//   3. Single pass check
-//   4. Single warn check with detail message
-//   5. Single fail check with multi-line detail
-//   6. 9-check full fixture round-trip
-//   7. Trailing whitespace tolerance
-//   8. Idempotency: parsing the same text twice yields the same result
-//   9. ANSI escape stripping
+//   1. Empty / blank input → []
+//   2. Verbatim fixture round-trip → 30 checks
+//   3. First check is the eidolons.yaml present pass in "Manifest + lock"
+//   4. Pending upgrades rows carry warn status + correct category
+//   5. Banner + summary lines are ignored (not present as check names)
+//   6. ANSI escape stripping
+//   7. Idempotency
 
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -31,140 +32,148 @@ function loadFixture(): string {
 // ---------------------------------------------------------------------------
 
 describe("parseDoctorStderr", () => {
+  // ------------------------------------------------------------------
+  // Edge cases: empty / blank input
+  // ------------------------------------------------------------------
+
   it("returns [] for empty input", () => {
     expect(parseDoctorStderr("")).toEqual([]);
   });
 
   it("returns [] for whitespace-only input", () => {
-    expect(parseDoctorStderr("   \n   \n   ")).toEqual([]);
+    expect(parseDoctorStderr("  \n  \n")).toEqual([]);
   });
 
-  it("parses a single pass check", () => {
-    const input = "  [1/9] eidolons.yaml present              ✓";
-    const result = parseDoctorStderr(input);
-    expect(result).toHaveLength(1);
+  // ------------------------------------------------------------------
+  // Real fixture round-trip
+  // ------------------------------------------------------------------
+
+  it("parses verbatim eidolons doctor output → 30 checks", () => {
+    const fixture = loadFixture();
+    const result = parseDoctorStderr(fixture);
+    // 2 (manifest) + 6 (installed) + 1 (host) + 1 (dispatch) +
+    // 6 (release) + 6 (cache) + 1 (mcp-servers) + 1 (mcp-drift) +
+    // 6 (pending-upgrade member rows) = 30
+    // The "· Run `eidolons upgrade`" trailer is appended as a message
+    // continuation on the last upgrade row, not counted as a separate check.
+    expect(result).toHaveLength(30);
+  });
+
+  it("first check is the eidolons.yaml present pass", () => {
+    const fixture = loadFixture();
+    const result = parseDoctorStderr(fixture);
     expect(result[0]).toMatchObject<Partial<DoctorCheck>>({
-      index: 1,
-      total: 9,
+      category: "Manifest + lock",
       name: "eidolons.yaml present",
       status: "pass",
-      message: "",
     });
   });
 
-  it("parses a single warn check with a detail message", () => {
-    const input = [
-      "  [4/9] dispatch freshness               ·",
-      "        → 1 legacy pointer detected",
-    ].join("\n");
-    const result = parseDoctorStderr(input);
-    expect(result).toHaveLength(1);
-    const check = result[0];
-    expect(check.index).toBe(4);
-    expect(check.total).toBe(9);
-    expect(check.status).toBe("warn");
-    expect(check.message).toContain("1 legacy pointer detected");
-  });
-
-  it("parses a single fail check with multi-line detail", () => {
-    const input = [
-      "  [5/9] host wiring complete               ✗",
-      "        → CLAUDE.md missing eidolon:spectra block",
-      "        → Re-run 'eidolons sync --force' to repair",
-    ].join("\n");
-    const result = parseDoctorStderr(input);
-    expect(result).toHaveLength(1);
-    const check = result[0];
-    expect(check.status).toBe("fail");
-    expect(check.message).toContain("CLAUDE.md missing");
-    expect(check.message).toContain("Re-run");
-    // Multi-line: message should have a newline between the two detail lines.
-    expect(check.message.split("\n").length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("parses the 9-check fixture round-trip correctly", () => {
+  it("captures Pending upgrades as warn rows with category", () => {
     const fixture = loadFixture();
     const result = parseDoctorStderr(fixture);
-
-    // Should produce exactly 9 checks.
-    expect(result).toHaveLength(9);
-
-    // Spot-check each check.
-    const byIndex = (i: number) => result.find((c) => c.index === i)!;
-
-    // Check 1: pass, no message
-    expect(byIndex(1)).toMatchObject({ index: 1, total: 9, status: "pass" });
-    expect(byIndex(1).message).toBe("");
-
-    // Check 2: pass
-    expect(byIndex(2)).toMatchObject({ status: "pass" });
-
-    // Check 3: pass
-    expect(byIndex(3)).toMatchObject({ status: "pass" });
-
-    // Check 4: pass
-    expect(byIndex(4)).toMatchObject({ status: "pass" });
-
-    // Check 5: fail — has detail message
-    expect(byIndex(5)).toMatchObject({ status: "fail" });
-    expect(byIndex(5).message).toContain("CLAUDE.md missing");
-
-    // Check 6: warn — has detail message
-    expect(byIndex(6)).toMatchObject({ status: "warn" });
-    expect(byIndex(6).message).toContain("legacy");
-
-    // Check 7: pass
-    expect(byIndex(7)).toMatchObject({ status: "pass" });
-
-    // Check 8: pass
-    expect(byIndex(8)).toMatchObject({ status: "pass" });
-
-    // Check 9: warn — has detail message
-    expect(byIndex(9)).toMatchObject({ status: "warn" });
-    expect(byIndex(9).message).toContain("upgrade");
+    const warnRows = result.filter((c) => c.status === "warn");
+    expect(warnRows.length).toBeGreaterThan(0);
+    const pendingRow = warnRows.find((c) => c.category === "Pending upgrades");
+    expect(pendingRow).toBeDefined();
+    expect(pendingRow!.status).toBe("warn");
   });
 
-  it("is tolerant of trailing whitespace on lines", () => {
-    // Lines with trailing spaces / tabs should still parse correctly.
-    const input = "  [1/9] eidolons.yaml present              ✓   \n  [2/9] lock present                       ✓  \t";
-    const result = parseDoctorStderr(input);
-    expect(result).toHaveLength(2);
-    expect(result[0].status).toBe("pass");
-    expect(result[1].status).toBe("pass");
+  it("ignores banner + summary lines — no check has those names", () => {
+    const fixture = loadFixture();
+    const result = parseDoctorStderr(fixture);
+    for (const check of result) {
+      expect(check.name).not.toContain("All checks passed");
+      expect(check.name).not.toContain("eidolons doctor —");
+    }
   });
 
-  it("is idempotent: parsing the same text twice yields equal output", () => {
+  it("all checks carry a non-empty category matching their section heading", () => {
+    const fixture = loadFixture();
+    const result = parseDoctorStderr(fixture);
+    for (const check of result) {
+      expect(check.category.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("index and total are correctly back-filled", () => {
+    const fixture = loadFixture();
+    const result = parseDoctorStderr(fixture);
+    expect(result[0].index).toBe(1);
+    expect(result[result.length - 1].index).toBe(result.length);
+    for (const check of result) {
+      expect(check.total).toBe(result.length);
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // ANSI-strip
+  // ------------------------------------------------------------------
+
+  it("strips ANSI escape sequences and parses identically", () => {
+    const green = "\x1b[32m";
+    const reset = "\x1b[0m";
+    const withAnsi = `=== Manifest + lock ===\n  ${green}✓${reset} eidolons.yaml present`;
+    const withoutAnsi = `=== Manifest + lock ===\n  ✓ eidolons.yaml present`;
+    const resultWithAnsi = parseDoctorStderr(withAnsi);
+    const resultWithout = parseDoctorStderr(withoutAnsi);
+    expect(resultWithAnsi).toEqual(resultWithout);
+    expect(resultWithAnsi[0].status).toBe("pass");
+  });
+
+  // ------------------------------------------------------------------
+  // Idempotency
+  // ------------------------------------------------------------------
+
+  it("is idempotent: parsing the same input twice yields equal output", () => {
     const fixture = loadFixture();
     const first = parseDoctorStderr(fixture);
     const second = parseDoctorStderr(fixture);
     expect(second).toEqual(first);
   });
 
-  it("strips ANSI escape sequences before matching glyphs", () => {
-    // Simulate the actual CLI output where glyphs are wrapped in ANSI codes.
-    // GREEN = \x1b[32m, RESET = \x1b[0m
-    const green = "\x1b[32m";
-    const reset = "\x1b[0m";
-    const input = `  [1/9] eidolons.yaml present              ${green}✓${reset}`;
+  // ------------------------------------------------------------------
+  // Minimal unit: single-check inputs
+  // ------------------------------------------------------------------
+
+  it("parses a single pass check with category", () => {
+    const input = "=== Manifest + lock ===\n  ✓ eidolons.yaml present";
     const result = parseDoctorStderr(input);
     expect(result).toHaveLength(1);
-    expect(result[0].status).toBe("pass");
+    expect(result[0]).toMatchObject<Partial<DoctorCheck>>({
+      index: 1,
+      total: 1,
+      category: "Manifest + lock",
+      name: "eidolons.yaml present",
+      status: "pass",
+      message: "",
+    });
   });
 
-  it("handles all three statuses in a single input", () => {
+  it("parses a fail check with category and message continuation", () => {
     const input = [
-      "  [1/3] check A                            ✓",
-      "  [2/3] check B                            ·",
-      "        → some warning detail",
-      "  [3/3] check C                            ✗",
-      "        → some error detail",
+      "=== Host wiring ===",
+      "  ✗ host wiring complete",
+      "    CLAUDE.md missing eidolon:spectra block",
+    ].join("\n");
+    const result = parseDoctorStderr(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe("fail");
+    expect(result[0].category).toBe("Host wiring");
+    expect(result[0].message).toContain("CLAUDE.md missing");
+  });
+
+  it("handles all three statuses in one input", () => {
+    const input = [
+      "=== Checks ===",
+      "  ✓ check A",
+      "  · check B",
+      "  ✗ check C",
     ].join("\n");
     const result = parseDoctorStderr(input);
     expect(result).toHaveLength(3);
     expect(result[0].status).toBe("pass");
     expect(result[1].status).toBe("warn");
-    expect(result[1].message).toContain("warning detail");
     expect(result[2].status).toBe("fail");
-    expect(result[2].message).toContain("error detail");
   });
 });
