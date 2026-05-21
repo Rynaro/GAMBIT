@@ -15,7 +15,7 @@
   flex-direction: column;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
-  box-shadow: 0 -8px 32px -8px rgb(0 0 0 / 0.45);
+  box-shadow: 0 -8px 32px -8px var(--shadow-pane-lift);
   animation: mcp-pane-enter var(--duration-panel) var(--motion-entry) both;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Toaster } from "sonner";
 import "./styles/global.css";
 import { Sidebar } from "./components/Sidebar";
 import { MainPane } from "./components/MainPane";
@@ -151,6 +152,19 @@ function AppShell() {
           upgrade={upgrade}
         />
       )}
+
+      {/* Sonner toast stack — system theme, bottom-right, richColors. */}
+      <Toaster
+        position="bottom-right"
+        theme="system"
+        richColors
+        closeButton
+        toastOptions={{
+          // success and info auto-dismiss; errors stay until clicked (per spec §3.5)
+          duration: 2500,
+          style: { fontFamily: "var(--font-ui)", fontSize: "13px" },
+        }}
+      />
     </div>
   );
 }

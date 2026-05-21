@@ -14,7 +14,7 @@
   flex-direction: column;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
-  box-shadow: 0 -8px 32px -8px rgb(0 0 0 / 0.45);
+  box-shadow: 0 -8px 32px -8px var(--shadow-pane-lift);
 
   /* 220ms fade-in per spec §3.3 */
   animation: log-pane-enter var(--duration-panel) var(--motion-entry) both;
@@ -182,7 +182,11 @@
   color: var(--status-warn);
 }
 
-/* anser CSS classes — foreground colours */
+/* anser CSS classes — foreground colours.
+   DESIGN EXCEPTION: these map to the fixed ANSI 16-color terminal palette
+   (standardised by ECMA-48 / ISO 6429). They intentionally use hard-coded
+   hex values rather than design tokens — terminal colors are a display
+   contract, not a theme decision. Do not replace these with var(--…). */
 .ansi-black-fg   { color: #4d4d4d; }
 .ansi-red-fg     { color: var(--status-error); }
 .ansi-green-fg   { color: var(--status-ok); }

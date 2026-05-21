@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import type { UpgradePlan } from "./upgrade.types";
 import type { SyncLine } from "./useSync";
 
@@ -153,10 +154,19 @@ export function useUpgrade(): UseUpgradeResult {
       (ev) => {
         const code = ev.payload.exitCode;
         setExitCode(code);
+        const verb = "Member upgrade";
         if (code === -2) {
           setState("cancelled");
+          toast.info(`${verb} cancelled`);
+        } else if (code === 0) {
+          setState("done");
+          toast.success(`${verb} complete`);
         } else {
-          setState(code === 0 ? "done" : "failed");
+          setState("failed");
+          toast.error(`${verb} failed`, {
+            description: `exit ${code}`,
+            duration: Infinity,
+          });
         }
         detachListeners();
       }
@@ -222,10 +232,19 @@ export function useUpgrade(): UseUpgradeResult {
       (ev) => {
         const code = ev.payload.exitCode;
         setExitCode(code);
+        const verb = "Nexus upgrade";
         if (code === -2) {
           setState("cancelled");
+          toast.info(`${verb} cancelled`);
+        } else if (code === 0) {
+          setState("done");
+          toast.success(`${verb} complete`);
         } else {
-          setState(code === 0 ? "done" : "failed");
+          setState("failed");
+          toast.error(`${verb} failed`, {
+            description: `exit ${code}`,
+            duration: Infinity,
+          });
         }
         detachListeners();
       }

@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import type { McpListEntry, McpAction, McpCompletePayload } from "./mcp.types";
 import type { SyncLine } from "./useSync";
 
@@ -162,11 +163,24 @@ export function useMcpStore(projectPath: string | null): UseMcpStoreResult {
         "mcp-complete",
         (ev) => {
           const code = ev.payload.exitCode;
+          const evAction = ev.payload.action;
+          const evName = ev.payload.name;
           setExitCode(code);
           if (code === -2) {
             setState("cancelled");
+            const opVerb = evAction === "install" ? "Install" : "Uninstall";
+            toast.info(`${opVerb} cancelled`);
+          } else if (code === 0) {
+            setState("done");
+            const doneVerb = evAction === "install" ? "Installed" : "Uninstalled";
+            toast.success(`${doneVerb} ${evName}`);
           } else {
-            setState(code === 0 ? "done" : "failed");
+            setState("failed");
+            const failVerb = evAction === "install" ? "Install" : "Uninstall";
+            toast.error(`${failVerb} failed: ${evName}`, {
+              description: `exit ${code}`,
+              duration: Infinity,
+            });
           }
           detachListeners();
           // Auto-refresh the list so row states update after completion.
