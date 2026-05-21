@@ -1,0 +1,30 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "dff3173f-9c8e-4c53-834a-e6f1e967c0ac",
+  "thread_id": "250a5f7e-c00b-47fb-9581-a749aa35ab18",
+  "parent_id": null,
+  "from": {"eidolon": "apivr", "version": "3.1.2"},
+  "to": {"eidolon": "idg", "version": "1.2.2"},
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off GAMBIT v0.2 polish: Sonner toasts across all verb completion handlers + light-mode CSS token audit.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "size_bytes": 5122
+  },
+  "constraints": {"trust_level": "standard"},
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:00:00Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
