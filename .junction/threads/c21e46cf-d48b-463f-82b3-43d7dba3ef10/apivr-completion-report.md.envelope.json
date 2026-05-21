@@ -1,0 +1,38 @@
+{
+  "envelope_version": "1.0",
+  "message_id": "92607256-4e8c-4878-a3fc-8ac7735607a5",
+  "thread_id": "c21e46cf-d48b-463f-82b3-43d7dba3ef10",
+  "parent_id": null,
+  "from": {
+    "eidolon": "apivr",
+    "version": "3.1.2"
+  },
+  "to": {
+    "eidolon": "idg",
+    "version": "1.2.2"
+  },
+  "performative": "PROPOSE",
+  "edge_origin": "roster",
+  "objective": "Hand off the GAMBIT v0.1 smoke-test (a) completion record (vibrancy sidebar + Docker-first dev) so IDG can chronicle the milestone in the CHANGELOG narrative.",
+  "artifact": {
+    "kind": "apivr-completion-report",
+    "schema_version": "1.0",
+    "path": "apivr-completion-report.md",
+    "sha256": "ab3c055f6ba33cbfb34969020a02fc6c22f504d28e44cb39c3e68e571068604c",
+    "size_bytes": 5257
+  },
+  "constraints": {
+    "trust_level": "standard"
+  },
+  "confidence": 0.85,
+  "integrity": {
+    "method": "sha256",
+    "value": "ab3c055f6ba33cbfb34969020a02fc6c22f504d28e44cb39c3e68e571068604c"
+  },
+  "trace": {
+    "ts": "2026-05-21T00:46:54Z",
+    "host": "claude-code",
+    "model": "claude-sonnet-4-6",
+    "tier": "trance"
+  }
+}
