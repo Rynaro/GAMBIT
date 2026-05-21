@@ -1,4 +1,4 @@
-/* global.css — MATERIA design system.
+/* global.css — GAMBIT design system.
    Dark-mode-first. All token values mirror src/lib/theme.ts.
    Do not hard-code colors in components; use these variables. */
 
@@ -101,7 +101,10 @@ button {
 html,
 body {
   height: 100%;
-  background-color: var(--bg-canvas);
+  /* Transparent so NSVisualEffectView vibrancy shows through on macOS.
+     On Linux/Windows the sidebar falls back to var(--bg-canvas) via the
+     :root[data-platform] selector below. */
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -112,6 +115,7 @@ body {
 
 #root {
   height: 100%;
+  background: transparent;
 }
 
 /* ---- App shell layout ---- */
@@ -126,11 +130,22 @@ body {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100%;
-  background-color: var(--sidebar-bg);
+  /* Transparent on macOS: vibrancy (NSVisualEffectView .sidebar) carries the
+     surface. On Linux/Windows: :root[data-platform] selector below fills in
+     the solid fallback. */
+  background: transparent;
+  /* Subtle 1px right border keeps the sidebar delineated even without vibrancy */
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* ---- Platform-specific sidebar fallback ---- */
+/* Linux: solid sidebar background (no vibrancy available) */
+:root[data-platform="linux"] .sidebar,
+:root[data-platform="windows"] .sidebar {
+  background: var(--bg-canvas);
 }
 
 .sidebar-header {
@@ -203,6 +218,7 @@ body {
   flex: 1;
   height: 100%;
   overflow-y: auto;
+  /* Fully opaque — vibrancy is sidebar-only; content area must never bleed through */
   background-color: var(--bg-canvas);
   display: flex;
   align-items: center;

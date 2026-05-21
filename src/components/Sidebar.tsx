@@ -13,20 +13,24 @@ const DESTINATIONS = [
 
 export function Sidebar() {
   return (
+    // background is transparent — NSVisualEffectView .sidebar vibrancy shows
+    // through on macOS. On Linux/Windows the CSS fallback
+    // :root[data-platform="linux"] .sidebar fills in var(--bg-canvas).
     <aside className="sidebar">
       <header className="sidebar-header">
+        {/* Text stays crisp against vibrancy — no background on the header */}
         <span className="sidebar-name">{BRAND.name}</span>
         <span className="sidebar-tagline">{BRAND.tagline}</span>
       </header>
 
       <nav className="sidebar-nav" aria-label="Main navigation">
         <ul className="sidebar-destinations">
-          {DESTINATIONS.map((dest, i) => (
-            <>
+          {DESTINATIONS.map((dest) => (
+            <span key={dest.id}>
               {dest.id === "settings" && (
-                <li key="divider" aria-hidden="true" className="sidebar-divider" />
+                <li aria-hidden="true" className="sidebar-divider" />
               )}
-              <li key={dest.id}>
+              <li>
                 <button
                   type="button"
                   className="sidebar-destination"
@@ -36,7 +40,7 @@ export function Sidebar() {
                   {dest.label}
                 </button>
               </li>
-            </>
+            </span>
           ))}
         </ul>
       </nav>
