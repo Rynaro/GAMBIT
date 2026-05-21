@@ -15,12 +15,14 @@ import { getRoute } from "@/routes/index";
 // Types
 // ---------------------------------------------------------------------------
 
-interface EidolonsYaml {
-  members?: string[];
+interface DeclaredMember {
+  name: string;
   version?: string;
+  source?: string;
 }
 
-interface LockEntry {
+interface LockMember {
+  name: string;
   version?: string;
   archive_sha256?: string;
   manifest_sha256?: string;
@@ -28,8 +30,13 @@ interface LockEntry {
   installed_at?: string;
 }
 
+interface EidolonsYaml {
+  members?: DeclaredMember[];
+  version?: number | string;
+}
+
 interface EidolonsLock {
-  members?: Record<string, LockEntry>;
+  members?: LockMember[];
 }
 
 interface ProjectRouteProps {
@@ -155,10 +162,12 @@ export function ProjectRoute({ projectPath, onPickProject }: ProjectRouteProps) 
     );
   }
 
-  const declaredMembers: string[] = yamlData?.members ?? [];
-  const lockMembers = lockData?.members ?? {};
-  const allMembers = Array.from(
-    new Set([...declaredMembers, ...Object.keys(lockMembers)])
+  const declaredMembers = yamlData?.members ?? [];
+  const lockMembers = lockData?.members ?? [];
+  const declaredByName = new Map(declaredMembers.map((m) => [m.name, m]));
+  const lockByName = new Map(lockMembers.map((m) => [m.name, m]));
+  const allNames = Array.from(
+    new Set([...declaredByName.keys(), ...lockByName.keys()])
   );
 
   return (
@@ -195,10 +204,10 @@ export function ProjectRoute({ projectPath, onPickProject }: ProjectRouteProps) 
       <div className="route-card">
         <p className="route-card-title">
           Members — {declaredMembers.length} declared
-          {Object.keys(lockMembers).length > 0 && `, ${Object.keys(lockMembers).length} in lock`}
+          {lockMembers.length > 0 && `, ${lockMembers.length} in lock`}
         </p>
 
-        {allMembers.length === 0 ? (
+        {allNames.length === 0 ? (
           <div className="route-empty" style={{ padding: "var(--space-7) 0" }}>
             <p className="route-empty-body">
               No members declared yet. Add some with{" "}
@@ -216,9 +225,9 @@ export function ProjectRoute({ projectPath, onPickProject }: ProjectRouteProps) 
               </tr>
             </thead>
             <tbody>
-              {allMembers.map((name) => {
-                const inYaml = declaredMembers.includes(name);
-                const lockEntry = lockMembers[name];
+              {allNames.map((name) => {
+                const inYaml = declaredByName.has(name);
+                const lockEntry = lockByName.get(name);
                 const verification = lockEntry?.verification;
                 return (
                   <tr key={name}>
