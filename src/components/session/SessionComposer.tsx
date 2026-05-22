@@ -32,7 +32,18 @@ import { getEnterToSend, setEnterToSend } from "@/lib/composerPrefs";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_DISPLAY_NAME } from "@/lib/eidolonRoster";
 import { estimateTokens } from "@/lib/estimateTokens";
-import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type MentionContext, applyMention, detectMention, filterFiles } from "@/lib/mentionPicker";
+import type { ProjectFiles } from "@/lib/session.types";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  type ChangeEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -118,6 +129,15 @@ interface SessionComposerProps {
    * `nonce` starts at `0` — that initial value never injects.
    */
   editDraft?: { text: string; nonce: number };
+
+  // -- P9 @-file mentions -------------------------------------------------
+  /**
+   * P9 — the project's absolute path, used to lazily fetch the file list for
+   * the `@`-mention picker. `null` (no project resolved) disables the picker —
+   * typing `@` simply inserts a literal `@`. The list is fetched once per
+   * `projectPath` on first `@` and cached for the composer's lifetime.
+   */
+  projectPath: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +166,7 @@ export function SessionComposer({
   thinkingEffort,
   onSelectThinkingEffort,
   editDraft,
+  projectPath,
 }: SessionComposerProps) {
   const [draft, setDraft] = useState("");
   // The optional FORM disclosure — collapsed by default so the zero-effort
@@ -175,6 +196,97 @@ export function SessionComposer({
   // every keystroke. The draft is only a FRACTION of the true request, so this
   // is a "ballpark" figure and is labelled with a leading `~`.
   const tokenEstimate = useMemo(() => estimateTokens(draft), [draft]);
+
+  // -------------------------------------------------------------------------
+  // P9 — @-file mention picker
+  // -------------------------------------------------------------------------
+  // The textarea ref lets the caret-aware mention detection read the current
+  // selection start, and lets `pickMention` re-place the cursor after a splice.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // The project's file list — fetched lazily once on the first `@` and cached
+  // for the composer's lifetime (re-fetched only if `projectPath` changes).
+  const [projectFiles, setProjectFiles] = useState<ProjectFiles>([]);
+  const filesFetchedFor = useRef<string | null>(null);
+
+  // The active `@`-mention token under the caret (`null` = dropdown closed),
+  // and which filtered row is highlighted.
+  const [mention, setMention] = useState<MentionContext | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  // The filtered file rows for the open mention — empty when no mention.
+  const mentionMatches = useMemo(
+    () => (mention ? filterFiles(projectFiles, mention.query) : []),
+    [mention, projectFiles],
+  );
+  const mentionOpen = mention !== null && mentionMatches.length > 0;
+
+  /**
+   * Lazily fetch the project file list for the `@`-picker. Fetched once per
+   * `projectPath`; a fetch failure leaves the list empty (the dropdown simply
+   * shows nothing) — `@` mentioning is a convenience, never a hard dependency.
+   */
+  const ensureProjectFiles = useCallback(async () => {
+    if (!projectPath || filesFetchedFor.current === projectPath) return;
+    filesFetchedFor.current = projectPath;
+    try {
+      const files = await invoke<ProjectFiles>("list_project_files", { projectPath });
+      setProjectFiles(files);
+    } catch {
+      // A missing/unreadable project leaves the picker empty — non-fatal.
+      setProjectFiles([]);
+    }
+  }, [projectPath]);
+
+  /**
+   * Re-evaluate the `@`-mention state from the textarea's current value +
+   * caret. Called on every change / key / click so the dropdown opens, tracks
+   * the query, and closes exactly as the caret moves.
+   */
+  const syncMention = useCallback(
+    (value: string, caret: number) => {
+      // No project → no file pool → `@` is just a literal character.
+      if (!projectPath) {
+        setMention(null);
+        return;
+      }
+      const ctx = detectMention(value, caret);
+      setMention(ctx);
+      setMentionIndex(0);
+      if (ctx) void ensureProjectFiles();
+    },
+    [projectPath, ensureProjectFiles],
+  );
+
+  /** Textarea `onChange` — update the draft AND re-evaluate the mention. */
+  function handleDraftChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setDraft(value);
+    syncMention(value, e.target.selectionStart ?? value.length);
+  }
+
+  /**
+   * Insert the picked file path as an `@<path>` token, replacing the active
+   * mention span, then close the dropdown and re-place the caret past the
+   * inserted token.
+   */
+  function pickMention(path: string) {
+    if (!mention) return;
+    const ta = textareaRef.current;
+    const caret = ta?.selectionStart ?? draft.length;
+    const { text, caret: nextCaret } = applyMention(draft, mention, path, caret);
+    setDraft(text);
+    setMention(null);
+    setMentionIndex(0);
+    // Re-place the caret after React commits the new value.
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(nextCaret, nextCaret);
+      }
+    });
+  }
 
   function handleCompose() {
     const prompt = draft.trim();
@@ -214,8 +326,40 @@ export function SessionComposer({
     }
   }
 
-  /** P7 — textarea key handling: ⌘/Ctrl+Enter, and plain Enter when opted in. */
+  /**
+   * P7/P9 — textarea key handling.
+   *
+   * When the `@`-mention dropdown is OPEN it OWNS the navigation keys: ↑/↓ move
+   * the highlighted row, Enter / Tab pick it, Esc dismisses — and the
+   * compose/send behaviour is suppressed so Enter never sends mid-pick. When
+   * the dropdown is CLOSED the v0.4.3 behaviour is unchanged: ⌘/Ctrl+Enter
+   * composes, plus plain Enter when the Enter-to-send preference is on.
+   */
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // --- P9: the open mention dropdown captures navigation keys first. ---
+    if (mentionOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickMention(mentionMatches[mentionIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
+
     if (e.key !== "Enter") return;
 
     // P7 — Enter-to-send ON: plain Enter sends, Shift+Enter is a newline.
@@ -231,6 +375,16 @@ export function SessionComposer({
       e.preventDefault();
       handleCompose();
     }
+  }
+
+  /**
+   * P9 — re-evaluate the mention after a caret-moving interaction that is NOT
+   * a value change (arrow keys, clicks): the caret may have entered or left an
+   * `@` token without the draft text changing.
+   */
+  function handleCaretSync(e: { currentTarget: HTMLTextAreaElement }) {
+    const ta = e.currentTarget;
+    syncMention(ta.value, ta.selectionStart ?? ta.value.length);
   }
 
   // The textarea is disabled only when a follow-up turn cannot be sent. In
@@ -258,16 +412,51 @@ export function SessionComposer({
         </p>
       )}
 
-      <textarea
-        className="session-composer-input"
-        placeholder={placeholder}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={inputDisabled}
-        rows={3}
-        aria-label={isCreate ? "New session prompt" : "Follow-up turn prompt"}
-      />
+      {/* P9 — the textarea + its `@`-mention dropdown share a positioned
+          wrapper so the dropdown anchors directly above the input. */}
+      <div className="session-composer-input-wrap">
+        <textarea
+          ref={textareaRef}
+          className="session-composer-input"
+          placeholder={placeholder}
+          value={draft}
+          onChange={handleDraftChange}
+          onKeyDown={handleKeyDown}
+          onClick={handleCaretSync}
+          disabled={inputDisabled}
+          rows={3}
+          aria-label={isCreate ? "New session prompt" : "Follow-up turn prompt"}
+        />
+
+        {/* P9 — the @-file mention dropdown. Open only while the caret sits in
+            an `@` token AND the project's file list has matches. */}
+        {mentionOpen && (
+          <ul className="session-mention-list" aria-label="Project files">
+            {mentionMatches.map((path, i) => (
+              <li key={path}>
+                <button
+                  type="button"
+                  className="session-mention-row"
+                  data-active={i === mentionIndex}
+                  // `onMouseDown` (not `onClick`) so the pick fires before the
+                  // textarea loses focus — a blur would otherwise close the
+                  // dropdown first.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickMention(path);
+                  }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                >
+                  <span className="session-mention-glyph" aria-hidden="true">
+                    @
+                  </span>
+                  {path}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* optional FORM disclosure — create mode only */}
       {isCreate && (

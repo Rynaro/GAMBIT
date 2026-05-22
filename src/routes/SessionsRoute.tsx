@@ -35,6 +35,7 @@
 import { RouteHeader } from "@/components/RouteHeader";
 import { AssistantText } from "@/components/session/AssistantText";
 import { ContextGauge } from "@/components/session/ContextGauge";
+import { HighlightedText } from "@/components/session/HighlightedText";
 import { RawNdjsonToggle } from "@/components/session/RawNdjsonToggle";
 import { ResultCard } from "@/components/session/ResultCard";
 import { SessionCard } from "@/components/session/SessionCard";
@@ -43,6 +44,7 @@ import { SessionList, railOrder } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import type { ExpandSignal } from "@/components/session/ToolUseChip";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
+import { TranscriptFindBar } from "@/components/session/TranscriptFindBar";
 import { DEFAULT_MODEL, EFFORT_DEFAULT } from "@/lib/claudeModels";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_EIDOLON_NAME, readProjectRoster } from "@/lib/eidolonRoster";
@@ -54,6 +56,7 @@ import type {
   ParsedResult,
   ParsedUser,
 } from "@/lib/session.types";
+import { searchTranscript } from "@/lib/transcriptFind";
 import type { TranscriptEntry, UseSessionResult } from "@/lib/useSession";
 import { useSession } from "@/lib/useSession";
 import type { SessionLiveState, SessionSlice, UseSessionsResult } from "@/lib/useSessions";
@@ -615,6 +618,8 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
                   onSelectModel={setModel}
                   thinkingEffort={thinkingEffort}
                   onSelectThinkingEffort={setThinkingEffort}
+                  // P9 — the resolved cwd is the file pool for `@`-mentions.
+                  projectPath={cwd.path}
                 />
               }
             />
@@ -793,6 +798,63 @@ function DetailPane({
     setExpandSignal((prev) => ({ value, nonce: prev.nonce + 1 }));
   }
 
+  // P10 — in-transcript find. `findOpen` gates the find bar, `findQuery` is the
+  // search text, `findIndex` is the active match (0-based). The find is pure
+  // frontend over `transcript` — `searchTranscript` flattens it and locates
+  // every match. Opened by the find button or ⌘/Ctrl+F (bound below).
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findIndex, setFindIndex] = useState(0);
+
+  const findResult = useMemo(
+    () => searchTranscript(transcript, findOpen ? findQuery : ""),
+    [transcript, findOpen, findQuery],
+  );
+  const findMatchCount = findResult.matches.length;
+  // The turn the active match sits in — drives scroll-to-turn navigation.
+  const activeMatch = findMatchCount > 0 ? findResult.matches[findIndex % findMatchCount] : null;
+
+  // Clamp the active match index whenever the match set shrinks (the query
+  // narrowed) so it never points past the end.
+  useEffect(() => {
+    setFindIndex((i) => (findMatchCount === 0 ? 0 : i % findMatchCount));
+  }, [findMatchCount]);
+
+  /** Step the active find match forward (`+1`) or back (`-1`), wrapping. */
+  function stepFind(delta: number) {
+    if (findMatchCount === 0) return;
+    setFindIndex((i) => (i + delta + findMatchCount) % findMatchCount);
+  }
+
+  /** Close the find bar and clear its query. */
+  function closeFind() {
+    setFindOpen(false);
+    setFindQuery("");
+    setFindIndex(0);
+  }
+
+  // P10 — route-scoped ⌘/Ctrl+F: opens the find bar. Bound inside `DetailPane`,
+  // which mounts ONLY when the Sessions route is active with a session open,
+  // so the listener is inherently route-scoped; the cleanup detaches it on
+  // unmount so ⌘F is never hijacked elsewhere.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setFindOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Scroll the active match's turn group into view as the user steps matches.
+  useEffect(() => {
+    if (!activeMatch) return;
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-turn="${activeMatch.turn}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeMatch, scrollRef]);
+
   // Re-pin to the bottom whenever the transcript grows or the live buffer
   // streams — but only while the user has not scrolled up.
   // biome-ignore lint/correctness/useExhaustiveDependencies: live.streamingText / toolCalls drive the streaming re-pin
@@ -871,8 +933,8 @@ function DetailPane({
       <ContextGauge slice={slice} />
 
       {/* P3: transcript-level bulk expand/collapse — one click syncs every
-          tool chip + thinking block. Mounted just above the transcript so it
-          reads as a control over the whole conversation. */}
+          tool chip + thinking block. P10 — a Find button opens the
+          in-transcript find bar (also bound to ⌘/Ctrl+F). */}
       <div className="session-transcript-controls">
         <button
           type="button"
@@ -890,11 +952,38 @@ function DetailPane({
         >
           Collapse all
         </button>
+        <button
+          type="button"
+          className="session-bulk-toggle"
+          onClick={() => setFindOpen(true)}
+          aria-label="Find in transcript"
+          title="Find in transcript (⌘F)"
+        >
+          Find
+        </button>
       </div>
+
+      {/* P10 — the in-transcript find bar. */}
+      {findOpen && (
+        <TranscriptFindBar
+          query={findQuery}
+          onQueryChange={setFindQuery}
+          matchCount={findMatchCount}
+          activeIndex={findMatchCount > 0 ? findIndex % findMatchCount : -1}
+          onNext={() => stepFind(1)}
+          onPrev={() => stepFind(-1)}
+          onClose={closeFind}
+        />
+      )}
 
       <div className="session-transcript">
         {turns.map((group) => (
-          <div className="session-turn" key={group.turn}>
+          <div
+            className="session-turn"
+            key={group.turn}
+            data-turn={group.turn}
+            data-find-match={findResult.matchedTurns.has(group.turn) || undefined}
+          >
             <div className="session-turn-marker">Turn {group.turn}</div>
             {group.entries.map((entry, idx) => (
               <TranscriptRow
@@ -906,6 +995,7 @@ function DetailPane({
                 canResend={canResend}
                 onResend={onResend}
                 onEditPrompt={onEditPrompt}
+                findQuery={findOpen ? findQuery : ""}
               />
             ))}
           </div>
@@ -961,6 +1051,8 @@ function DetailPane({
         onSend={(prompt) => session.sendTurn(prompt)}
         onCancel={() => session.cancel()}
         editDraft={editDraft}
+        // P9 — the open session's pinned project is the `@`-mention file pool.
+        projectPath={slice?.summary?.projectPath || sessionInfo?.projectPath || null}
         // create-mode props are unused in detail mode — supplied inert.
         onCreate={() => {}}
         createReady={false}
@@ -1085,6 +1177,12 @@ interface TranscriptRowProps {
   onResend: (prompt: string) => void;
   /** P4 — load a prompt into the composer to amend before sending. */
   onEditPrompt: (prompt: string) => void;
+  /**
+   * P10 — the active in-transcript find query. Empty when the find bar is
+   * closed. Non-empty highlights matches in the plain-text rows (the user
+   * prompt + stderr lines) via `<mark>`.
+   */
+  findQuery: string;
 }
 
 /**
@@ -1106,16 +1204,19 @@ function UserPrompt({
   canResend,
   onResend,
   onEditPrompt,
+  findQuery,
 }: {
   prompt: string;
   canResend: boolean;
   onResend: (prompt: string) => void;
   onEditPrompt: (prompt: string) => void;
+  /** P10 — highlight find matches inside the prompt bubble. */
+  findQuery: string;
 }) {
   return (
     <div className="session-user-wrap">
       <div className="session-user" aria-label="Your prompt">
-        {prompt}
+        <HighlightedText text={prompt} query={findQuery} />
       </div>
       <div className="session-user-actions">
         <button
@@ -1151,10 +1252,15 @@ function TranscriptRow({
   canResend,
   onResend,
   onEditPrompt,
+  findQuery,
 }: TranscriptRowProps) {
-  // stderr — a diagnostics line.
+  // stderr — a diagnostics line. P10 — highlight find matches inline.
   if (entry.source === "stderr") {
-    return <pre className="session-stderr-line">{entry.line}</pre>;
+    return (
+      <pre className="session-stderr-line">
+        <HighlightedText text={entry.line} query={findQuery} />
+      </pre>
+    );
   }
 
   // R4 — the human's own typed prompt for the turn: a right-aligned bubble
@@ -1167,6 +1273,7 @@ function TranscriptRow({
         canResend={canResend}
         onResend={onResend}
         onEditPrompt={onEditPrompt}
+        findQuery={findQuery}
       />
     );
   }

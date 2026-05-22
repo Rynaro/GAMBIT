@@ -357,6 +357,81 @@
   color: var(--text-secondary);
 }
 
+/* ---- In-transcript find bar (P10) ---- */
+.session-find-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface-raised);
+}
+
+.session-find-input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.session-find-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.session-find-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.session-find-count[data-empty="true"] {
+  color: var(--accent-danger, var(--text-muted));
+}
+
+.session-find-step,
+.session-find-close {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.session-find-step:hover:not(:disabled),
+.session-find-close:hover {
+  color: var(--text-primary);
+}
+
+.session-find-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The inline match highlight in plain-text rows (prompt / stderr). */
+.session-find-hit {
+  background: color-mix(in srgb, var(--accent-primary) 40%, transparent 60%);
+  color: var(--text-primary);
+  border-radius: var(--radius-control);
+  padding: 0 1px;
+}
+
+/* A turn group containing at least one find match. */
+.session-turn[data-find-match="true"] {
+  outline: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent 70%);
+  outline-offset: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
 /* ---- Jump-to-latest pill (P2) — re-engages stick-to-bottom autoscroll ---- */
 .session-jump-latest {
   position: sticky;

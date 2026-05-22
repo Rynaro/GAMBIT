@@ -437,6 +437,17 @@ export interface AuthStatus {
   detail: string;
 }
 
+/**
+ * P9 — the return shape of the `list_project_files` command.
+ *
+ * The Rust command (`project_files.rs`) returns a bare `Vec<String>` of
+ * RELATIVE, forward-slashed file paths sorted alphabetically and capped at a
+ * few thousand entries — the file pool the composer's `@`-mention picker
+ * filters. A plain alias rather than an `interface` because the wire shape is
+ * exactly `string[]`; the alias documents the contract at the call site.
+ */
+export type ProjectFiles = string[];
+
 // ---------------------------------------------------------------------------
 // session.rs — event payloads (all camelCase on the wire)
 // ---------------------------------------------------------------------------

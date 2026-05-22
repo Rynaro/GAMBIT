@@ -4,6 +4,7 @@ pub mod claude_adapter;
 pub mod doctor;
 pub mod extract;
 pub mod mcp;
+pub mod project_files;
 pub mod session;
 pub mod session_store;
 pub mod spawn_core;
@@ -84,6 +85,7 @@ pub fn run() {
             session::fork_session,
             session::claude_auth_status,
             session::cancel_session,
+            project_files::list_project_files,
             session_store::list_sessions,
             session_store::load_session,
             session_store::delete_session,
