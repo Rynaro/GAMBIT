@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-05-22
+
+The fourth v0.3.x minor — the context-temperature gauge.
+
+### Added
+
+- An always-visible **context-temperature gauge** in the session detail header.
+  The bar reads how full the model's context window is — the latest turn's
+  input-side tokens (`input + cache-read + cache-creation`) over a host-side
+  model→window table (Opus 4.7/4.6 & Sonnet 4.6 = 1,000,000 tokens; Sonnet 4.5
+  and older = 200,000; conservative fallback for unknown models). It also shows
+  session-lifetime total tokens and an estimated cost (labelled an estimate —
+  it is client-side, not billing). The gauge helps you stop before
+  context-exhaustion hallucinations. A `compact_boundary` event is detected
+  best-effort; regardless, the next turn's `result` re-baselines the gauge.
+
 ## [0.3.3] — 2026-05-22
 
 The third v0.3.x minor — cortex-default launch (TRANCE-lite).
