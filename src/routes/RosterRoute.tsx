@@ -1,82 +1,28 @@
-// RosterRoute.tsx — Browse the Eidolons team roster from nexus roster/index.yaml.
-// Reads from ~/.eidolons/nexus/roster/index.yaml via the Tauri fs plugin.
-// Falls back to an informational panel if the file is unavailable.
+// RosterRoute.tsx — Browse the PROJECT's installed Eidolons and launch one.
+//
+// Per the v0.3 SPECTRA decision the Roster is project-only: it reads the
+// opened project's Eidolons via `readProjectEidolons` (S3) — `eidolons.yaml`
+// + each `.eidolons/<name>/agent.md` — and renders them as a table. The
+// global `~/.eidolons/nexus/roster/index.yaml` read is dropped.
+//
+// Each row carries a "Launch" action: clicking it hands the Eidolon off to
+// the Sessions route (S7), pre-selected in its pre-launch picker, making the
+// Roster the natural launch point for a live session.
 
 import { RouteHeader } from "@/components/RouteHeader";
+import type { ProjectEidolon } from "@/lib/eidolon.types";
+import { readProjectEidolons } from "@/lib/eidolonRoster";
 import { getRoute } from "@/routes/index";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import { BaseDirectory } from "@tauri-apps/plugin-fs";
 import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
-// Minimal YAML line parser — extracts roster members from roster/index.yaml.
-//
-// Real shape (captured from ~/.eidolons/nexus/roster/index.yaml):
-//   eidolons:             ← top-level array key (NOT `members:`)
-//     - name: atlas       ← array items with `- name:` (NOT `  atlas:`)
-//       status: shipped
-//       source:
-//         repo: Rynaro/ATLAS
-//       versions:
-//         latest: "1.5.3"
+// Props
 // ---------------------------------------------------------------------------
 
-interface RosterMember {
-  name: string;
-  status?: string;
-  latestVersion?: string;
-  repo?: string;
-}
-
-function parseRosterYaml(raw: string): RosterMember[] {
-  const members: RosterMember[] = [];
-  const lines = raw.split("\n");
-  let inEidolons = false;
-  let current: Partial<RosterMember> | null = null;
-
-  for (const line of lines) {
-    // Detect `eidolons:` top-level key
-    if (/^eidolons\s*:/.test(line)) {
-      inEidolons = true;
-      continue;
-    }
-
-    // Another top-level key (no leading whitespace, not a list item) ends the block
-    if (inEidolons && /^[a-z_][\w-]*\s*:/.test(line)) {
-      inEidolons = false;
-    }
-
-    if (!inEidolons) continue;
-
-    // A new member entry starts with `  - name: <value>`
-    const nameItem = line.match(/^\s+-\s+name\s*:\s*(.+)/);
-    if (nameItem) {
-      if (current?.name) members.push(current as RosterMember);
-      current = { name: nameItem[1].trim().replace(/^['"]|['"]$/g, "") };
-      continue;
-    }
-
-    if (!current) continue;
-
-    // Parse sub-keys within a member (indented, no leading `-`)
-    const statusMatch = line.match(/^\s+status\s*:\s*(.+)/);
-    if (statusMatch) {
-      current.status = statusMatch[1].trim().replace(/^['"]|['"]$/g, "");
-    }
-
-    const repoMatch = line.match(/^\s+repo\s*:\s*(.+)/);
-    if (repoMatch) {
-      current.repo = repoMatch[1].trim().replace(/^['"]|['"]$/g, "");
-    }
-
-    const latestMatch = line.match(/^\s+latest\s*:\s*(.+)/);
-    if (latestMatch) {
-      current.latestVersion = latestMatch[1].trim().replace(/^['"]|['"]$/g, "");
-    }
-  }
-
-  if (current?.name) members.push(current as RosterMember);
-  return members;
+interface RosterRouteProps {
+  projectPath: string | null;
+  /** S8 — hand the chosen Eidolon to the Sessions route, pre-selected. */
+  onLaunchSession: (eidolonName: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,70 +31,92 @@ function parseRosterYaml(raw: string): RosterMember[] {
 
 const ROUTE = getRoute("roster");
 
-export function RosterRoute() {
-  const [members, setMembers] = useState<RosterMember[] | null>(null);
+export function RosterRoute({ projectPath, onLaunchSession }: RosterRouteProps) {
+  const [eidolons, setEidolons] = useState<ProjectEidolon[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [attemptedPath, setAttemptedPath] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
+    if (!projectPath) {
+      setEidolons(null);
       setError(null);
-
-      // Try ~/.eidolons/nexus/roster/index.yaml via BaseDirectory.Home
-      const relPath = ".eidolons/nexus/roster/index.yaml";
-      setAttemptedPath(`~/${relPath}`);
-
-      try {
-        const raw = await readTextFile(relPath, { baseDir: BaseDirectory.Home });
-        if (cancelled) return;
-        const parsed = parseRosterYaml(raw);
-        setMembers(parsed);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setMembers(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      setLoading(false);
+      return;
     }
 
-    void load();
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setEidolons(null);
+
+    readProjectEidolons(projectPath)
+      .then((roster) => {
+        if (cancelled) return;
+        setEidolons(roster);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setEidolons(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectPath]);
 
-  if (loading) {
+  // ------------------------------------------------------------------
+  // Render: no project
+  // ------------------------------------------------------------------
+  if (!projectPath) {
     return (
       <div className="route-pane">
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
-        <div className="route-loading">Fetching roster…</div>
+        <div className="route-empty">
+          <p className="route-empty-heading">No project selected.</p>
+          <p className="route-empty-body">
+            Pick a project folder from the sidebar to see its installed Eidolons.
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (error || !members) {
+  // ------------------------------------------------------------------
+  // Render: loading
+  // ------------------------------------------------------------------
+  if (loading) {
+    return (
+      <div className="route-pane">
+        <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
+        <div className="route-loading">Reading project roster…</div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Render: error
+  // ------------------------------------------------------------------
+  if (error || !eidolons) {
     return (
       <div className="route-pane">
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
         <div className="route-card">
           <div className="route-empty">
-            <p className="route-empty-heading">Registry unreachable.</p>
+            <p className="route-empty-heading">Roster unreadable.</p>
             <p className="route-empty-body">
-              Couldn't read the local roster. Maybe the kettle is louder than the wifi.
+              Couldn't read this project's Eidolons. Maybe the kettle is louder than the wifi.
             </p>
             <p className="route-empty-body">
-              Run{" "}
+              Checked{" "}
               <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-                eidolons install
+                eidolons.yaml
               </code>{" "}
-              first to populate the nexus cache.
+              and each member's <code style={{ fontFamily: "var(--font-mono)" }}>agent.md</code>.
             </p>
-            <span className="route-empty-note">{attemptedPath}</span>
             {error && (
               <span
                 className="route-empty-note"
@@ -163,54 +131,70 @@ export function RosterRoute() {
     );
   }
 
-  if (members.length === 0) {
+  // ------------------------------------------------------------------
+  // Render: empty roster
+  // ------------------------------------------------------------------
+  if (eidolons.length === 0) {
     return (
       <div className="route-pane">
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
         <div className="route-empty">
-          <p className="route-empty-heading">No members found in roster.</p>
+          <p className="route-empty-heading">No Eidolons in this project.</p>
           <p className="route-empty-body">
-            The roster file was read but contained no member entries.
+            Add members to <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.yaml</code> and
+            run <code style={{ fontFamily: "var(--font-mono)" }}>eidolons sync</code> to install
+            them.
           </p>
-          <span className="route-empty-note">{attemptedPath}</span>
         </div>
       </div>
     );
   }
 
+  // ------------------------------------------------------------------
+  // Render: project Eidolons
+  // ------------------------------------------------------------------
   return (
     <div className="route-pane">
       <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
       <div className="route-card">
-        <p className="route-card-title">Team members</p>
+        <p className="route-card-title">Project Eidolons</p>
         <table className="route-table">
           <thead>
             <tr>
               <th>Name</th>
-              <th>Status</th>
-              <th>Latest</th>
-              <th>Repository</th>
+              <th>Role</th>
+              <th>Description</th>
+              <th>Methodology</th>
+              <th>Tools</th>
+              <th>Launch</th>
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => (
-              <tr key={m.name}>
+            {eidolons.map((e) => (
+              <tr key={e.name}>
                 <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                  {m.name.toUpperCase()}
+                  {e.name.toUpperCase()}
+                </td>
+                <td>{e.role || "—"}</td>
+                <td>{e.description || "—"}</td>
+                <td className="mono">
+                  {e.methodology
+                    ? `${e.methodology}${e.methodologyVersion ? ` ${e.methodologyVersion}` : ""}`
+                    : "—"}
+                </td>
+                <td className="mono">
+                  {e.allowedTools.length} tool{e.allowedTools.length === 1 ? "" : "s"}
                 </td>
                 <td>
-                  {m.status ? (
-                    <span
-                      className={`badge ${m.status === "stable" ? "badge-ok" : m.status === "in_construction" ? "badge-warn" : "badge-muted"}`}
-                    >
-                      {m.status}
-                    </span>
-                  ) : (
-                    <span className="badge badge-muted">—</span>
-                  )}
+                  <button
+                    type="button"
+                    className="route-verb-btn primary"
+                    onClick={() => onLaunchSession(e.name)}
+                    aria-label={`Launch ${e.name} as a session`}
+                  >
+                    Launch
+                  </button>
                 </td>
-                <td className="mono">{m.latestVersion ?? "—"}</td>
-                <td className="mono">{m.repo ? <span title={m.repo}>{m.repo}</span> : "—"}</td>
               </tr>
             ))}
           </tbody>

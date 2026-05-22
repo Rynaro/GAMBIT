@@ -22,6 +22,7 @@ export type CommandId =
   | "nav:harness"
   | "nav:doctor"
   | "nav:methodology"
+  | "nav:sessions"
   | "nav:settings"
   // Actions
   | "action:sync"
@@ -51,6 +52,7 @@ export const COMMANDS: Command[] = [
   { id: "nav:harness", group: "navigate", label: "Harness" },
   { id: "nav:doctor", group: "navigate", label: "Doctor" },
   { id: "nav:methodology", group: "navigate", label: "Methodology" },
+  { id: "nav:sessions", group: "navigate", label: "Sessions" },
   { id: "nav:settings", group: "navigate", label: "Settings" },
 
   // Actions group

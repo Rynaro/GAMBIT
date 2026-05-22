@@ -28,6 +28,10 @@ function AppShell() {
 
   const [projectPath, setProjectPathState] = useState<string | null>(() => getProjectPath());
 
+  // S8 — Roster→Sessions handoff: the Eidolon name a "Launch" click pre-selects
+  // in the Sessions route's pre-launch picker. Consumed once by SessionsRoute.
+  const [pendingSessionEidolon, setPendingSessionEidolon] = useState<string | null>(null);
+
   const { state: driftState, projectBasename, clearDrift } = useDriftWatcher(projectPath);
 
   // Sync hook — manages live eidolons sync streaming state.
@@ -98,6 +102,13 @@ function AppShell() {
     setProjectPathState(null);
   };
 
+  // S8 — the Roster's "Launch" action: stash the chosen Eidolon and switch to
+  // the Sessions route, which seeds its picker from `pendingSessionEidolon`.
+  const handleLaunchSession = (eidolonName: string) => {
+    setPendingSessionEidolon(eidolonName);
+    setActiveRoute("sessions");
+  };
+
   const showLogPane = sync.state !== "idle";
   const showUpgradePane = upgrade.state !== "idle";
 
@@ -110,6 +121,8 @@ function AppShell() {
           projectPath={projectPath}
           onPickProject={handlePickProject}
           onClearProject={handleClearProject}
+          onLaunchSession={handleLaunchSession}
+          pendingSessionEidolon={pendingSessionEidolon}
           onCheckUpgrades={
             projectPath
               ? () => {

@@ -126,20 +126,28 @@ function indexToolResults(
 
 interface SessionsRouteProps {
   projectPath: string | null;
+  /**
+   * S8 — optional Eidolon name to pre-select in the pre-launch picker, set by
+   * the Roster's "Launch" handoff. When absent, the picker behaves exactly as
+   * S7 shipped it (auto-selects the first project Eidolon).
+   */
+  initialEidolonName?: string | null;
 }
 
 // ---------------------------------------------------------------------------
 // Route
 // ---------------------------------------------------------------------------
 
-export function SessionsRoute({ projectPath }: SessionsRouteProps) {
+export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRouteProps) {
   const session = useSession();
   const { status, authStatus } = session;
 
-  // Pre-launch panel form state.
+  // Pre-launch panel form state. `selectedName` seeds from the S8 Roster
+  // handoff (`initialEidolonName`) when present, else stays empty for the
+  // roster-load to auto-select the first Eidolon (S7 behaviour).
   const [eidolons, setEidolons] = useState<ProjectEidolon[]>([]);
   const [eidolonsLoaded, setEidolonsLoaded] = useState(false);
-  const [selectedName, setSelectedName] = useState<string>("");
+  const [selectedName, setSelectedName] = useState<string>(initialEidolonName ?? "");
   const [permissionMode, setPermissionMode] = useState<string>("default");
   const [firstPrompt, setFirstPrompt] = useState<string>("");
   const [launchError, setLaunchError] = useState<string | null>(null);
@@ -159,7 +167,13 @@ export function SessionsRoute({ projectPath }: SessionsRouteProps) {
       .then((roster) => {
         if (cancelled) return;
         setEidolons(roster);
-        setSelectedName((prev) => prev || roster[0]?.name || "");
+        // Prefer the S8 handoff name when it matches a project Eidolon, else
+        // keep any prior selection, else auto-select the first (S7 behaviour).
+        const handoff =
+          initialEidolonName && roster.some((e) => e.name === initialEidolonName)
+            ? initialEidolonName
+            : "";
+        setSelectedName((prev) => handoff || prev || roster[0]?.name || "");
       })
       .catch(() => {
         if (!cancelled) setEidolons([]);
@@ -175,7 +189,8 @@ export function SessionsRoute({ projectPath }: SessionsRouteProps) {
       cancelled = true;
     };
     // session.checkAuth is a stable useCallback; projectPath drives the reload.
-  }, [projectPath]);
+    // initialEidolonName re-runs the load so a fresh S8 handoff re-seeds the pick.
+  }, [projectPath, initialEidolonName]);
 
   const selectedEidolon = useMemo(
     () => eidolons.find((e) => e.name === selectedName) ?? null,
