@@ -24,6 +24,13 @@
 //
 // The FRONTEND supplies the persona text: a create reads the chosen Eidolon's
 // `agent.md` and passes its full content as `appendSystemPrompt`.
+//
+// Story S4 — cortex-default launch (TRANCE-lite): the picker's pre-selected
+// default is the synthetic "Cortex (default)" entry. Creating a cortex session
+// reads `.eidolons/cortex/EIDOLONS.md` (the routing descriptor) as the
+// `appendSystemPrompt` and sets `isCortex: true` so `claude` self-routes across
+// the project's Eidolons; picking a NAMED Eidolon instead is the explicit
+// opt-in override (its `agent.md`, `isCortex: false`), exactly as S3 shipped.
 
 import { RouteHeader } from "@/components/RouteHeader";
 import { AssistantText } from "@/components/session/AssistantText";
@@ -35,7 +42,7 @@ import { SessionList } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
-import { readProjectEidolons } from "@/lib/eidolonRoster";
+import { CORTEX_EIDOLON_NAME, readProjectRoster } from "@/lib/eidolonRoster";
 import type {
   ContentBlock,
   ParsedAssistant,
@@ -211,9 +218,15 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
 
   // Composer create-mode form state. The Eidolon picker + permission select
   // are now an optional disclosure inside the composer (story S3).
+  //
+  // S4: the roster's FIRST entry is always the synthetic "Cortex (default)"
+  // option, and `selectedName` defaults to its sentinel — the zero-effort
+  // type-and-send path. A Roster "Launch" handoff still overrides it.
   const [eidolons, setEidolons] = useState<ProjectEidolon[]>([]);
   const [eidolonsLoaded, setEidolonsLoaded] = useState(false);
-  const [selectedName, setSelectedName] = useState<string>(initialEidolonName ?? "");
+  const [selectedName, setSelectedName] = useState<string>(
+    initialEidolonName ?? CORTEX_EIDOLON_NAME,
+  );
   const [permissionMode, setPermissionMode] = useState<string>("default");
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -232,23 +245,26 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     if (!rosterPath) {
       setEidolons([]);
       setEidolonsLoaded(false);
-      setSelectedName("");
+      setSelectedName(CORTEX_EIDOLON_NAME);
       return;
     }
 
     let cancelled = false;
     setEidolonsLoaded(false);
-    readProjectEidolons(rosterPath)
+    // S4: the roster is Cortex-prepended — entry[0] is "Cortex (default)",
+    // named project Eidolons follow as explicit opt-in overrides.
+    readProjectRoster(rosterPath)
       .then((roster) => {
         if (cancelled) return;
         setEidolons(roster);
         // Prefer the Roster handoff name when it matches a project Eidolon,
-        // else keep any prior selection, else auto-select the first.
+        // else keep any prior selection, else fall back to the Cortex default
+        // (always roster[0]) — never auto-pick a named Eidolon.
         const handoff =
           initialEidolonName && roster.some((e) => e.name === initialEidolonName)
             ? initialEidolonName
             : "";
-        setSelectedName((prev) => handoff || prev || roster[0]?.name || "");
+        setSelectedName((prev) => handoff || prev || roster[0]?.name || CORTEX_EIDOLON_NAME);
       })
       .catch(() => {
         if (!cancelled) setEidolons([]);
@@ -305,17 +321,41 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     if (cwd.path === null) return;
     setCreateError(null);
 
-    // The FRONTEND resolves the persona text — read the chosen Eidolon's
-    // agent.md and pass its full content as appendSystemPrompt.
+    // The FRONTEND resolves the persona text. For a NAMED Eidolon this is its
+    // `agent.md`; for the synthetic "Cortex (default)" entry it is the cortex
+    // routing descriptor (`.eidolons/cortex/EIDOLONS.md`) — both reached via
+    // `agentMdPath`, so a single `readTextFile` covers both (story S4).
     let appendSystemPrompt = "";
     let allowedTools: string[] = [];
     const eidolon = eidolons.find((e) => e.name === opts.eidolonName) ?? selectedEidolon;
+    // `isCortex` keys the launch path off the chosen entry's marker — true
+    // only for the synthetic Cortex entry, false for every named Eidolon.
+    const isCortex = eidolon?.isCortex === true;
+
+    // A cortex entry whose descriptor is missing must not start a session —
+    // it would launch with an empty system prompt and no routing at all.
+    if (isCortex && eidolon?.unavailable === true) {
+      setCreateError(
+        `Cannot start a Cortex session — ${eidolon.agentMdPath} not found. Pick a specific Eidolon under Options instead.`,
+      );
+      return;
+    }
+
     if (eidolon) {
-      allowedTools = eidolon.allowedTools;
+      // Cortex routing is dynamic — the routed Eidolons carry their own tool
+      // contracts — so a cortex session takes claude's default (permissive)
+      // tool posture: leave `allowedTools` empty rather than over-restrict.
+      allowedTools = isCortex ? [] : eidolon.allowedTools;
       try {
         appendSystemPrompt = await readTextFile(eidolon.agentMdPath);
       } catch {
-        // agent.md unreadable — proceed with an empty persona; surface a note.
+        // Persona/descriptor unreadable — surface a note. A cortex session
+        // with no descriptor is pointless, so abort it; a named Eidolon may
+        // still proceed with an empty persona (matches S3 behaviour).
+        if (isCortex) {
+          setCreateError(`Could not read ${eidolon.agentMdPath} — Cortex session not started.`);
+          return;
+        }
         setCreateError(
           `Could not read ${eidolon.agentMdPath} — launching without a persona prompt.`,
         );
@@ -326,11 +366,13 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     // the detail pane opens. The resolved cwd is pinned here, before turn 1.
     const newId = await store.start({
       projectPath: cwd.path,
-      eidolonName: eidolon?.name ?? "",
+      // A cortex session carries no named-Eidolon identity (eidolonName "").
+      eidolonName: isCortex ? "" : (eidolon?.name ?? ""),
       permissionMode,
       appendSystemPrompt,
       allowedTools,
       firstPrompt: prompt,
+      isCortex,
     });
     if (newId) {
       setActiveSessionId(newId);
@@ -509,13 +551,17 @@ function DetailPane({ session }: DetailPaneProps) {
   const turns = useMemo(() => groupByTurn(transcript), [transcript]);
   const toolResults = useMemo(() => indexToolResults(transcript), [transcript]);
 
-  const eidolonName = sessionInfo?.eidolonName || "Eidolon";
+  // S4: a cortex-routed session carries no named-Eidolon identity — label it
+  // "Cortex" with a routing role rather than the generic "Eidolon" fallback.
+  const isCortex = sessionInfo?.isCortex === true;
+  const eidolonName = isCortex ? "Cortex" : sessionInfo?.eidolonName || "Eidolon";
   const turnRunning = status === "turn-running" || status === "launching";
   const canSend = status === "awaiting-input";
-  // The Eidolon role line is not carried on `SessionInfo` — left blank here
-  // (the v0.3.0 pre-launch panel sourced it from the picked `ProjectEidolon`,
-  // which the list<->detail shell no longer threads into the detail pane).
-  const eidolonRole = "";
+  // The Eidolon role line is not carried on `SessionInfo` — left blank for a
+  // named Eidolon (the v0.3.0 pre-launch panel sourced it from the picked
+  // `ProjectEidolon`, which the list<->detail shell no longer threads in). A
+  // cortex session gets a static routing role so the header reads correctly.
+  const eidolonRole = isCortex ? "Self-routing across the project's Eidolons" : "";
 
   return (
     <div className="session-detail-inner">

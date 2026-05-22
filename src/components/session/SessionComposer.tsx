@@ -14,6 +14,13 @@
 // path is pure type-and-send. The panel is shown only in create mode (a live
 // session's Eidolon/mode are immutable).
 //
+// Story S4 — the picker's first entry is the synthetic "Cortex (default)"
+// option (TRANCE-lite, FORGE option (c)): it is pre-selected by the route so
+// the zero-effort path opens a cortex-routed session with no picker
+// interaction at all. Selecting a named Eidolon is the explicit opt-in
+// override. A Cortex entry whose `.eidolons/cortex/EIDOLONS.md` descriptor is
+// absent renders disabled with an "unavailable" note.
+//
 // cwd resolution (FORGE-mandated, spec §5) lives in the ROUTE — the composer is
 // handed the resolved state via `createReady` / `cwdBlockedReason`. When the
 // resolution yields no absolute project_path the composer is in a blocked
@@ -21,6 +28,7 @@
 // shown. A session is NEVER created without a resolved absolute project_path.
 
 import type { ProjectEidolon } from "@/lib/eidolon.types";
+import { CORTEX_DISPLAY_NAME } from "@/lib/eidolonRoster";
 import { type KeyboardEvent, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -203,12 +211,25 @@ export function SessionComposer({
                     aria-label="Select an Eidolon to launch"
                   >
                     {!eidolonsLoaded && <option value="">Loading…</option>}
-                    {eidolons.map((e) => (
-                      <option key={e.name} value={e.name}>
-                        {e.name}
-                        {e.role ? ` — ${e.role}` : ""}
-                      </option>
-                    ))}
+                    {eidolons.map((e) => {
+                      // S4: the synthetic Cortex entry shows its display name;
+                      // a Cortex entry whose descriptor is missing is disabled
+                      // so it cannot be picked as the launch persona.
+                      const label = e.isCortex
+                        ? e.unavailable
+                          ? `${CORTEX_DISPLAY_NAME} — unavailable`
+                          : CORTEX_DISPLAY_NAME
+                        : `${e.name}${e.role ? ` — ${e.role}` : ""}`;
+                      return (
+                        <option
+                          key={e.name}
+                          value={e.name}
+                          disabled={e.isCortex === true && e.unavailable === true}
+                        >
+                          {label}
+                        </option>
+                      );
+                    })}
                   </select>
                 )}
               </div>

@@ -30,9 +30,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mocks
 // ---------------------------------------------------------------------------
 
-const readProjectEidolonsMock = vi.fn<(path: string) => Promise<ProjectEidolon[]>>();
+// S4: the route now loads a Cortex-prepended roster via `readProjectRoster`.
+// The mock keeps the real `CORTEX_*` constants so the composer + route agree.
+const readProjectRosterMock = vi.fn<(path: string) => Promise<ProjectEidolon[]>>();
 vi.mock("@/lib/eidolonRoster", () => ({
-  readProjectEidolons: (path: string) => readProjectEidolonsMock(path),
+  readProjectRoster: (path: string) => readProjectRosterMock(path),
+  CORTEX_EIDOLON_NAME: "@cortex",
+  CORTEX_DISPLAY_NAME: "Cortex (default)",
 }));
 
 const readTextFileMock = vi.fn<(path: string) => Promise<string>>();
@@ -72,6 +76,30 @@ const ATLAS: ProjectEidolon = {
   handoffs: ["spectra"],
   agentMdPath: "/proj/.eidolons/atlas/agent.md",
 };
+
+/** The synthetic "Cortex (default)" roster entry (story S4) — available. */
+const CORTEX: ProjectEidolon = {
+  name: "@cortex",
+  description: "Self-routing default.",
+  role: "Routing cortex",
+  methodology: "TRANCE",
+  methodologyVersion: "",
+  allowedTools: [],
+  handoffs: [],
+  agentMdPath: "/proj/.eidolons/cortex/EIDOLONS.md",
+  isCortex: true,
+  unavailable: false,
+};
+
+/** The Cortex entry for a project missing `.eidolons/cortex/EIDOLONS.md`. */
+const CORTEX_UNAVAILABLE: ProjectEidolon = {
+  ...CORTEX,
+  description: "Cortex routing descriptor not found in this project.",
+  unavailable: true,
+};
+
+/** The cortex routing descriptor's content — fed as `appendSystemPrompt`. */
+const EIDOLONS_MD = "# EIDOLONS.md — Routing Cortex\nroute work to the project's Eidolons";
 
 const LOGGED_IN: AuthStatus = { loggedIn: true, detail: "Logged in to claude." };
 
@@ -162,8 +190,13 @@ describe("resolveCwd (spec §5)", () => {
 describe("SessionsRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    readProjectEidolonsMock.mockResolvedValue([ATLAS]);
-    readTextFileMock.mockResolvedValue("---\nname: atlas\n---\npersona");
+    // S4: the roster is Cortex-prepended — entry[0] is "Cortex (default)".
+    readProjectRosterMock.mockResolvedValue([CORTEX, ATLAS]);
+    // `readTextFile` resolves both the cortex EIDOLONS.md descriptor and a
+    // named Eidolon's agent.md by path — distinguish them per-call below.
+    readTextFileMock.mockImplementation(async (path: string) =>
+      path.endsWith("EIDOLONS.md") ? EIDOLONS_MD : "---\nname: atlas\n---\npersona",
+    );
   });
 
   afterEach(() => {
@@ -287,6 +320,127 @@ describe("SessionsRoute", () => {
     render(<SessionsRoute projectPath="/proj" store={store} />);
     await flush();
     expect(store.checkAuth).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // S4 — cortex-default launch (TRANCE-lite)
+  // -------------------------------------------------------------------------
+
+  it("S4: the Eidolon picker defaults to the Cortex option", async () => {
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+
+    // Open the optional disclosure to reveal the picker.
+    fireEvent.click(screen.getByLabelText("Toggle session options"));
+    const select = screen.getByLabelText("Select an Eidolon to launch") as HTMLSelectElement;
+    // The pre-selected value is the synthetic Cortex sentinel — zero-effort
+    // type-and-send opens a cortex session with NO picker interaction.
+    expect(select.value).toBe("@cortex");
+    expect(screen.getByText("Cortex (default)")).toBeDefined();
+  });
+
+  it("S4: creating a default session calls start with isCortex:true + the EIDOLONS.md descriptor", async () => {
+    const startMock = vi.fn(async () => "cortex-session-id");
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/abs/project" store={store} />);
+    await flush();
+
+    // No picker interaction — the default IS Cortex.
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "do the thing" } });
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const params = startMock.mock.calls[0][0] as {
+      isCortex: boolean;
+      appendSystemPrompt: string;
+      eidolonName: string;
+      allowedTools: string[];
+    };
+    expect(params.isCortex).toBe(true);
+    // The cortex routing descriptor is the session's system prompt.
+    expect(params.appendSystemPrompt).toBe(EIDOLONS_MD);
+    // A cortex session carries no named-Eidolon identity.
+    expect(params.eidolonName).toBe("");
+    // Cortex routing is dynamic — no over-restricted allow-list.
+    expect(params.allowedTools).toEqual([]);
+  });
+
+  it("S4: picking a named Eidolon yields isCortex:false with that Eidolon's agent.md", async () => {
+    const startMock = vi.fn(async () => "atlas-session-id");
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // Explicit opt-in override — pick ATLAS in the disclosure picker.
+    fireEvent.click(screen.getByLabelText("Toggle session options"));
+    const select = screen.getByLabelText("Select an Eidolon to launch") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "atlas" } });
+
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "scout the repo" } });
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const params = startMock.mock.calls[0][0] as {
+      isCortex: boolean;
+      appendSystemPrompt: string;
+      eidolonName: string;
+      allowedTools: string[];
+    };
+    expect(params.isCortex).toBe(false);
+    expect(params.eidolonName).toBe("atlas");
+    // The named Eidolon's agent.md is the persona — NOT the cortex descriptor.
+    expect(params.appendSystemPrompt).toBe("---\nname: atlas\n---\npersona");
+    expect(params.appendSystemPrompt).not.toBe(EIDOLONS_MD);
+    // A named Eidolon carries its own allowed-tools contract.
+    expect(params.allowedTools).toEqual(ATLAS.allowedTools);
+  });
+
+  it("S4: a project missing .eidolons/cortex/EIDOLONS.md degrades gracefully — no crash, no session", async () => {
+    // The roster's Cortex entry is flagged unavailable (descriptor absent).
+    readProjectRosterMock.mockResolvedValue([CORTEX_UNAVAILABLE, ATLAS]);
+    const startMock = vi.fn(async () => null);
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // The route still renders — no crash.
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "this cannot route" } });
+    // Cortex stays the pre-selected default; the launch guard catches it.
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    // No session is created with a missing cortex descriptor.
+    expect(startMock).not.toHaveBeenCalled();
+    // A clear note is surfaced instead of a crash.
+    expect(screen.getByText(/Cannot start a Cortex session/)).toBeDefined();
+  });
+
+  it("S4: a missing-descriptor project can still launch a named Eidolon override", async () => {
+    readProjectRosterMock.mockResolvedValue([CORTEX_UNAVAILABLE, ATLAS]);
+    const startMock = vi.fn(async () => "atlas-session-id");
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // Override to ATLAS — a real Eidolon is unaffected by the missing cortex.
+    fireEvent.click(screen.getByLabelText("Toggle session options"));
+    const select = screen.getByLabelText("Select an Eidolon to launch") as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "atlas" } });
+
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "scout anyway" } });
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const params = startMock.mock.calls[0][0] as { isCortex: boolean; eidolonName: string };
+    expect(params.isCortex).toBe(false);
+    expect(params.eidolonName).toBe("atlas");
   });
 });
 
