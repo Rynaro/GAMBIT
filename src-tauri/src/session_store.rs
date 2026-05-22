@@ -158,6 +158,29 @@ pub struct SessionRecord {
     /// The serving model, captured from the `system/init` event (or `None`).
     #[serde(default)]
     pub model: Option<String>,
+    /// R3 — the user-CHOSEN model, passed to `--model` on every turn. Distinct
+    /// from [`SessionRecord::model`] (the OBSERVED model `claude` reports on
+    /// `system/init`): this is the launch-time selection, persisted so a
+    /// reopened session resumes on the same `--model`. `#[serde(default)]` for
+    /// forward-compat with records written before R3.
+    #[serde(default)]
+    pub chosen_model: Option<String>,
+    /// R3 — the reasoning effort level (`--effort`), persisted so a reopened
+    /// session resumes on the same effort. `#[serde(default)]` for old records.
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
+    /// R3 — the fallback model alias (`--fallback-model`). `#[serde(default)]`
+    /// for forward-compat with records written before R3.
+    #[serde(default)]
+    pub fallback_model: Option<String>,
+    /// P8 — when this session is a FORK, the UUID of the session it was forked
+    /// from (its parent). `None` for an ordinary, non-forked session. The
+    /// fork's metadata (eidolon, project, permission mode, model/effort,
+    /// persona) is copied from the parent's record at fork time; this field
+    /// records the lineage. `#[serde(default)]` for forward-compat with
+    /// records written before P8.
+    #[serde(default)]
+    pub forked_from: Option<String>,
     /// RFC-3339 creation timestamp.
     pub created_at: String,
     /// RFC-3339 timestamp, bumped on every turn flush.
@@ -190,6 +213,8 @@ impl SessionRecord {
             project_path: self.project_path.clone(),
             status: self.status.clone(),
             model: self.model.clone(),
+            chosen_model: self.chosen_model.clone(),
+            thinking_effort: self.thinking_effort.clone(),
             created_at: self.created_at.clone(),
             last_active_at: self.last_active_at.clone(),
             cumulative_input_tokens: self.cumulative_usage.input_tokens,
@@ -228,6 +253,15 @@ pub struct SessionSummary {
     /// The serving model, or `None` if not yet captured.
     #[serde(default)]
     pub model: Option<String>,
+    /// R3 — the user-CHOSEN model (`--model`), surfaced on the summary so the
+    /// session list can show the pinned model before the first `system/init`
+    /// arrives. `#[serde(default)]` for forward-compat with old index entries.
+    #[serde(default)]
+    pub chosen_model: Option<String>,
+    /// R3 — the reasoning effort level (`--effort`). `#[serde(default)]` for
+    /// forward-compat with old index entries.
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
     /// RFC-3339 creation timestamp.
     pub created_at: String,
     /// RFC-3339 timestamp, bumped on every turn flush.
@@ -450,6 +484,10 @@ mod tests {
             allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
             status: "idle".to_string(),
             model: Some("claude-opus-4-7".to_string()),
+            chosen_model: Some("opus".to_string()),
+            thinking_effort: Some("high".to_string()),
+            fallback_model: Some("sonnet".to_string()),
+            forked_from: None,
             created_at: "2026-05-22T12:00:00+00:00".to_string(),
             last_active_at: "2026-05-22T12:05:00+00:00".to_string(),
             transcript: vec![sample_entry(1)],
@@ -493,6 +531,10 @@ mod tests {
             "allowedTools",
             "status",
             "model",
+            "chosenModel",
+            "thinkingEffort",
+            "fallbackModel",
+            "forkedFrom",
             "createdAt",
             "lastActiveAt",
             "transcript",
@@ -556,6 +598,8 @@ mod tests {
             "projectPath",
             "status",
             "model",
+            "chosenModel",
+            "thinkingEffort",
             "createdAt",
             "lastActiveAt",
             "cumulativeInputTokens",
@@ -718,5 +762,55 @@ mod tests {
         assert!(record.per_turn.is_empty());
         assert_eq!(record.cumulative_usage, CumulativeUsage::default());
         assert!(record.model.is_none());
+        // R3 — the new fields default to `None` on a pre-R3 record.
+        assert!(record.chosen_model.is_none());
+        assert!(record.thinking_effort.is_none());
+        assert!(record.fallback_model.is_none());
+        // P8 — `forked_from` defaults to `None` on a pre-P8 record.
+        assert!(record.forked_from.is_none());
+    }
+
+    /// P8 — a forked session's `forked_from` (its parent's UUID) round-trips
+    /// losslessly through a `SessionRecord`.
+    #[test]
+    fn p8_forked_from_round_trips() {
+        let mut record = sample_record();
+        record.uuid = "99999999-9999-9999-9999-999999999999".to_string();
+        record.forked_from = Some("11111111-1111-1111-1111-111111111111".to_string());
+
+        let json = serde_json::to_value(&record).expect("serialises");
+        // The lineage field crosses the IPC boundary as camelCase.
+        assert_eq!(
+            json.get("forkedFrom").and_then(|v| v.as_str()),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        assert!(json.get("forked_from").is_none(), "snake_case must not leak");
+
+        let back: SessionRecord =
+            serde_json::from_value(json).expect("deserialises");
+        assert_eq!(record, back, "round-trip must be lossless");
+        assert_eq!(
+            back.forked_from.as_deref(),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+    }
+
+    /// R3 — the user-chosen `model` / `thinkingEffort` / `fallbackModel`
+    /// round-trip through a `SessionRecord` and project onto the summary, so a
+    /// reopened session resumes on the same `--model` / `--effort`.
+    #[test]
+    fn r3_chosen_model_and_effort_round_trip_and_project_to_summary() {
+        let record = sample_record();
+        assert_eq!(record.chosen_model.as_deref(), Some("opus"));
+        assert_eq!(record.thinking_effort.as_deref(), Some("high"));
+        assert_eq!(record.fallback_model.as_deref(), Some("sonnet"));
+
+        let json = serde_json::to_string(&record).expect("serialises");
+        let back: SessionRecord = serde_json::from_str(&json).expect("deserialises");
+        assert_eq!(record, back, "R3 fields round-trip losslessly");
+
+        let summary = record.summary();
+        assert_eq!(summary.chosen_model.as_deref(), Some("opus"));
+        assert_eq!(summary.thinking_effort.as_deref(), Some("high"));
     }
 }

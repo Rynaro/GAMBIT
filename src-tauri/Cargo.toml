@@ -1,6 +1,6 @@
 [package]
 name = "gambit"
-version = "0.3.6"
+version = "0.4.5"
 edition = "2021"
 description = "GAMBIT — The ControlCenter where you compose the Eidolons."
 license = "MIT"

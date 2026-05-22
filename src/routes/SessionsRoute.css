@@ -20,6 +20,40 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  position: relative;
+}
+
+/* ---- Rail collapse toggle (R1) — sits at the rail/detail boundary ---- */
+.session-rail-toggle {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  transition: color var(--duration-micro) var(--motion-entry), border-color var(--duration-micro)
+    var(--motion-entry);
+}
+
+.session-rail-toggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.session-rail-toggle-chevron {
+  font-size: 13px;
+  line-height: 1;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.session-rail-toggle-chevron[data-collapsed="true"] {
+  transform: rotate(180deg);
 }
 
 .session-detail-inner {
@@ -95,6 +129,12 @@
   background: color-mix(in srgb, var(--status-ok) 6%, var(--bg-surface) 94%);
 }
 
+/* P8 — the fork-armed banner: an accent-toned variant of the auth banner. */
+.session-auth-banner[data-tone="info"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-surface) 94%);
+}
+
 .session-auth-glyph {
   font-size: 16px;
   flex-shrink: 0;
@@ -106,6 +146,10 @@
 
 .session-auth-banner[data-tone="ok"] .session-auth-glyph {
   color: var(--status-ok);
+}
+
+.session-auth-banner[data-tone="info"] .session-auth-glyph {
+  color: var(--accent-primary);
 }
 
 .session-auth-text {
@@ -288,6 +332,132 @@
   flex-direction: column;
   gap: var(--space-7);
   margin: var(--space-6) 0;
+}
+
+/* ---- Bulk expand/collapse controls (P3) ---- */
+.session-transcript-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.session-bulk-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  transition: color var(--duration-micro) var(--motion-entry);
+}
+
+.session-bulk-toggle:hover {
+  color: var(--text-secondary);
+}
+
+/* ---- In-transcript find bar (P10) ---- */
+.session-find-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface-raised);
+}
+
+.session-find-input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.session-find-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.session-find-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.session-find-count[data-empty="true"] {
+  color: var(--accent-danger, var(--text-muted));
+}
+
+.session-find-step,
+.session-find-close {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.session-find-step:hover:not(:disabled),
+.session-find-close:hover {
+  color: var(--text-primary);
+}
+
+.session-find-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The inline match highlight in plain-text rows (prompt / stderr). */
+.session-find-hit {
+  background: color-mix(in srgb, var(--accent-primary) 40%, transparent 60%);
+  color: var(--text-primary);
+  border-radius: var(--radius-control);
+  padding: 0 1px;
+}
+
+/* A turn group containing at least one find match. */
+.session-turn[data-find-match="true"] {
+  outline: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent 70%);
+  outline-offset: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
+/* ---- Jump-to-latest pill (P2) — re-engages stick-to-bottom autoscroll ---- */
+.session-jump-latest {
+  position: sticky;
+  bottom: var(--space-5);
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-primary);
+  background: var(--bg-surface-raised);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg-canvas) 70%, transparent 30%);
+  transition: opacity var(--duration-micro) var(--motion-entry);
+}
+
+.session-jump-latest:hover {
+  opacity: 0.85;
+}
+
+.session-jump-latest-glyph {
+  font-size: 12px;
+  line-height: 1;
 }
 
 /* ---- stderr line ---- */

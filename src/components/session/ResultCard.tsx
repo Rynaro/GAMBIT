@@ -2,6 +2,13 @@
 //
 // Surfaces the accounting carried on a `result` event: success/error, cost,
 // turn count, and wall-clock duration — the cozy "turn closed" footer.
+//
+// S0 — it ALSO surfaces `permission_denials`: when a turn requested a tool
+// claude-code did not have pre-approved, headless mode silently denies the
+// call. Without this notice the turn looks "complete" while the requested
+// work never happened.
+
+import type { PermissionDenial } from "@/lib/session.types";
 
 interface ResultCardProps {
   /** Result subtype, e.g. "success" / "error_max_turns" ("" when absent). */
@@ -14,6 +21,11 @@ interface ResultCardProps {
   numTurns: number | null;
   /** Wall-clock duration in milliseconds; null when not reported. */
   durationMs: number | null;
+  /**
+   * S0 — tool calls claude-code silently denied during the turn. Empty (the
+   * default) renders no notice — the normal card is unchanged.
+   */
+  permissionDenials?: PermissionDenial[];
 }
 
 /** Render a millisecond duration as a compact human string. */
@@ -32,8 +44,14 @@ export function ResultCard({
   totalCostUsd,
   numTurns,
   durationMs,
+  permissionDenials = [],
 }: ResultCardProps) {
   const outcome = isError ? "error" : "ok";
+
+  // S0 — the distinct tool names that were denied, in first-seen order.
+  const deniedTools = [
+    ...new Set(permissionDenials.map((d) => d.toolName).filter((n) => n.length > 0)),
+  ];
 
   return (
     <div className="session-result" data-outcome={outcome} role="status">
@@ -66,6 +84,26 @@ export function ResultCard({
           </span>
         )}
       </div>
+      {permissionDenials.length > 0 && (
+        <div className="session-result-denials" role="alert">
+          <span className="session-result-denials-glyph" aria-hidden="true">
+            ⚠
+          </span>
+          <div className="session-result-denials-text">
+            <strong>
+              {permissionDenials.length === 1
+                ? "1 tool call was denied"
+                : `${permissionDenials.length} tool calls were denied`}
+              {deniedTools.length > 0 && <> — {deniedTools.join(", ")}</>}
+            </strong>
+            <span>
+              claude-code blocked these tools because they are not pre-approved for this session.
+              Relaunch with a looser permission mode (the composer's Options → permission mode) to
+              allow them — in-app approval is coming.
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

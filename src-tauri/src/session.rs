@@ -52,6 +52,18 @@
 //     Look up the SessionHandle by UUID and SIGKILL the current turn's child,
 //     mirroring sync.rs's cancel_sync.
 //
+// Story P8 adds conversation forking:
+//
+//   fork_session(state, app, params) → Result<SessionInfo, String>
+//     Fork a persisted session into a NEW conversation via claude-code's
+//     `--fork-session`. Loads the origin's SessionRecord, host-generates a
+//     fresh UUID for the fork, and runs turn 1 as a TurnKind::Fork turn
+//     (`--resume <orig> --session-id <new> --fork-session`) so claude-code
+//     seeds the new session from a copy of the origin's conversation. The
+//     fork's metadata is copied from the origin's record and its transcript
+//     buffer is seeded with the origin's transcript; `forked_from` records the
+//     lineage. Follow-up turns on the fork are ordinary `send_turn` resumes.
+//
 // NOTE (v0.3 known gap): cancel_session sends SIGKILL via child.kill(), not
 // SIGINT. Killing *between* turns is harmless — session state lives in
 // claude-code's `--resume` store, not in the process — so a cancelled session
@@ -99,6 +111,23 @@ pub struct SessionHandle {
     pub project_path: PathBuf,
     /// Value passed verbatim to `--permission-mode`.
     pub permission_mode: String,
+    /// R3 — the user-CHOSEN model, passed to `--model` on every turn. Distinct
+    /// from the observed [`SessionHandle::model`] (the model `claude` reports
+    /// back on `system/init`): this is the launch-time selection. Lives on the
+    /// handle (not the frontend) so `send_turn` rebuilds the `TurnArgs` with it
+    /// on every `--resume`. `None` omits the flag — `claude`'s default applies.
+    pub chosen_model: Option<String>,
+    /// R3 — the reasoning effort level, passed to `--effort` on every turn.
+    /// Pinned for the session — `send_turn` rebuilds `TurnArgs` from it on
+    /// every `--resume`. `None` omits the flag.
+    pub thinking_effort: Option<String>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` on every
+    /// turn. Pinned for the session's life. `None` omits the flag.
+    pub fallback_model: Option<String>,
+    /// P8 — when this session is a FORK, the UUID of the session it was forked
+    /// from (its parent). `None` for an ordinary, non-forked session. Carried
+    /// on the handle so the per-turn flush writes it into the `SessionRecord`.
+    pub forked_from: Option<String>,
     /// Resolved Eidolon persona text — fed to `--append-system-prompt` on
     /// every turn. Resolved once by the frontend, remembered here.
     pub append_system_prompt: String,
@@ -209,6 +238,21 @@ pub struct StartSessionParams {
     /// from `first_prompt` (first ~60 chars).
     #[serde(default)]
     pub title: Option<String>,
+    /// R3 — the model to serve the session, passed to `--model` on every turn.
+    /// An alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus the
+    /// `[1m]` variants) or a full model id. Optional — `None`/absent lets
+    /// `claude` apply its own default. Pinned for the session's life.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// R3 — the reasoning effort level, passed to `--effort` on every turn
+    /// (`low` / `medium` / `high` / `xhigh` / `max`). Optional — `None` lets
+    /// `claude`'s own default apply. Pinned for the session's life.
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` on every
+    /// turn (auto-downgrade when the primary model is overloaded). Optional.
+    #[serde(default)]
+    pub fallback_model: Option<String>,
 }
 
 /// Returned by [`start_session`]: the addressable session descriptor.
@@ -561,6 +605,14 @@ struct SessionMeta {
     append_system_prompt: String,
     allowed_tools: Vec<String>,
     created_at: String,
+    /// R3 — the user-chosen model / effort / fallback, snapshotted so the
+    /// per-turn flush writes them into the durable `SessionRecord`.
+    chosen_model: Option<String>,
+    thinking_effort: Option<String>,
+    fallback_model: Option<String>,
+    /// P8 — the parent session's UUID when this session is a fork, snapshotted
+    /// so the per-turn flush writes the lineage into the `SessionRecord`.
+    forked_from: Option<String>,
 }
 
 /// The shared persistence `Arc`s a turn's reader/wait tasks accumulate into.
@@ -618,6 +670,13 @@ fn build_record(meta: &SessionMeta, persist: &PersistState, status: &str) -> Ses
         allowed_tools: meta.allowed_tools.clone(),
         status: status.to_string(),
         model,
+        // R3 — persist the launch-time model/effort selection so a reopened
+        // session resumes with the SAME `--model` / `--effort` / fallback.
+        chosen_model: meta.chosen_model.clone(),
+        thinking_effort: meta.thinking_effort.clone(),
+        fallback_model: meta.fallback_model.clone(),
+        // P8 — carry the fork lineage into every flushed record.
+        forked_from: meta.forked_from.clone(),
         created_at: meta.created_at.clone(),
         last_active_at: chrono::Utc::now().to_rfc3339(),
         transcript,
@@ -645,6 +704,13 @@ fn handle_from_record(record: &SessionRecord) -> SessionHandle {
         eidolon_name: record.eidolon_name.clone(),
         project_path: PathBuf::from(&record.project_path),
         permission_mode: record.permission_mode.clone(),
+        // R3 — rehydrate the launch-time model/effort selection so a resumed
+        // turn rebuilds `TurnArgs` with the same `--model` / `--effort`.
+        chosen_model: record.chosen_model.clone(),
+        thinking_effort: record.thinking_effort.clone(),
+        fallback_model: record.fallback_model.clone(),
+        // P8 — rehydrate the fork lineage so a reopened fork keeps it.
+        forked_from: record.forked_from.clone(),
         append_system_prompt: record.append_system_prompt.clone(),
         allowed_tools: record.allowed_tools.clone(),
         status: "idle".to_string(),
@@ -687,6 +753,15 @@ fn handle_from_record(record: &SessionRecord) -> SessionHandle {
 /// a terminal `result`, the crash/SIGKILL safety case), and flushes the FULL
 /// [`SessionRecord`] + `index.json` entry right before the
 /// `session-turn-complete` emit.
+///
+/// R4 — `prompt` is the human's typed prompt for this turn. A `PersistedEntry`
+/// for it is appended to `persist.transcript` here, BEFORE the reader tasks,
+/// so it lands ahead of the turn's `claude` output and survives a reopen. It
+/// is DELIBERATELY not emitted as a live event: the frontend already appends
+/// the matching live `prompt` `TranscriptEntry` on turn dispatch, so emitting
+/// here would double it. The persisted entry is purely for restart durability
+/// — `reopen` replaces the whole transcript via `transcriptFromPersisted`, so
+/// the live and reopened transcripts converge on the SAME `prompt` entry shape.
 #[allow(clippy::too_many_arguments)]
 fn run_turn(
     app: AppHandle,
@@ -697,6 +772,7 @@ fn run_turn(
     meta: SessionMeta,
     persist: PersistState,
     turn: u32,
+    prompt: &str,
 ) {
     let spawn_core::SpawnedChild {
         child,
@@ -705,6 +781,26 @@ fn run_turn(
     } = spawned;
 
     let session_id_str = session_id.to_string();
+
+    // R4 — append the user's typed prompt as a `prompt` PersistedEntry before
+    // the turn's `claude` output. It heads the turn group on a reopen and uses
+    // the SAME shape (`source: "prompt"`, `line` = prompt text) the frontend
+    // appends live, so a reopened transcript neither duplicates nor mis-renders.
+    {
+        let prompt_ts = chrono::Utc::now().to_rfc3339();
+        persist
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "prompt".to_string(),
+                turn,
+                kind: None,
+                parsed: None,
+                line: prompt.to_string(),
+                ts: prompt_ts,
+            });
+    }
 
     // R6 — shared dual-finalize state.
     //   * `result_seen`  — set by the stdout reader on a terminal `result`.
@@ -971,6 +1067,7 @@ pub async fn start_session(
     let claude_bin = binary::find_host_tool(&app, "claude", None)?;
 
     // --- Build the turn-1 arg vector (TurnKind::First → `--session-id`) ---
+    // R3 — the user-chosen model / effort / fallback flow in from `params`.
     let turn_args = TurnArgs {
         prompt: &params.first_prompt,
         append_system_prompt: &params.append_system_prompt,
@@ -978,6 +1075,10 @@ pub async fn start_session(
         permission_mode: &params.permission_mode,
         session_id: &session_id_str,
         turn_kind: TurnKind::First,
+        model: params.model.as_deref(),
+        thinking_effort: params.thinking_effort.as_deref(),
+        fallback_model: params.fallback_model.as_deref(),
+        fork_from: None,
     };
     let args = claude_adapter::build_args(&turn_args);
 
@@ -1012,6 +1113,13 @@ pub async fn start_session(
         eidolon_name: params.eidolon_name.clone(),
         project_path: project_dir.clone(),
         permission_mode: params.permission_mode.clone(),
+        // R3 — pin the launch-time model/effort onto the handle so `send_turn`
+        // rebuilds `TurnArgs` with them on every `--resume`.
+        chosen_model: params.model.clone(),
+        thinking_effort: params.thinking_effort.clone(),
+        fallback_model: params.fallback_model.clone(),
+        // P8 — `start_session` opens a fresh (non-forked) session.
+        forked_from: None,
         append_system_prompt: params.append_system_prompt.clone(),
         allowed_tools: params.allowed_tools.clone(),
         status: "running".to_string(),
@@ -1044,6 +1152,10 @@ pub async fn start_session(
         append_system_prompt: params.append_system_prompt.clone(),
         allowed_tools: params.allowed_tools.clone(),
         created_at: created_at.clone(),
+        chosen_model: params.model.clone(),
+        thinking_effort: params.thinking_effort.clone(),
+        fallback_model: params.fallback_model.clone(),
+        forked_from: None,
     };
     let persist = PersistState {
         model,
@@ -1075,6 +1187,7 @@ pub async fn start_session(
         meta,
         persist,
         turn,
+        &params.first_prompt,
     );
 
     Ok(SessionInfo {
@@ -1136,7 +1249,9 @@ pub async fn send_turn(
         }
 
         // Rebuild the arg vector from the session's remembered persona/tools —
-        // the frontend does NOT re-send these on a follow-up turn.
+        // the frontend does NOT re-send these on a follow-up turn. R3: the
+        // user-chosen model / effort / fallback are read from the handle here
+        // too, so a `--resume` turn runs on the SAME model/effort as turn 1.
         let turn_args = TurnArgs {
             prompt: &prompt,
             append_system_prompt: &handle.append_system_prompt,
@@ -1144,6 +1259,10 @@ pub async fn send_turn(
             permission_mode: &handle.permission_mode,
             session_id: &session_id,
             turn_kind: TurnKind::Resumed,
+            model: handle.chosen_model.as_deref(),
+            thinking_effort: handle.thinking_effort.as_deref(),
+            fallback_model: handle.fallback_model.as_deref(),
+            fork_from: None,
         };
         let meta = SessionMeta {
             uuid: session_id.clone(),
@@ -1155,6 +1274,10 @@ pub async fn send_turn(
             append_system_prompt: handle.append_system_prompt.clone(),
             allowed_tools: handle.allowed_tools.clone(),
             created_at: handle.created_at.clone(),
+            chosen_model: handle.chosen_model.clone(),
+            thinking_effort: handle.thinking_effort.clone(),
+            fallback_model: handle.fallback_model.clone(),
+            forked_from: handle.forked_from.clone(),
         };
         let persist = PersistState {
             model: handle.model.clone(),
@@ -1206,6 +1329,7 @@ pub async fn send_turn(
         meta,
         persist,
         turn,
+        &prompt,
     );
 
     Ok(())
@@ -1291,6 +1415,237 @@ pub async fn reopen_session(
         status: "idle".to_string(),
         created_at: record.created_at,
         is_cortex: record.is_cortex,
+    })
+}
+
+/// Parameters for [`fork_session`].
+///
+/// P8 — a fork continues a COPY of an existing session's conversation under a
+/// new id, leaving the original untouched. `origin_session_id` must be a
+/// persisted (known) session — its on-disk [`SessionRecord`] is the source of
+/// the fork's copied metadata + seeded transcript. `first_prompt` is the
+/// fork's turn-1 prompt.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkSessionParams {
+    /// The UUID of the session to fork from — must be persisted on disk.
+    pub origin_session_id: String,
+    /// The prompt for the fork's first turn.
+    pub first_prompt: String,
+    /// Optional explicit title for the fork. When absent the title is derived
+    /// from `first_prompt` (first ~60 chars), mirroring `start_session`.
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// Tauri command: fork an existing session into a NEW conversation.
+///
+/// P8 — claude-code's `--fork-session`: resuming a session with that flag
+/// writes the conversation to a NEW session id instead of mutating the
+/// original, giving the user a copy of the history to explore an alternate
+/// path from. `fork_session` exposes that as a GAMBIT command.
+///
+/// FLAG SEMANTICS (verified against the installed `claude` binary): the CLI
+/// accepts `--resume <orig> --session-id <new> --fork-session` together — in
+/// fact it REQUIRES `--fork-session` for the `--resume` + `--session-id` pair
+/// (`--session-id can only be used with --continue or --resume if
+/// --fork-session is also specified`). So GAMBIT keeps owning the id: the new
+/// session id is host-generated here (a UUID v4), exactly like `start_session`
+/// — it is NOT captured from the stream's `system/init`. The fork's turn 1 is
+/// a [`TurnKind::Fork`] turn; every follow-up `send_turn` on the new session
+/// is an ordinary `--resume <new-id>` turn (the handle's `forked_from` does
+/// not affect `send_turn`, which always builds `TurnKind::Resumed`).
+///
+/// What it does:
+///   1. Parse + validate the origin UUID and load its persisted
+///      [`SessionRecord`] (error if the origin is unknown / not persisted).
+///   2. Host-generate a fresh UUID v4 — the fork's stable id.
+///   3. Build the fork's turn-1 arg vector with `TurnKind::Fork`
+///      (`--resume <orig> --session-id <new> --fork-session`).
+///   4. Spawn `claude` in the origin's `project_path`.
+///   5. Register a [`SessionHandle`] for the fork: its metadata
+///      (eidolon/cortex, project, permission mode, model/effort/fallback,
+///      persona, allowed tools) is COPIED from the origin's record so the fork
+///      behaves like its parent; `forked_from` records the lineage.
+///   6. Seed the fork's transcript buffer with a COPY of the origin record's
+///      transcript so the user SEES the inherited history in the new session;
+///      the fork's own turns append after it.
+///   7. Persist the fork's initial [`SessionRecord`] + index entry, then run
+///      turn 1.
+///
+/// Lock discipline mirrors `start_session`: the registry map guard wraps only
+/// the synchronous `insert` and is dropped before `run_turn`.
+#[tauri::command]
+pub async fn fork_session(
+    state: State<'_, SessionRegistry>,
+    app: AppHandle,
+    params: ForkSessionParams,
+) -> Result<SessionInfo, String> {
+    // --- Validate the origin UUID + load its persisted record ---
+    let origin_uuid = Uuid::parse_str(&params.origin_session_id).map_err(|e| {
+        format!(
+            "invalid origin session id '{}': {e}",
+            params.origin_session_id
+        )
+    })?;
+    let origin = session_store::read_record(&app, &origin_uuid.to_string())?;
+
+    // --- Host-generate the fork's own UUID v4 (GAMBIT keeps owning the id) ---
+    let fork_id = Uuid::new_v4();
+    let fork_id_str = fork_id.to_string();
+
+    // --- Resolve the `claude` binary ---
+    let claude_bin = binary::find_host_tool(&app, "claude", None)?;
+
+    // --- Build the fork's turn-1 arg vector (TurnKind::Fork) ---
+    // `--resume <origin> --session-id <fork> --fork-session`: claude-code
+    // seeds the new session from a copy of the origin's conversation. The
+    // model/effort/fallback are COPIED from the origin so the fork resumes on
+    // the same model as its parent.
+    let turn_args = TurnArgs {
+        prompt: &params.first_prompt,
+        append_system_prompt: &origin.append_system_prompt,
+        allowed_tools: &origin.allowed_tools,
+        permission_mode: &origin.permission_mode,
+        session_id: &fork_id_str,
+        turn_kind: TurnKind::Fork,
+        model: origin.chosen_model.as_deref(),
+        thinking_effort: origin.thinking_effort.as_deref(),
+        fallback_model: origin.fallback_model.as_deref(),
+        fork_from: Some(&params.origin_session_id),
+    };
+    let args = claude_adapter::build_args(&turn_args);
+
+    // --- Spawn `claude` in the ORIGIN's project_path ---
+    let project_dir = PathBuf::from(&origin.project_path);
+    let mut cmd = spawn_core::piped_command(&claude_bin);
+    cmd.args(&args).current_dir(&project_dir);
+    let spawned = spawn_core::spawn_piped(cmd, &claude_bin)?;
+
+    // --- Derive the fork's title + creation timestamp ---
+    let title = match &params.title {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => session_store::derive_title(&params.first_prompt),
+    };
+    let created_at = chrono::Utc::now().to_rfc3339();
+
+    // --- Register the fork's SessionHandle ---
+    let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
+    let turn_in_flight = Arc::new(AtomicBool::new(true));
+    // P8 — start the fork's turn counter PAST the origin's highest recorded
+    // turn (mirroring `handle_from_record`). The seeded transcript already
+    // carries the origin's turns 1..N; the fork's own first turn must stamp
+    // N+1 so its `prompt`/event entries do not collide with — and the
+    // frontend's `groupByTurn` does not merge them into — an inherited turn.
+    let origin_max_turn = origin
+        .per_turn
+        .iter()
+        .map(|t| t.turn)
+        .chain(origin.transcript.iter().map(|e| e.turn))
+        .max()
+        .unwrap_or(0);
+    let turn_counter = Arc::new(AtomicU32::new(origin_max_turn));
+    let model: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(None));
+    // P8 — seed the fork's transcript buffer with a COPY of the origin's
+    // persisted transcript so the user SEES the inherited history in the new
+    // session. claude-code holds the actual conversation (via --fork-session);
+    // GAMBIT must copy its own rendered transcript for display. The fork's own
+    // turns append AFTER this seeded history.
+    let transcript: Arc<StdMutex<Vec<PersistedEntry>>> =
+        Arc::new(StdMutex::new(origin.transcript.clone()));
+    let per_turn: Arc<StdMutex<Vec<TurnRecord>>> = Arc::new(StdMutex::new(Vec::new()));
+    let cumulative_usage: Arc<StdMutex<CumulativeUsage>> =
+        Arc::new(StdMutex::new(CumulativeUsage::default()));
+    let cumulative_cost_usd: Arc<StdMutex<Option<f64>>> = Arc::new(StdMutex::new(None));
+
+    let handle = SessionHandle {
+        // Metadata COPIED from the origin's record — the fork behaves like its
+        // parent (same Eidolon, project, permission mode, model/effort).
+        eidolon_name: origin.eidolon_name.clone(),
+        project_path: project_dir.clone(),
+        permission_mode: origin.permission_mode.clone(),
+        chosen_model: origin.chosen_model.clone(),
+        thinking_effort: origin.thinking_effort.clone(),
+        fallback_model: origin.fallback_model.clone(),
+        // P8 — record the lineage: this session is a fork of `origin`.
+        forked_from: Some(params.origin_session_id.clone()),
+        append_system_prompt: origin.append_system_prompt.clone(),
+        allowed_tools: origin.allowed_tools.clone(),
+        status: "running".to_string(),
+        child: child_slot.clone(),
+        turn_in_flight: turn_in_flight.clone(),
+        is_cortex: origin.is_cortex,
+        title: title.clone(),
+        created_at: created_at.clone(),
+        model: model.clone(),
+        transcript: transcript.clone(),
+        per_turn: per_turn.clone(),
+        cumulative_usage: cumulative_usage.clone(),
+        cumulative_cost_usd: cumulative_cost_usd.clone(),
+        turn_counter: turn_counter.clone(),
+    };
+    {
+        // Guard scoped to the synchronous insert — dropped before `run_turn`.
+        let mut sessions = state.sessions.lock().await;
+        sessions.insert(fork_id, handle);
+    }
+
+    // --- Snapshot the persistence context for the fork's turn 1 ---
+    let meta = SessionMeta {
+        uuid: fork_id_str.clone(),
+        eidolon_name: origin.eidolon_name.clone(),
+        is_cortex: origin.is_cortex,
+        title: title.clone(),
+        project_path: origin.project_path.clone(),
+        permission_mode: origin.permission_mode.clone(),
+        append_system_prompt: origin.append_system_prompt.clone(),
+        allowed_tools: origin.allowed_tools.clone(),
+        created_at: created_at.clone(),
+        chosen_model: origin.chosen_model.clone(),
+        thinking_effort: origin.thinking_effort.clone(),
+        fallback_model: origin.fallback_model.clone(),
+        forked_from: Some(params.origin_session_id.clone()),
+    };
+    let persist = PersistState {
+        model,
+        transcript,
+        per_turn,
+        cumulative_usage,
+        cumulative_cost_usd,
+    };
+
+    // --- Write the fork's initial SessionRecord + index entry ---
+    // The fork is durable from birth — the seeded (inherited) transcript is
+    // already in `persist.transcript`, so the initial record carries it.
+    {
+        let initial = build_record(&meta, &persist, "running");
+        if let Err(e) = session_store::persist_record(&app, &initial) {
+            eprintln!("[session-store] warn: fork initial record write failed for {fork_id_str}: {e}");
+        }
+    }
+
+    // --- Start the fork's turn 1 ---
+    let turn = turn_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    run_turn(
+        app.clone(),
+        fork_id,
+        spawned,
+        child_slot,
+        turn_in_flight,
+        meta,
+        persist,
+        turn,
+        &params.first_prompt,
+    );
+
+    Ok(SessionInfo {
+        session_id: fork_id_str,
+        eidolon_name: origin.eidolon_name,
+        project_path: origin.project_path,
+        permission_mode: origin.permission_mode,
+        status: "running".to_string(),
+        created_at,
+        is_cortex: origin.is_cortex,
     })
 }
 
@@ -1421,6 +1776,10 @@ mod tests {
             eidolon_name: name.to_string(),
             project_path: PathBuf::from("/tmp/project"),
             permission_mode: "default".to_string(),
+            chosen_model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            forked_from: None,
             append_system_prompt: "You are Sage.".to_string(),
             allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
             status: "idle".to_string(),
@@ -1511,6 +1870,7 @@ mod tests {
                 duration_ms: None,
                 total_cost_usd: None,
                 usage: Usage::default(),
+                permission_denials: Vec::new(),
             }),
             "result"
         );
@@ -1716,6 +2076,10 @@ mod tests {
             allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
             status: "failed".to_string(),
             model: Some("claude-opus-4-7".to_string()),
+            chosen_model: Some("opus".to_string()),
+            thinking_effort: Some("high".to_string()),
+            fallback_model: Some("sonnet".to_string()),
+            forked_from: None,
             created_at: "2026-05-22T12:00:00+00:00".to_string(),
             last_active_at: "2026-05-22T12:30:00+00:00".to_string(),
             transcript: vec![PersistedEntry {
@@ -1801,6 +2165,17 @@ mod tests {
         );
     }
 
+    /// R3 — `handle_from_record` rehydrates the user-chosen model / effort /
+    /// fallback so a `--resume` turn rebuilds `TurnArgs` with the same flags.
+    #[test]
+    fn handle_from_record_rehydrates_chosen_model_and_effort() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+        assert_eq!(handle.chosen_model.as_deref(), Some("opus"));
+        assert_eq!(handle.thinking_effort.as_deref(), Some("high"));
+        assert_eq!(handle.fallback_model.as_deref(), Some("sonnet"));
+    }
+
     /// A record with no per-turn entries (a session that never finished a turn)
     /// rehydrates with the turn counter at 0 — the next `send_turn` is turn 1.
     #[test]
@@ -1811,6 +2186,93 @@ mod tests {
         let handle = handle_from_record(&record);
         assert_eq!(handle.turn_counter.load(Ordering::SeqCst), 0);
         assert!(handle.transcript.lock().unwrap().is_empty());
+    }
+
+    // --- P8: conversation forking --------------------------------------------
+
+    /// P8 — the fork-record construction (`build_record` over a fork's
+    /// `SessionMeta` + a transcript buffer seeded from the parent) COPIES the
+    /// parent's metadata, sets `forked_from`, gets a DISTINCT id, and carries
+    /// the parent's transcript so the fork shows the inherited history.
+    #[test]
+    fn fork_record_copies_parent_metadata_and_seeds_transcript() {
+        let parent = sample_record();
+
+        // The fork's metadata is COPIED from the parent — same Eidolon,
+        // project, permission mode, model/effort — but with a fresh id and the
+        // `forked_from` lineage set, mirroring what `fork_session` builds.
+        let fork_id = "99999999-9999-9999-9999-999999999999".to_string();
+        let meta = SessionMeta {
+            uuid: fork_id.clone(),
+            eidolon_name: parent.eidolon_name.clone(),
+            is_cortex: parent.is_cortex,
+            title: "Forked exploration".to_string(),
+            project_path: parent.project_path.clone(),
+            permission_mode: parent.permission_mode.clone(),
+            append_system_prompt: parent.append_system_prompt.clone(),
+            allowed_tools: parent.allowed_tools.clone(),
+            created_at: "2026-05-22T13:00:00+00:00".to_string(),
+            chosen_model: parent.chosen_model.clone(),
+            thinking_effort: parent.thinking_effort.clone(),
+            fallback_model: parent.fallback_model.clone(),
+            forked_from: Some(parent.uuid.clone()),
+        };
+        // The fork's transcript buffer is SEEDED with a copy of the parent's.
+        let persist = PersistState {
+            model: Arc::new(StdMutex::new(None)),
+            transcript: Arc::new(StdMutex::new(parent.transcript.clone())),
+            per_turn: Arc::new(StdMutex::new(Vec::new())),
+            cumulative_usage: Arc::new(StdMutex::new(CumulativeUsage::default())),
+            cumulative_cost_usd: Arc::new(StdMutex::new(None)),
+        };
+
+        let record = build_record(&meta, &persist, "running");
+
+        // Distinct id from the parent.
+        assert_ne!(record.uuid, parent.uuid, "the fork gets its own id");
+        assert_eq!(record.uuid, fork_id);
+        // Lineage is recorded.
+        assert_eq!(record.forked_from.as_deref(), Some(parent.uuid.as_str()));
+        // Metadata copied verbatim from the parent.
+        assert_eq!(record.eidolon_name, parent.eidolon_name);
+        assert_eq!(record.project_path, parent.project_path);
+        assert_eq!(record.permission_mode, parent.permission_mode);
+        assert_eq!(record.append_system_prompt, parent.append_system_prompt);
+        assert_eq!(record.allowed_tools, parent.allowed_tools);
+        assert_eq!(record.chosen_model, parent.chosen_model);
+        assert_eq!(record.thinking_effort, parent.thinking_effort);
+        assert_eq!(record.fallback_model, parent.fallback_model);
+        // The transcript is seeded from the parent — the fork shows the
+        // inherited history.
+        assert_eq!(
+            record.transcript, parent.transcript,
+            "the fork's transcript is seeded from the parent record"
+        );
+    }
+
+    /// P8 — the fork's turn counter starts PAST the parent's highest recorded
+    /// turn (so the fork's first turn stamps N+1 and does not collide with an
+    /// inherited turn). This mirrors the `origin_max_turn` logic in
+    /// `fork_session`.
+    #[test]
+    fn fork_turn_counter_starts_past_parent_highest_turn() {
+        let parent = sample_record();
+        // sample_record has per_turn turns {1, 2} and a transcript entry at
+        // turn 1 — the highest recorded turn is 2.
+        let origin_max_turn = parent
+            .per_turn
+            .iter()
+            .map(|t| t.turn)
+            .chain(parent.transcript.iter().map(|e| e.turn))
+            .max()
+            .unwrap_or(0);
+        assert_eq!(origin_max_turn, 2);
+
+        let counter = Arc::new(AtomicU32::new(origin_max_turn));
+        // The fork's first turn (counter + 1) is turn 3 — distinct from every
+        // inherited turn.
+        let fork_turn_1 = counter.fetch_add(1, Ordering::SeqCst) + 1;
+        assert_eq!(fork_turn_1, 3, "the fork's first turn is past the parent's");
     }
 
     /// `reopen_session` is idempotent: re-inserting an already-live session
@@ -1832,6 +2294,58 @@ mod tests {
             "First",
             "an already-live session must not be clobbered by reopen"
         );
+    }
+
+    // --- R4: user-prompt transcript entry ------------------------------------
+
+    /// R4 — a `prompt` `PersistedEntry` (the human's typed turn prompt) is the
+    /// shape `run_turn` appends at turn start: `source: "prompt"`, the raw
+    /// prompt in `line`, and no `kind` / `parsed`.
+    #[test]
+    fn prompt_persisted_entry_has_prompt_source_and_carries_text() {
+        // Mirror the entry `run_turn` pushes for a turn's prompt.
+        let entry = PersistedEntry {
+            source: "prompt".to_string(),
+            turn: 2,
+            kind: None,
+            parsed: None,
+            line: "refactor the auth module".to_string(),
+            ts: "2026-05-22T12:00:00+00:00".to_string(),
+        };
+        assert_eq!(entry.source, "prompt");
+        assert_eq!(entry.line, "refactor the auth module");
+        assert!(entry.kind.is_none(), "a prompt entry carries no kind");
+        assert!(entry.parsed.is_none(), "a prompt entry carries no parsed event");
+    }
+
+    /// R4 — a `prompt` `PersistedEntry` round-trips through a `SessionRecord`'s
+    /// transcript: a session persisted with a prompt entry, then read back from
+    /// disk, still carries the typed prompt so a reopened session shows it.
+    #[test]
+    fn prompt_entry_round_trips_through_session_record() {
+        let mut record = sample_record();
+        // Append a turn-3 prompt entry, as `run_turn` does at turn start.
+        record.transcript.push(PersistedEntry {
+            source: "prompt".to_string(),
+            turn: 3,
+            kind: None,
+            parsed: None,
+            line: "and now write the changelog".to_string(),
+            ts: "2026-05-22T13:00:00+00:00".to_string(),
+        });
+
+        let json = serde_json::to_string(&record).expect("SessionRecord serialises");
+        let back: SessionRecord =
+            serde_json::from_str(&json).expect("SessionRecord deserialises");
+
+        let prompt = back
+            .transcript
+            .iter()
+            .find(|e| e.source == "prompt")
+            .expect("the prompt entry survives the round-trip");
+        assert_eq!(prompt.turn, 3);
+        assert_eq!(prompt.line, "and now write the changelog");
+        assert_eq!(record, back, "round-trip must be lossless");
     }
 
     /// The `session-turn-complete` payload serialises to the camelCase IPC

@@ -43,12 +43,50 @@
   line-height: 1;
 }
 
+/* ---- Collapsed rail (R1) — a thin strip with just the New-session glyph ---- */
+.session-rail[data-collapsed="true"] {
+  width: 44px;
+  padding-right: 0;
+  align-items: center;
+}
+
+.session-rail[data-collapsed="true"] .session-rail-new {
+  justify-content: center;
+  padding: var(--space-3);
+  width: 32px;
+}
+
+.session-rail[data-collapsed="true"] .session-rail-new-label {
+  display: none;
+}
+
 /* ---- Empty state ---- */
 .session-rail-empty {
   font-size: 11px;
   line-height: 1.5;
   color: var(--text-muted);
   padding: var(--space-4) var(--space-3);
+}
+
+/* ---- P10: rail filter ---- */
+.session-rail-filter {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.session-rail-filter:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.session-rail-filter::placeholder {
+  color: var(--text-muted);
 }
 
 /* ---- List ---- */
@@ -161,7 +199,10 @@
 }
 
 /* ---- Per-row delete ---- */
-.session-rail-remove {
+/* P8: the fork affordance shares the per-row action-button shape with the
+   delete button — both hover-revealed at the row's trailing edge. */
+.session-rail-remove,
+.session-rail-fork {
   flex-shrink: 0;
   width: 22px;
   font-size: 14px;
@@ -173,11 +214,17 @@
   transition: opacity var(--duration-micro) var(--motion-entry);
 }
 
-.session-rail-row:hover .session-rail-remove {
+.session-rail-row:hover .session-rail-remove,
+.session-rail-row:hover .session-rail-fork {
   opacity: 1;
 }
 
 .session-rail-remove:hover {
   color: var(--status-error);
   background: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}
+
+.session-rail-fork:hover {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent 90%);
 }

@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-05-22
+
+A visibility patch ahead of the **v0.5 Interactive Sessions** milestone — see
+`.junction/plans/v0-5-interactive-sessions.json` (planned: in-app approval of
+mid-turn permission / `AskUserQuestion` / plan prompts, gated on a verification
+spike).
+
+### Added
+
+- **Denied tool calls are now shown on the turn's result card.** When
+  claude-code denies an un-pre-approved tool in headless mode — which it does
+  *silently* — the result card now lists the denied tools and hints to relaunch
+  with a looser permission mode. Until v0.5 lands interactive approval, this at
+  least makes the denial visible instead of an invisible no-op.
+
+### Fixed
+
+- `ParsedEvent` serialised its `Result` fields snake_case (`total_cost_usd`,
+  `num_turns`, `duration_ms`, `is_error`, `session_id`) while the frontend reads
+  camelCase — so the result card's **cost / turns / duration have been blank
+  since v0.3.0**. The enum now carries `rename_all_fields = "camelCase"`; a
+  regression test guards the wire shape. Same class as the v0.3.6 `ContentBlock`
+  fix, which repaired the nested structs but not the enum's own variant fields.
+
+## [0.4.4] — 2026-05-22
+
+The fourth v0.4.x minor — power-user features. Completes the v0.4.x round.
+
+### Added
+
+- **Conversation forking** — fork a session to explore an alternate path; the
+  fork inherits the original's conversation (via claude-code's `--fork-session`)
+  and its configuration, leaving the original untouched.
+- **@-file mentions** — type `@` in the composer to pick a project file from a
+  filtered dropdown; selecting it inserts the relative path.
+- **Session + transcript search** — a filter box on the session rail, and an
+  in-conversation find (⌘/Ctrl+F) that highlights matches and steps through
+  them with a count.
+
+## [0.4.3] — 2026-05-22
+
+The third v0.4.x minor — session interaction.
+
+### Added
+
+- **Stop a running turn** — a prominent Stop control (composer + detail header)
+  interrupts an in-flight turn.
+- **Retry / edit-and-resend** — each user-prompt bubble can resend its prompt or
+  load it back into the composer to amend; a failed turn offers a one-click
+  "retry last turn".
+- **Keyboard navigation** — an Enter-to-send preference (persisted; off by
+  default, ⌘/Ctrl+Enter still works), Esc to cancel a running turn, and
+  ⌘/Ctrl+1–9 to switch between sessions in the rail.
+
+## [0.4.2] — 2026-05-22
+
+The second v0.4.x minor — session controls.
+
+### Added
+
+- **Model selection** — choose the model for a session at launch: Opus, Sonnet,
+  Haiku, `opusplan`, the 1M-context variants, or the account default. The choice
+  is pinned for the session and replayed on every `--resume` turn.
+- **Thinking-effort selection** — pick a reasoning effort (`low` / `medium` /
+  `high` / `xhigh` / `max`); claude-code auto-downgrades to the model's top
+  supported level.
+- Sessions now pass `showThinkingSummaries`, so Opus 4.7 thinking blocks stream
+  real reasoning text rather than empty placeholders.
+- Optional **fallback model** — auto-downgrade when the primary model is
+  overloaded (honored in headless mode).
+- **Prompt token estimate** — the composer shows a live `~N tokens` estimate of
+  the draft as you type. A heuristic, clearly labelled approximate.
+
+## [0.4.1] — 2026-05-22
+
+The first v0.4.x minor — transcript comfort. Planned via a TRANCE chain; round
+plan at `.junction/plans/v0-4-x-sessions.json`.
+
+### Added
+
+- **Collapsible session sidebar** — collapse the left rail to give the chat the
+  full window width; the choice persists across reloads.
+- **Transcript autoscroll** — the conversation sticks to the bottom as output
+  streams in, pauses when you scroll up to read, and offers a "jump to latest"
+  pill to re-engage.
+- **Copy buttons** — hover-to-copy on assistant messages, tool-result bodies,
+  and code fences.
+- **Quieter tool chips** — a collapsed tool chip is now just a name + an
+  outcome dot; the input peek is revealed on expand. Plus an
+  expand-all / collapse-all control for every tool chip and thinking block in
+  the conversation.
+
+### Fixed
+
+- **The user's own prompt is now shown in the transcript.** Previously a turn's
+  prompt was sent but never displayed — you lost track of what you asked. Each
+  turn's prompt now appears as a bubble heading its turn group, and persists
+  across a session reopen.
+
 ## [0.3.6] — 2026-05-22
 
 ### Fixed

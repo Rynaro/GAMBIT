@@ -49,6 +49,7 @@
 
 import type {
   AuthStatus,
+  ForkSessionParams,
   PersistedEntry,
   SessionDeltaPayload,
   SessionEventPayload,
@@ -180,6 +181,12 @@ export interface UseSessionsResult {
   setPendingEidolon: (name: string | null) => void;
   /** Open a NEW session and spawn turn 1 — ADDS to the map, wipes nothing. */
   start: (params: StartSessionParams) => Promise<string | null>;
+  /**
+   * P8 — fork an existing session: open a NEW session continuing from a copy
+   * of the origin's conversation, leaving the origin untouched. ADDS the fork
+   * to the map and returns its id (or `null` if `fork_session` rejected).
+   */
+  fork: (originId: string, firstPrompt: string) => Promise<string | null>;
   /** Send a follow-up turn on an existing session. */
   sendTurn: (sessionId: string, prompt: string) => void;
   /** Cancel the in-flight turn of a session (SIGKILL). */
@@ -204,14 +211,26 @@ export interface UseSessionsResult {
  * `TranscriptEntry` types and drops the `null`s `serde` may emit.
  */
 function transcriptFromPersisted(entries: PersistedEntry[]): TranscriptEntry[] {
-  return entries.map((e) => ({
-    source: e.source === "stderr" ? "stderr" : "event",
-    turn: e.turn,
-    kind: e.kind ?? undefined,
-    parsed: e.parsed ?? undefined,
-    line: e.line,
-    ts: e.ts,
-  }));
+  return entries.map((e) => {
+    // R4: a `prompt` PersistedEntry (the user's typed turn prompt) maps to a
+    // `prompt` TranscriptEntry — the SAME shape `start` / `sendTurn` append
+    // live, so a reopened session does not duplicate or mis-render it.
+    const source: TranscriptEntry["source"] =
+      e.source === "stderr" ? "stderr" : e.source === "prompt" ? "prompt" : "event";
+    return {
+      source,
+      turn: e.turn,
+      kind: e.kind ?? undefined,
+      parsed: e.parsed ?? undefined,
+      line: e.line,
+      ts: e.ts,
+    };
+  });
+}
+
+/** Build a `prompt` transcript entry for a turn's typed user prompt (R4). */
+function promptEntry(turn: number, prompt: string): TranscriptEntry {
+  return { source: "prompt", turn, line: prompt, ts: new Date().toISOString() };
 }
 
 /**
@@ -595,7 +614,10 @@ export function useSessions(): UseSessionsResult {
         [info.sessionId]: {
           sessionId: info.sessionId,
           status: "turn-running",
-          transcript: [],
+          // R4: seed the transcript with the turn-1 prompt entry so the user's
+          // own ask heads the turn group. Rust appends the matching persisted
+          // entry in `run_turn`, so a reopen rebuilds the identical entry.
+          transcript: [promptEntry(1, params.firstPrompt)],
           sessionInfo: info,
           summary: null,
           turn: 1,
@@ -615,6 +637,65 @@ export function useSessions(): UseSessionsResult {
     }
   }, []);
 
+  /**
+   * P8 — fork an existing session into a NEW conversation.
+   *
+   * Invokes `fork_session`, which runs the fork's turn 1 via claude-code's
+   * `--fork-session` (the new conversation is seeded from a COPY of the
+   * origin's history). The new session is ADDED to the map and SELECTED is
+   * left to the caller (the route selects it). Mirrors `start` — the fork
+   * lands in `turn-running` with turn 1 spawning.
+   *
+   * The fork's slice transcript is seeded with the origin slice's transcript
+   * (so the user immediately SEES the inherited history) plus the fork's
+   * turn-1 prompt entry. Rust persists the same seeded transcript, so a later
+   * `reopen` rebuilds the identical view. The fork's turn number starts past
+   * the origin's last turn (Rust does the same) so the inherited turns and the
+   * fork's own turns never collide.
+   */
+  const fork = useCallback(
+    async (originId: string, firstPrompt: string): Promise<string | null> => {
+      try {
+        const params: ForkSessionParams = { originSessionId: originId, firstPrompt };
+        const info = await invoke<SessionInfo>("fork_session", { params });
+
+        // Seed the fork's view from the origin slice's transcript, if the
+        // origin is in the map. The fork's first turn is one past the origin's
+        // highest turn — mirroring Rust's `origin_max_turn` logic.
+        const originSlice = sessions[originId];
+        const inherited = originSlice ? originSlice.transcript : [];
+        const originMaxTurn = inherited.reduce((max, e) => Math.max(max, e.turn), 0);
+        const forkTurn = originMaxTurn + 1;
+
+        turnRefs.current[info.sessionId] = forkTurn;
+        setSessions((prev) => ({
+          ...prev,
+          [info.sessionId]: {
+            sessionId: info.sessionId,
+            status: "turn-running",
+            // Inherited history + the fork's own turn-1 prompt heading its
+            // (post-inheritance) turn group.
+            transcript: [...inherited, promptEntry(forkTurn, firstPrompt)],
+            sessionInfo: info,
+            summary: null,
+            turn: forkTurn,
+            hydrated: true,
+            live: { ...EMPTY_LIVE_STATE, turn: forkTurn },
+          },
+        }));
+        return info.sessionId;
+      } catch (err) {
+        const msg = typeof err === "string" ? err : JSON.stringify(err);
+        toast.error("Could not fork session", {
+          description: msg,
+          duration: Number.POSITIVE_INFINITY,
+        });
+        return null;
+      }
+    },
+    [sessions],
+  );
+
   /** Send a follow-up turn on an existing session. */
   const sendTurn = useCallback(
     (sessionId: string, prompt: string) => {
@@ -632,6 +713,10 @@ export function useSessions(): UseSessionsResult {
         ...s,
         status: "turn-running",
         turn: nextTurn,
+        // R4: append the typed prompt as a transcript entry at the new turn —
+        // it heads the turn group. Rust's `run_turn` appends the matching
+        // persisted entry so a reopen rebuilds the identical entry.
+        transcript: [...s.transcript, promptEntry(nextTurn, prompt)],
         // A fresh turn starts with empty live state — the prior turn's
         // streamed text / tool calls are now persisted entries.
         live: { ...EMPTY_LIVE_STATE, turn: nextTurn },
@@ -755,6 +840,7 @@ export function useSessions(): UseSessionsResult {
     pendingEidolon,
     setPendingEidolon,
     start,
+    fork,
     sendTurn,
     cancel,
     reopen,

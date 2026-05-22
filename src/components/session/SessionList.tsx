@@ -11,6 +11,7 @@
 // map). Rows are sorted most-recently-active first.
 
 import type { SessionSlice } from "@/lib/useSessions";
+import { useMemo, useState } from "react";
 import "./SessionList.css";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,35 @@ function sortStamp(slice: SessionSlice): number {
   return Number.isNaN(ms) ? 0 : ms;
 }
 
+/**
+ * The rail's display order — sessions sorted most-recently-active first.
+ *
+ * Exported so the route's ⌘/Ctrl+1..9 session-switch shortcut (P7) selects the
+ * Nth session by the SAME order the rail renders, with no drift between the
+ * keyboard index and the visible row.
+ */
+export function railOrder(sessions: Record<string, SessionSlice>): SessionSlice[] {
+  return Object.values(sessions).sort((a, b) => sortStamp(b) - sortStamp(a));
+}
+
+/**
+ * P10 — filter rail rows by a free-text `query` (case-insensitive substring).
+ *
+ * Matches against the session's display title AND its Eidolon / badge name, so
+ * a user can find a session by either. An empty / whitespace-only query is a
+ * pass-through (every session matches). Pure + exported so the filter logic is
+ * directly unit-testable without rendering the rail.
+ */
+export function filterRail(rows: SessionSlice[], query: string): SessionSlice[] {
+  const q = query.trim().toLowerCase();
+  if (q.length === 0) return rows;
+  return rows.filter((slice) => {
+    const title = rowTitle(slice).toLowerCase();
+    const badge = rowBadge(slice).toLowerCase();
+    return title.includes(q) || badge.includes(q);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -95,6 +125,18 @@ interface SessionListProps {
   onNewSession: () => void;
   /** Remove a session — deletes its record and drops it from the store. */
   onRemove: (sessionId: string) => void;
+  /**
+   * P8 — fork a session: the route opens a NEW session continuing from a copy
+   * of this one's conversation. The fork's first prompt is the next composer
+   * input — `onFork` arms the route's pending-fork state.
+   */
+  onFork: (sessionId: string) => void;
+  /**
+   * When `true` the rail is a thin strip — only the (icon-only) "New session"
+   * affordance shows; the full session list is hidden (R1). The route owns the
+   * collapsed bit and the expand control; this prop just gates the body.
+   */
+  collapsed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,27 +149,56 @@ export function SessionList({
   onSelect,
   onNewSession,
   onRemove,
+  onFork,
+  collapsed = false,
 }: SessionListProps) {
-  // Most-recently-active first — the rail's natural ordering.
-  const rows = Object.values(sessions).sort((a, b) => sortStamp(b) - sortStamp(a));
+  // Most-recently-active first — the rail's natural ordering. The route's
+  // ⌘1..9 shortcut reads the SAME `railOrder` so the index never drifts.
+  const ordered = railOrder(sessions);
+
+  // P10 — the rail filter query. Local component state: the filter is pure
+  // frontend over `store.sessions` and persists nothing. An empty query shows
+  // every session (`filterRail` passes through).
+  const [filter, setFilter] = useState("");
+  const rows = useMemo(() => filterRail(ordered, filter), [ordered, filter]);
+  // Whether the user has typed a filter that matched nothing — distinct from a
+  // genuinely empty rail so the empty state can read correctly.
+  const hasSessions = ordered.length > 0;
 
   return (
-    <aside className="session-rail" aria-label="Sessions">
+    <aside className="session-rail" aria-label="Sessions" data-collapsed={String(collapsed)}>
       <button
         type="button"
         className="session-rail-new"
         onClick={onNewSession}
         aria-label="Start a new session"
+        title={collapsed ? "Start a new session" : undefined}
         data-active={activeSessionId === null}
       >
         <span className="session-rail-new-glyph" aria-hidden="true">
           +
         </span>
-        New session
+        <span className="session-rail-new-label">New session</span>
       </button>
 
-      {rows.length === 0 ? (
+      {/* P10 — the rail filter. Hidden when collapsed (no room) and when there
+          is nothing to filter. Narrows rows by title / Eidolon name. */}
+      {!collapsed && hasSessions && (
+        <input
+          type="search"
+          className="session-rail-filter"
+          placeholder="Filter sessions…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          aria-label="Filter sessions by title or Eidolon"
+        />
+      )}
+
+      {/* Collapsed = a thin strip: keep only the "New session" affordance. */}
+      {collapsed ? null : !hasSessions ? (
         <p className="session-rail-empty">No sessions yet. Type into the composer to start one.</p>
+      ) : rows.length === 0 ? (
+        <p className="session-rail-empty">No sessions match “{filter.trim()}”.</p>
       ) : (
         <ul className="session-rail-list">
           {rows.map((slice) => {
@@ -155,6 +226,17 @@ export function SessionList({
                       </span>
                     </span>
                   </span>
+                </button>
+                {/* P8 — fork: open a new session continuing from a copy of
+                    this conversation. */}
+                <button
+                  type="button"
+                  className="session-rail-fork"
+                  onClick={() => onFork(slice.sessionId)}
+                  aria-label={`Fork session ${rowTitle(slice)}`}
+                  title="Fork session"
+                >
+                  ⑂
                 </button>
                 <button
                   type="button"

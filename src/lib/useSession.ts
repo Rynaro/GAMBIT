@@ -44,18 +44,22 @@ export type SessionState =
 /**
  * One entry in the append-only session transcript.
  *
- * Two source kinds:
+ * Three source kinds:
  *   - `event`  — a parsed `session-event` line; `parsed` + `kind` are set,
  *                `line` is the raw NDJSON.
  *   - `stderr` — a `session-stderr` diagnostics line; `line` is the text,
  *                `parsed` / `kind` are absent.
+ *   - `prompt` — the human's own typed prompt for the turn (R4); `line` is the
+ *                raw prompt text, `parsed` / `kind` are absent. Appended on
+ *                turn dispatch (live) and persisted as a `PersistedEntry` so a
+ *                reopened session still shows what the user asked.
  *
  * `turn` is a per-turn grouping marker (1-based) so the conversation can be
- * rendered grouped by turn.
+ * rendered grouped by turn — a `prompt` entry heads its turn group.
  */
 export interface TranscriptEntry {
   /** Source channel of this entry. */
-  source: "event" | "stderr";
+  source: "event" | "stderr" | "prompt";
   /** 1-based turn number this entry belongs to. */
   turn: number;
   /** Stable lowercase discriminator for `event` entries (`init` / `result` / …). */

@@ -13,6 +13,7 @@
 // renders it nested/indented (see SessionsRoute), and the chip itself flags it
 // with a subagent tag.
 
+import { CopyButton } from "@/components/session/CopyButton";
 import { useEffect, useState } from "react";
 
 interface ToolUseChipProps {
@@ -36,6 +37,28 @@ interface ToolUseChipProps {
   running?: boolean;
   startedAt?: number;
   subagent?: boolean;
+  /**
+   * P3 bulk-collapse signal — a route-level "expand all / collapse all" pulse.
+   * Each pulse (a fresh `nonce`) syncs the chip's `expanded` default to
+   * `value`; the user can still toggle the chip individually afterwards. When
+   * absent the chip simply keeps its own local state. See {@link ExpandSignal}.
+   */
+  expandSignal?: ExpandSignal;
+}
+
+/**
+ * A transcript-level bulk expand/collapse pulse (P3).
+ *
+ * `value` is the desired expanded state; `nonce` makes every pulse distinct so
+ * a `useEffect` re-fires even when the same `value` is requested twice (e.g.
+ * "collapse all" after the user hand-expanded one chip). It is a *default*
+ * sync, not a lock — per-chip toggling stays live between pulses.
+ */
+export interface ExpandSignal {
+  /** The desired expanded state to sync every chip / block to. */
+  value: boolean;
+  /** A monotonically-increasing pulse id — distinguishes repeat requests. */
+  nonce: number;
 }
 
 /** Collapse an arbitrary tool-input value into a short single-line peek. */
@@ -90,14 +113,29 @@ export function ToolUseChip({
   running = false,
   startedAt,
   subagent = false,
+  expandSignal,
 }: ToolUseChipProps) {
   const [expanded, setExpanded] = useState(false);
   const peek = peekInput(input);
   const hasResult = Boolean(result);
-  const toggleable = hasResult && Boolean(result?.text.trim());
+  const hasResultBody = hasResult && Boolean(result?.text.trim());
+  // R2: the input peek is gated behind expand — a collapsed chip is a bare
+  // name + outcome dot. The chip is toggleable whenever expanding would reveal
+  // *something*: either the input peek OR a non-empty result body.
+  const toggleable = hasResultBody || Boolean(peek);
   // The chip is "live" while a tool-start was seen and no result has landed.
   const isRunning = running && !hasResult;
   const outcome = result ? (result.isError ? "error" : "ok") : isRunning ? "running" : "pending";
+
+  // P3: a bulk expand/collapse pulse syncs this chip's `expanded` default.
+  // It runs only on a fresh `nonce`, so per-chip toggling between pulses is
+  // never clobbered. `toggleable` gates it — a chip with nothing to reveal
+  // stays collapsed regardless of the signal.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the nonce is the intended trigger; value/toggleable are read, not depended on
+  useEffect(() => {
+    if (!expandSignal) return;
+    setExpanded(expandSignal.value && toggleable);
+  }, [expandSignal?.nonce]);
 
   return (
     <div className="session-tool" data-outcome={outcome} data-subagent={String(subagent)}>
@@ -121,7 +159,9 @@ export function ToolUseChip({
             subagent
           </span>
         )}
-        {peek && <span className="session-tool-peek">{peek}</span>}
+        {/* R2: the input peek is revealed only once the chip is expanded —
+            a collapsed chip stays a bare name + outcome dot. */}
+        {expanded && peek && <span className="session-tool-peek">{peek}</span>}
         {isRunning && typeof startedAt === "number" && (
           <ElapsedReadout startedAt={startedAt} running={true} />
         )}
@@ -144,9 +184,17 @@ export function ToolUseChip({
       </button>
 
       {expanded && result && (
-        <pre className="session-tool-result" data-error={String(result.isError)}>
-          {result.text}
-        </pre>
+        <div className="session-tool-result-wrap">
+          {/* P5: hover copy affordance on the tool-result body. */}
+          <CopyButton
+            value={result.text}
+            label={`Copy ${name} result`}
+            className="session-copy-btn--overlay"
+          />
+          <pre className="session-tool-result" data-error={String(result.isError)}>
+            {result.text}
+          </pre>
+        </div>
       )}
     </div>
   );

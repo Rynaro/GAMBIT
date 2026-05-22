@@ -44,13 +44,18 @@ use serde::{Deserialize, Serialize};
 /// Whether a turn opens a fresh session or resumes an existing one.
 ///
 /// Drives the single mutually-exclusive flag pair in [`build_args`]:
-/// `First` → `--session-id <uuid>`, `Resumed` → `--resume <uuid>`.
+/// `First` → `--session-id <uuid>`, `Resumed` → `--resume <uuid>`,
+/// `Fork` → `--resume <orig> --session-id <new> --fork-session`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnKind {
     /// The first turn of a conversation — opens the session.
     First,
     /// A later turn — resumes the existing session.
     Resumed,
+    /// P8 — the first turn of a FORKED session: resume an existing
+    /// conversation but write to a NEW session id, leaving the original
+    /// untouched. See [`TurnArgs::fork_from`].
+    Fork,
 }
 
 /// All inputs `build_args` needs to assemble a `claude` argument vector.
@@ -74,10 +79,45 @@ pub struct TurnArgs<'a> {
     pub permission_mode: &'a str,
     /// The session UUID — `--session-id` on a first turn, `--resume` on a
     /// resumed turn. A `&str`; the adapter does not depend on `uuid`.
+    ///
+    /// P8: on a [`TurnKind::Fork`] turn this is the NEW (forked) session's id,
+    /// passed to `--session-id` — GAMBIT keeps owning the id. The conversation
+    /// to seed from is given separately in [`TurnArgs::fork_from`].
     pub session_id: &'a str,
-    /// Whether this is the first turn or a resumed turn.
+    /// Whether this is the first turn, a resumed turn, or a fork's first turn.
     pub turn_kind: TurnKind,
+    /// R3 — the model serving the session, passed to `--model`. Accepts a
+    /// short alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus
+    /// the `[1m]` variants) or a full model id. `None` omits the flag entirely
+    /// so `claude` applies its own default.
+    pub model: Option<&'a str>,
+    /// R3 — the reasoning effort level, passed to `--effort` (`low` / `medium`
+    /// / `high` / `xhigh` / `max`). Supported levels vary per model; an
+    /// unsupported level is auto-downgraded CLI-side. `None` omits the flag.
+    pub thinking_effort: Option<&'a str>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` — `claude`
+    /// auto-downgrades to it when the primary model is overloaded (honored in
+    /// `-p` mode). `None` omits the flag.
+    pub fallback_model: Option<&'a str>,
+    /// P8 — the ORIGINAL session id to fork from. Set ONLY on a
+    /// [`TurnKind::Fork`] turn (the fork's first turn): it is the id passed to
+    /// `--resume`, while [`TurnArgs::session_id`] is the NEW forked id passed to
+    /// `--session-id`, and `--fork-session` is added so claude-code accepts the
+    /// combination and writes the resumed conversation under the new id.
+    ///
+    /// `None` for every `First` / `Resumed` turn — and for those `turn_kind`s
+    /// it is ignored even if set. After a fork's first turn, follow-up turns on
+    /// the new session are ordinary `Resumed` turns with `fork_from: None`.
+    pub fork_from: Option<&'a str>,
 }
+
+/// The fixed `--settings` JSON payload — R3.
+///
+/// `showThinkingSummaries` is enabled so Opus 4.7 streams `thinking` blocks
+/// with NON-EMPTY content: without it the `thinking` blocks arrive blank and
+/// the cozy `ThinkingBlock` would render nothing. A fixed string is enough —
+/// GAMBIT carries no other host-side `claude` settings.
+const SETTINGS_JSON: &str = r#"{"showThinkingSummaries":true}"#;
 
 /// Build the `claude` argument vector for one turn.
 ///
@@ -87,14 +127,27 @@ pub struct TurnArgs<'a> {
 ///
 /// The vector always contains, in order:
 ///   `-p`, `--output-format stream-json`, `--verbose`,
-///   `--include-partial-messages`, `--append-system-prompt <text>`,
-///   `--allowedTools <comma-separated>`, `--permission-mode <mode>`,
-///   exactly one of `--session-id <uuid>` / `--resume <uuid>`,
+///   `--include-partial-messages`, `--settings <json>`,
+///   `--append-system-prompt <text>`, `--allowedTools <comma-separated>`,
+///   `--permission-mode <mode>`, optionally `--model <v>` / `--effort <v>` /
+///   `--fallback-model <v>` (each only when its `TurnArgs` field is `Some`),
+///   then the session flags depending on `turn_kind`:
+///     * `First`   → `--session-id <uuid>`
+///     * `Resumed` → `--resume <uuid>`
+///     * `Fork`    → `--resume <fork_from> --session-id <uuid> --fork-session`
 ///   and finally the prompt as the trailing positional argument.
+///
+/// P8: the `Fork` arm uses `--fork-session` so claude-code seeds a NEW session
+/// (`--session-id <uuid>`) from a copy of an existing conversation
+/// (`--resume <fork_from>`), leaving the original untouched. The CLI requires
+/// `--fork-session` for the `--session-id` + `--resume` combination — without
+/// it `claude` rejects the pair (`--session-id can only be used with
+/// --resume ... if --fork-session is also specified`). GAMBIT therefore keeps
+/// owning the id: the new session id is host-generated, never CLI-minted.
 ///
 /// It NEVER contains `--bare` (that flag strips auth + skill discovery).
 pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
-    let mut v: Vec<String> = Vec::with_capacity(16);
+    let mut v: Vec<String> = Vec::with_capacity(24);
 
     // Headless streaming transport.
     v.push("-p".to_string());
@@ -104,6 +157,12 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
     // stream-json NDJSON to carry init/partial events the cozy UI renders.
     v.push("--verbose".to_string());
     v.push("--include-partial-messages".to_string());
+
+    // R3 — always pass `--settings` with `showThinkingSummaries: true` so the
+    // `thinking` content blocks Opus 4.7 streams carry real reasoning text
+    // (without it they arrive empty and the cozy ThinkingBlock renders blank).
+    v.push("--settings".to_string());
+    v.push(SETTINGS_JSON.to_string());
 
     // Eidolon persona — a verbatim string supplied by the caller.
     v.push("--append-system-prompt".to_string());
@@ -118,7 +177,25 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
     v.push("--permission-mode".to_string());
     v.push(args.permission_mode.to_string());
 
-    // Exactly one of the session flags, depending on the turn kind.
+    // R3 — optional model / effort / fallback-model. Each flag is appended
+    // ONLY when its `TurnArgs` field is `Some`; a `None` omits the flag
+    // entirely so `claude` applies its own default rather than receiving an
+    // empty value. The model/effort are session-scoped: `send_turn` rebuilds
+    // `TurnArgs` from the `SessionHandle` so they survive every `--resume`.
+    if let Some(model) = args.model {
+        v.push("--model".to_string());
+        v.push(model.to_string());
+    }
+    if let Some(effort) = args.thinking_effort {
+        v.push("--effort".to_string());
+        v.push(effort.to_string());
+    }
+    if let Some(fallback) = args.fallback_model {
+        v.push("--fallback-model".to_string());
+        v.push(fallback.to_string());
+    }
+
+    // The session flags, depending on the turn kind.
     match args.turn_kind {
         TurnKind::First => {
             v.push("--session-id".to_string());
@@ -127,6 +204,22 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
         TurnKind::Resumed => {
             v.push("--resume".to_string());
             v.push(args.session_id.to_string());
+        }
+        TurnKind::Fork => {
+            // P8 — fork: resume the ORIGINAL conversation (`fork_from`) but
+            // write it under the NEW host-generated id (`session_id`).
+            // `--fork-session` is mandatory for the CLI to accept the
+            // `--resume` + `--session-id` pair. If `fork_from` is somehow
+            // absent (a caller bug — `Fork` always carries it) we fall back to
+            // resuming the new id, which is harmless and keeps `build_args`
+            // total (it never panics on a missing field).
+            if let Some(origin) = args.fork_from {
+                v.push("--resume".to_string());
+                v.push(origin.to_string());
+            }
+            v.push("--session-id".to_string());
+            v.push(args.session_id.to_string());
+            v.push("--fork-session".to_string());
         }
     }
 
@@ -214,6 +307,32 @@ pub struct Usage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
+/// A single permission denial carried on the terminal `result` event.
+///
+/// S0 — when a claude-code turn requests a tool that is not pre-approved,
+/// headless mode silently denies the call: the turn still finishes, but the
+/// requested work never happened. claude-code reports each such block in the
+/// `result` event's `permission_denials` array; GAMBIT surfaces it on the
+/// result card so the denial is not invisible.
+///
+/// Deserialised from claude's snake_case wire (`tool_name` / `tool_use_id` /
+/// `tool_input`); serialised to the frontend as camelCase (`toolName` /
+/// `toolUseId` / `toolInput`) to match the TS `PermissionDenial` mirror — the
+/// same split `rename_all` the v0.3.6 `ContentBlock` fix established.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
+pub struct PermissionDenial {
+    /// The name of the tool whose call was denied (e.g. `"Write"`, `"Bash"`).
+    #[serde(default)]
+    pub tool_name: String,
+    /// The `tool_use` id of the denied call.
+    #[serde(default)]
+    pub tool_use_id: String,
+    /// The tool input the denied call would have run — shape varies per tool.
+    #[serde(default)]
+    pub tool_input: serde_json::Value,
+}
+
 /// The cozy delta pre-extracted from a `stream_event`'s inner `event` (story
 /// S6/S7).
 ///
@@ -281,7 +400,16 @@ pub struct StreamDeltaExtraction {
 /// Covers what a cozy session UI needs; anything unrecognised falls through
 /// to [`ParsedEvent::Unknown`] (unknown `type`) or [`ParsedEvent::Malformed`]
 /// (not valid JSON). `parse_line` is total — it always returns one of these.
+// `rename_all_fields` camelCases every struct-variant field on serialise
+// (`session_id` -> `sessionId`, `total_cost_usd` -> `totalCostUsd`,
+// `permission_denials` -> `permissionDenials`, `parent_tool_use_id` -> …) so
+// the `session-event` payload's `parsed` object matches the camelCase TS
+// mirrors. The variant names (`Init`/`Result`/…) are deliberately NOT renamed —
+// they are the externally-tagged keys the frontend switches on (`parsed.Result`).
+// Without this, the multi-word fields shipped snake_case and the UI read
+// `undefined` (ResultCard cost/turns/duration, the S0 denial notice).
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all_fields = "camelCase")]
 pub enum ParsedEvent {
     /// `type: "system", subtype: "init"` — the session handshake.
     Init {
@@ -348,6 +476,9 @@ pub enum ParsedEvent {
         total_cost_usd: Option<f64>,
         /// Token-usage accounting for the turn.
         usage: Usage,
+        /// S0 — tool calls claude-code silently denied during the turn (a tool
+        /// not pre-approved in headless mode). Empty when nothing was denied.
+        permission_denials: Vec<PermissionDenial>,
     },
     /// A syntactically valid JSON line whose `type` we do not model — carries
     /// the raw line so nothing is silently dropped.
@@ -575,6 +706,8 @@ struct ResultLine {
     total_cost_usd: Option<f64>,
     #[serde(default)]
     usage: Usage,
+    #[serde(default)]
+    permission_denials: Vec<PermissionDenial>,
 }
 
 /// Parse one NDJSON output line into a typed [`ParsedEvent`].
@@ -659,6 +792,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                 duration_ms: r.duration_ms,
                 total_cost_usd: r.total_cost_usd,
                 usage: r.usage,
+                permission_denials: r.permission_denials,
             },
             Err(_) => unknown(line),
         },
@@ -702,6 +836,10 @@ mod tests {
             permission_mode: "default",
             session_id: "11111111-1111-1111-1111-111111111111",
             turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
 
@@ -738,6 +876,10 @@ mod tests {
             permission_mode: "acceptEdits",
             session_id: "22222222-2222-2222-2222-222222222222",
             turn_kind: TurnKind::Resumed,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
 
@@ -759,9 +901,160 @@ mod tests {
             permission_mode: "default",
             session_id: "33333333-3333-3333-3333-333333333333",
             turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
         assert_eq!(v.last().map(String::as_str), Some("the prompt"));
+    }
+
+    /// R3 — `--settings` carrying `showThinkingSummaries` is ALWAYS present,
+    /// even when no model/effort is chosen, so streamed `thinking` blocks
+    /// carry real reasoning text.
+    #[test]
+    fn build_args_always_passes_settings_with_thinking_summaries() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "44444444-4444-4444-4444-444444444444",
+            turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
+        };
+        let v = build_args(&args);
+        assert!(v.contains(&"--settings".to_string()));
+        assert!(v.contains(&r#"{"showThinkingSummaries":true}"#.to_string()));
+        // `--bare` stays forbidden.
+        assert!(!v.contains(&"--bare".to_string()));
+    }
+
+    /// R3 — when `model` / `thinking_effort` / `fallback_model` are `Some`,
+    /// `build_args` appends `--model` / `--effort` / `--fallback-model` with
+    /// their values.
+    #[test]
+    fn build_args_includes_model_effort_and_fallback_when_set() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "55555555-5555-5555-5555-555555555555",
+            turn_kind: TurnKind::First,
+            model: Some("opus[1m]"),
+            thinking_effort: Some("high"),
+            fallback_model: Some("sonnet"),
+            fork_from: None,
+        };
+        let v = build_args(&args);
+
+        // Each flag is followed immediately by its value.
+        let flag_value = |flag: &str| -> Option<&str> {
+            v.iter()
+                .position(|a| a == flag)
+                .and_then(|i| v.get(i + 1))
+                .map(String::as_str)
+        };
+        assert_eq!(flag_value("--model"), Some("opus[1m]"));
+        assert_eq!(flag_value("--effort"), Some("high"));
+        assert_eq!(flag_value("--fallback-model"), Some("sonnet"));
+    }
+
+    /// R3 — when `model` / `thinking_effort` / `fallback_model` are `None`,
+    /// the corresponding flags are omitted ENTIRELY (no empty value passed).
+    #[test]
+    fn build_args_omits_model_effort_and_fallback_when_none() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "66666666-6666-6666-6666-666666666666",
+            turn_kind: TurnKind::Resumed,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
+        };
+        let v = build_args(&args);
+        assert!(!v.contains(&"--model".to_string()));
+        assert!(!v.contains(&"--effort".to_string()));
+        assert!(!v.contains(&"--fallback-model".to_string()));
+        // The empty-string value must never leak in.
+        assert!(!v.contains(&String::new()));
+    }
+
+    /// P8 — a `Fork` turn carries `--resume <origin>` AND `--session-id <new>`
+    /// AND `--fork-session`: it resumes the ORIGINAL conversation but writes to
+    /// the NEW host-generated id. This is the fork's FIRST turn only.
+    #[test]
+    fn build_args_fork_turn_resumes_origin_and_writes_new_id() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "explore an alternate path",
+            append_system_prompt: "You are Sage.",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "99999999-9999-9999-9999-999999999999",
+            turn_kind: TurnKind::Fork,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: Some("11111111-1111-1111-1111-111111111111"),
+        };
+        let v = build_args(&args);
+
+        // `--resume` carries the ORIGINAL id; `--session-id` the NEW forked id.
+        let flag_value = |flag: &str| -> Option<&str> {
+            v.iter()
+                .position(|a| a == flag)
+                .and_then(|i| v.get(i + 1))
+                .map(String::as_str)
+        };
+        assert_eq!(
+            flag_value("--resume"),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        assert_eq!(
+            flag_value("--session-id"),
+            Some("99999999-9999-9999-9999-999999999999")
+        );
+        // `--fork-session` is mandatory for the CLI to accept the pair.
+        assert!(v.contains(&"--fork-session".to_string()));
+        // The prompt still rides as the trailing positional.
+        assert_eq!(v.last().map(String::as_str), Some("explore an alternate path"));
+        // `--bare` stays forbidden.
+        assert!(!v.contains(&"--bare".to_string()));
+    }
+
+    /// P8 — `--fork-session` appears ONLY on a `Fork` turn. A `First` turn and
+    /// a `Resumed` turn never carry it (a fork's follow-up turns are ordinary
+    /// `Resumed` turns).
+    #[test]
+    fn build_args_fork_session_only_on_fork_turn() {
+        let tools = sample_tools();
+        let base = |kind: TurnKind| TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "22222222-2222-2222-2222-222222222222",
+            turn_kind: kind,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
+        };
+        assert!(!build_args(&base(TurnKind::First)).contains(&"--fork-session".to_string()));
+        assert!(!build_args(&base(TurnKind::Resumed)).contains(&"--fork-session".to_string()));
     }
 
     /// `system/init` → `ParsedEvent::Init` with session/model/tools populated.
@@ -1032,6 +1325,7 @@ mod tests {
                 duration_ms,
                 total_cost_usd,
                 usage,
+                permission_denials,
             } => {
                 assert_eq!(subtype.as_deref(), Some("success"));
                 assert_eq!(result.as_deref(), Some("all done"));
@@ -1042,9 +1336,82 @@ mod tests {
                 assert_eq!(total_cost_usd, Some(0.0123));
                 assert_eq!(usage.input_tokens, Some(1500));
                 assert_eq!(usage.output_tokens, Some(300));
+                // No `permission_denials` field on the line → empty vec.
+                assert!(permission_denials.is_empty());
             }
             other => panic!("expected Result, got {other:?}"),
         }
+    }
+
+    /// S0 — a `result` line carrying `permission_denials` parses each denial
+    /// with its `tool_name` / `tool_use_id` / `tool_input`.
+    #[test]
+    fn parse_line_result_with_permission_denials() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}},{"tool_name":"Bash","tool_use_id":"toolu_2","tool_input":{"command":"ls"}}]}"#;
+        match parse_line(line) {
+            ParsedEvent::Result {
+                permission_denials,
+                ..
+            } => {
+                assert_eq!(permission_denials.len(), 2);
+                assert_eq!(permission_denials[0].tool_name, "Write");
+                assert_eq!(permission_denials[0].tool_use_id, "toolu_1");
+                assert_eq!(
+                    permission_denials[0].tool_input.get("file_path"),
+                    Some(&serde_json::json!("/a"))
+                );
+                assert_eq!(permission_denials[1].tool_name, "Bash");
+            }
+            other => panic!("expected Result, got {other:?}"),
+        }
+    }
+
+    /// S0 — an empty `permission_denials: []` array yields an empty vec, same
+    /// as the field being absent (no regression to the normal result).
+    #[test]
+    fn parse_line_result_empty_permission_denials() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[]}"#;
+        match parse_line(line) {
+            ParsedEvent::Result {
+                permission_denials, ..
+            } => assert!(permission_denials.is_empty()),
+            other => panic!("expected Result, got {other:?}"),
+        }
+    }
+
+    /// REGRESSION (mirrors the v0.3.6 camelCase regression test, extended for
+    /// the `ParsedEvent` enum-level `rename_all_fields`): `ParsedEvent::Result`
+    /// must serialise EVERY multi-word field as camelCase — `totalCostUsd` /
+    /// `numTurns` / `durationMs` / `isError` / `sessionId` / `permissionDenials`
+    /// — so the frontend's `ParsedResult` mirror reads them. Without the
+    /// enum-level `rename_all_fields`, these shipped snake_case and the UI
+    /// (ResultCard cost/turns/duration, the S0 denial notice) read `undefined`.
+    /// Each denial's INNER fields are camelCased by `PermissionDenial`'s own
+    /// split `rename_all`.
+    #[test]
+    fn parsed_result_serialises_camelcase_for_the_frontend() {
+        let line = r#"{"type":"result","subtype":"success","session_id":"s1","is_error":false,"num_turns":3,"duration_ms":4200,"total_cost_usd":0.0123,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}}]}"#;
+        let value = serde_json::to_value(parse_line(line)).expect("serialise");
+        let r = value.get("Result").expect("Result variant");
+        // The variant-level multi-word fields are camelCase.
+        assert_eq!(r.get("totalCostUsd").and_then(|v| v.as_f64()), Some(0.0123));
+        assert_eq!(r.get("numTurns").and_then(|v| v.as_u64()), Some(3));
+        assert_eq!(r.get("durationMs").and_then(|v| v.as_u64()), Some(4200));
+        assert_eq!(r.get("isError").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(r.get("sessionId").and_then(|v| v.as_str()), Some("s1"));
+        assert!(r.get("permissionDenials").is_some(), "permissionDenials present");
+        // The snake_case names must NOT appear.
+        for snake in ["total_cost_usd", "num_turns", "duration_ms", "is_error", "permission_denials"] {
+            assert!(r.get(snake).is_none(), "must not serialise as `{snake}`");
+        }
+        // Each denial's inner fields are camelCased by PermissionDenial.
+        let d0 = &r
+            .get("permissionDenials")
+            .and_then(|d| d.as_array())
+            .expect("permissionDenials array")[0];
+        assert_eq!(d0.get("toolName").and_then(|v| v.as_str()), Some("Write"));
+        assert_eq!(d0.get("toolUseId").and_then(|v| v.as_str()), Some("toolu_1"));
+        assert!(d0.get("toolInput").is_some(), "toolInput present");
     }
 
     /// A JSON line with an unrecognised `type` → `Unknown`, raw preserved.

@@ -537,8 +537,12 @@ describe("useSessions", () => {
     emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "lo!" });
 
     // Text accumulated into the EPHEMERAL live buffer — not the transcript.
+    // The transcript holds only the R4 turn-1 prompt entry; a delta is never
+    // appended to it.
     expect(result.current.sessions[SESSION_A].live.streamingText).toBe("Hello!");
-    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(0);
+    expect(
+      result.current.sessions[SESSION_A].transcript.filter((e) => e.source !== "prompt"),
+    ).toHaveLength(0);
   });
 
   it("registers a live tool call from session-tool-start and accumulates its input", async () => {
@@ -623,6 +627,185 @@ describe("useSessions", () => {
     expect(live.toolCalls).toEqual({});
     expect(live.usage).toBe(null);
     expect(live.turn).toBe(0);
+  });
+
+  // --- R4: the user's own prompt is captured as a transcript entry ---------
+
+  it("R4: start() seeds the transcript with the turn-1 prompt entry", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+
+    await act(async () => {
+      await result.current.start({
+        projectPath: "/p",
+        eidolonName: "Sage",
+        permissionMode: "default",
+        appendSystemPrompt: "",
+        allowedTools: [],
+        firstPrompt: "refactor the auth module",
+      });
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    expect(transcript).toHaveLength(1);
+    expect(transcript[0].source).toBe("prompt");
+    expect(transcript[0].turn).toBe(1);
+    expect(transcript[0].line).toBe("refactor the auth module");
+  });
+
+  it("R4: sendTurn() appends a prompt entry at the new turn number", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    act(() => {
+      result.current.sendTurn(SESSION_A, "now write the changelog");
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    // The turn-1 prompt ("go") and the turn-2 prompt both present.
+    const prompts = transcript.filter((e) => e.source === "prompt");
+    expect(prompts).toHaveLength(2);
+    const turn2Prompt = prompts.find((e) => e.turn === 2);
+    expect(turn2Prompt?.line).toBe("now write the changelog");
+  });
+
+  it("R4: a reopened session rebuilds the persisted prompt entry without duplicating", async () => {
+    const recWithPrompt: SessionRecord = {
+      ...record(SESSION_A, true),
+      transcript: [
+        { source: "prompt", turn: 1, kind: undefined, parsed: undefined, line: "the ask", ts: TS },
+        { source: "event", turn: 1, kind: "assistant", parsed: undefined, line: "{}", ts: TS },
+      ],
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_A));
+      if (cmd === "load_session") return Promise.resolve(recWithPrompt);
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await act(async () => {
+      await result.current.reopen(SESSION_A);
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    // Exactly one prompt entry — `transcriptFromPersisted` maps source 1:1.
+    const prompts = transcript.filter((e) => e.source === "prompt");
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].line).toBe("the ask");
+    expect(transcript).toHaveLength(2);
+  });
+
+  // --- P8: conversation forking ---------------------------------------------
+
+  it("P8: fork() ADDS a new session keyed by the new id, distinct from the origin", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "fork_session") return Promise.resolve(sessionInfo(SESSION_B));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+
+    // The origin A is in the map (summary-level) after rehydration.
+    expect(Object.keys(result.current.sessions)).toEqual([SESSION_A]);
+
+    let forkId: string | null = null;
+    await act(async () => {
+      forkId = await result.current.fork(SESSION_A, "explore an alternate path");
+    });
+
+    // `fork_session` was invoked with the origin id wrapped in params.
+    expect(mockInvoke).toHaveBeenCalledWith("fork_session", {
+      params: { originSessionId: SESSION_A, firstPrompt: "explore an alternate path" },
+    });
+
+    // The fork is ADDED under the NEW id, distinct from the origin — the
+    // origin is NOT wiped.
+    expect(forkId).toBe(SESSION_B);
+    expect(Object.keys(result.current.sessions).sort()).toEqual([SESSION_A, SESSION_B].sort());
+    expect(SESSION_B).not.toBe(SESSION_A);
+    expect(result.current.sessions[SESSION_B].status).toBe("turn-running");
+    expect(result.current.sessions[SESSION_B].sessionId).toBe(SESSION_B);
+  });
+
+  it("P8: fork() seeds the fork's transcript with the origin's history + its turn-1 prompt", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_A));
+      // The origin has a one-entry transcript at turn 1.
+      if (cmd === "load_session") return Promise.resolve(record(SESSION_A, true));
+      if (cmd === "fork_session") return Promise.resolve(sessionInfo(SESSION_B));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    // Hydrate the origin so its slice carries the transcript fork() copies.
+    await act(async () => {
+      await result.current.reopen(SESSION_A);
+    });
+    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.fork(SESSION_A, "the fork's first ask");
+    });
+
+    const forkTranscript = result.current.sessions[SESSION_B].transcript;
+    // Inherited history (1 entry, turn 1) + the fork's own turn-1 prompt.
+    expect(forkTranscript).toHaveLength(2);
+    // The fork's prompt heads a turn PAST the inherited turn (no collision).
+    const prompt = forkTranscript[forkTranscript.length - 1];
+    expect(prompt.source).toBe("prompt");
+    expect(prompt.line).toBe("the fork's first ask");
+    expect(prompt.turn).toBe(2);
+    // The origin's transcript is untouched by the fork.
+    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(1);
+  });
+
+  it("P8: a forkedFrom lineage on a loaded record is carried through reopen", async () => {
+    const forkedRecord: SessionRecord = {
+      ...record(SESSION_B, true),
+      uuid: SESSION_B,
+      forkedFrom: SESSION_A,
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_B)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_B));
+      if (cmd === "load_session") return Promise.resolve(forkedRecord);
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await act(async () => {
+      await result.current.reopen(SESSION_B);
+    });
+
+    // `load_session` returned a record carrying the fork lineage — the wire
+    // shape mirrors Rust's `forkedFrom` field.
+    const loaded = mockInvoke.mock.results.find(
+      (_, i) => mockInvoke.mock.calls[i][0] === "load_session",
+    );
+    expect(loaded).toBeDefined();
+    const rec = (await loaded?.value) as SessionRecord;
+    expect(rec.forkedFrom).toBe(SESSION_A);
   });
 
   it("a session-delta for session A does NOT touch session B", async () => {

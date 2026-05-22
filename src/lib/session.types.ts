@@ -69,6 +69,23 @@ export interface ContentBlock {
   isError?: boolean | null;
 }
 
+/**
+ * A single permission denial carried on the terminal `result` event.
+ *
+ * S0 — when a claude-code turn requests a tool that is not pre-approved,
+ * headless mode silently denies the call: the turn finishes, but the work
+ * never happened. `claude_adapter.rs`'s `PermissionDenial` carries a split
+ * `rename_all` — snake_case in from `claude`, camelCase out to this interface.
+ */
+export interface PermissionDenial {
+  /** The name of the denied tool (e.g. `"Write"` / `"Bash"`). */
+  toolName: string;
+  /** The `tool_use` id of the denied call. */
+  toolUseId: string;
+  /** The tool input the denied call would have run; shape varies per tool. */
+  toolInput?: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // claude_adapter.rs — the ParsedEvent union (externally-tagged)
 // ---------------------------------------------------------------------------
@@ -157,6 +174,11 @@ export interface ParsedResult {
     totalCostUsd?: number | null;
     /** Token-usage accounting for the turn. */
     usage: Usage;
+    /**
+     * S0 — tool calls claude-code silently denied during the turn (a tool not
+     * pre-approved in headless mode). Empty when nothing was denied.
+     */
+    permissionDenials: PermissionDenial[];
   };
 }
 
@@ -223,9 +245,47 @@ export interface StartSessionParams {
    * from `firstPrompt` (first ~60 chars).
    */
   title?: string | null;
+  /**
+   * R3 — the model to serve the session, passed to `--model` on every turn.
+   * An alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus the
+   * `[1m]` variants) or a full model id. Optional — absent lets `claude`
+   * apply its own default. Open string for forward-compat (new aliases).
+   */
+  model?: string | null;
+  /**
+   * R3 — the reasoning effort level, passed to `--effort` on every turn
+   * (`low` / `medium` / `high` / `xhigh` / `max`). Optional — absent lets
+   * `claude`'s own default apply. Open string for forward-compat.
+   */
+  thinkingEffort?: string | null;
+  /**
+   * R3 — the fallback model alias, passed to `--fallback-model` (auto-downgrade
+   * when the primary model is overloaded). Optional. Open string.
+   */
+  fallbackModel?: string | null;
 }
 
-/** Returned by `start_session` / `reopen_session`: the session descriptor. */
+/**
+ * Parameters for the `fork_session` command (P8).
+ *
+ * A fork continues a COPY of an existing session's conversation under a new
+ * id, leaving the original untouched — for exploring an alternate path.
+ * `originSessionId` must be a persisted (known) session; its on-disk record is
+ * the source of the fork's copied metadata + seeded transcript.
+ */
+export interface ForkSessionParams {
+  /** The UUID of the session to fork from — must be persisted on disk. */
+  originSessionId: string;
+  /** The prompt for the fork's first turn. */
+  firstPrompt: string;
+  /**
+   * Optional explicit title for the fork. When absent Rust derives the title
+   * from `firstPrompt` (first ~60 chars), mirroring `start_session`.
+   */
+  title?: string | null;
+}
+
+/** Returned by `start_session` / `reopen_session` / `fork_session`: the session descriptor. */
 export interface SessionInfo {
   /** The host-generated UUID v4 — the session's stable address. */
   sessionId: string;
@@ -314,6 +374,23 @@ export interface SessionRecord {
   status: string;
   /** The serving model, captured from the `system/init` event. */
   model?: string | null;
+  /**
+   * R3 — the user-CHOSEN model (`--model`), distinct from the OBSERVED
+   * `model` above. The launch-time selection, persisted so a reopened session
+   * resumes on the same model. Absent on records written before R3.
+   */
+  chosenModel?: string | null;
+  /** R3 — the reasoning effort level (`--effort`). Absent on pre-R3 records. */
+  thinkingEffort?: string | null;
+  /** R3 — the fallback model alias (`--fallback-model`). Absent pre-R3. */
+  fallbackModel?: string | null;
+  /**
+   * P8 — when this session is a FORK, the UUID of the session it was forked
+   * from (its parent). Absent / `null` for an ordinary, non-forked session.
+   * The fork's metadata is copied from the parent at fork time; this records
+   * the lineage. Absent on records written before P8.
+   */
+  forkedFrom?: string | null;
   /** RFC-3339 creation timestamp. */
   createdAt: string;
   /** RFC-3339 timestamp, bumped on every turn flush. */
@@ -354,6 +431,14 @@ export interface SessionSummary {
   status: string;
   /** The serving model, or null if not yet captured. */
   model?: string | null;
+  /**
+   * R3 — the user-CHOSEN model (`--model`), surfaced on the summary so the
+   * list can show the pinned model before the first `system/init` arrives.
+   * Absent on index entries written before R3.
+   */
+  chosenModel?: string | null;
+  /** R3 — the reasoning effort level (`--effort`). Absent pre-R3. */
+  thinkingEffort?: string | null;
   /** RFC-3339 creation timestamp. */
   createdAt: string;
   /** RFC-3339 timestamp, bumped on every turn flush. */
@@ -373,6 +458,17 @@ export interface AuthStatus {
   /** Short human-readable status line for the UI to display. */
   detail: string;
 }
+
+/**
+ * P9 — the return shape of the `list_project_files` command.
+ *
+ * The Rust command (`project_files.rs`) returns a bare `Vec<String>` of
+ * RELATIVE, forward-slashed file paths sorted alphabetically and capped at a
+ * few thousand entries — the file pool the composer's `@`-mention picker
+ * filters. A plain alias rather than an `interface` because the wire shape is
+ * exactly `string[]`; the alias documents the contract at the call site.
+ */
+export type ProjectFiles = string[];
 
 // ---------------------------------------------------------------------------
 // session.rs — event payloads (all camelCase on the wire)

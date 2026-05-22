@@ -1,0 +1,68 @@
+{
+  "thread_id": "8f144b80-e02e-4e67-ab46-260a04b74db5",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "round": "v0.5 — Interactive Sessions",
+  "provenance": {
+    "scout": ".atlas/scout-report.md",
+    "chain": "ATLAS scout + research -> FORGE deliberation -> orchestrator roadmap",
+    "caveat": "claude-code needs mid-turn user input (permission approval, AskUserQuestion, plan approval); the stateless per-turn model has no back-channel. Triggers the v0.3 FORGE D2 reversal."
+  },
+  "scope": {
+    "v0.4.5": ["S0"],
+    "v0.5": ["S1", "S2", "S3"],
+    "deferred_v0.6": ["S4 — AskUserQuestion + plan-mode UI; plan-mode headless approval is a key unknown"]
+  },
+  "architecture": "Hybrid long-lived process (claude --input-format stream-json --output-format stream-json, resident while turning, dropped + --resume when idle). Interactive channel: stream-json control-protocol primary, Node/Python Agent-SDK sidecar contingency. cancel -> in-band interrupt. NO architecture commit until the S1 spike closes the [UNVERIFIED] gaps.",
+  "steps": [
+    {
+      "step_id": "S0",
+      "release": "0.4.5",
+      "depends_on": [],
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Parser early win — surface permission_denials. claude_adapter.rs ResultLine + ParsedEvent::Result gain a permission_denials field (each entry {tool_name, tool_use_id, tool_input}); today it is parsed then silently dropped. The UI surfaces denied tool calls on the result card with a hint to relaunch with a looser --permission-mode. Independent of the v0.5 rearchitecture; ships on the v0.4.x branch.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S1",
+      "release": "0.5",
+      "depends_on": [],
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "VERIFY",
+      "edge_origin": "roster",
+      "objective": "Verification spike (GATES v0.5). Run a real `claude` against a throwaway logging MCP server + the streaming-input mode; capture the undocumented payloads: (1) the stdin NDJSON user-message schema; (2) whether a control_request/control_response envelope exists on stdout/stdin for a non-SDK host; (3) the --permission-prompt-tool input field names (claude-code issue #1175); (4) whether AskUserQuestion routes through the prompt-tool/canUseTool path and the answer shape; (5) whether plan-mode has a headless ExitPlanMode/approval mechanism; (6) whether --resume cleanly re-attaches to an interactive stream-json session; (7) the turn-boundary signal in a long-lived process. The architecture branches on these findings — no S2/S3 commit until the spike answers them.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S2",
+      "release": "0.5",
+      "depends_on": ["S1"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Area 1 — long-lived hybrid process foundation. Convert the session layer from stateless-per-turn to a hybrid long-lived model: a `claude --input-format stream-json --output-format stream-json` process resident while a session is actively turning, dropped + re-spawned via --resume when idle. spawn_core exposes a ChildStdin + writer; the turn_in_flight AtomicBool becomes an explicit turn-state machine; run_turn's drain-to-EOF finalize is replaced by a result-driven finalize with a stdout-inactivity backstop (the v0.3 R6 dual-finalize loses its process-exit half); cancel_session SIGKILL becomes an in-band interrupt. Shape per the S1 spike findings.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S3",
+      "release": "0.5",
+      "depends_on": ["S2"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Area 2 — permission request/answer round-trip (the v0.5 release floor). When claude requests an un-pre-approved tool mid-turn, GAMBIT surfaces an in-app approve/deny dialog and answers over the back-channel (S2) so the turn continues without restart. Channel per the S1 spike: stream-json control-protocol primary, Agent-SDK sidecar contingency. Run sessions in --permission-mode default so requests actually fire. This fixes the reported defect (permission_denials silently denying turns).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    }
+  ]
+}
