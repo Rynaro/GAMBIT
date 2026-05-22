@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-05-22
+
+### Fixed
+
+- **Assistant responses never appeared in the session transcript.** A turn would
+  run and complete, but the UI showed nothing. The Rust `ContentBlock` struct
+  serialised its fields snake_case (`type`, `tool_use_id`, `is_error`) while the
+  frontend reads camelCase (`blockType`, `toolUseId`, `isError`) — so
+  `AssistantBlock`'s `switch (block.blockType)` always saw `undefined` and every
+  content block rendered as `null`. `ContentBlock` and `Usage` now carry a
+  split-direction serde `rename_all` (snake_case in from `claude`, camelCase out
+  to the UI). This also repairs `tool_result` pairing — tool chips that were
+  stuck showing "running" now resolve. Root-caused by VIGIL; a serialization
+  regression test guards the wire shape.
+
 ## [0.3.5] — 2026-05-22
 
 The fifth v0.3.x minor — liveness. Completes the v0.3.x session round.

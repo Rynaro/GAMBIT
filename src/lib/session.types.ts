@@ -42,9 +42,11 @@ export interface Usage {
 /**
  * A single content block inside an `assistant` or `user` message.
  *
- * The `type` field is renamed to `blockType` (the Rust field is
- * `#[serde(rename = "type")] block_type`). It is an open string —
- * `"text"` / `"tool_use"` / `"thinking"` / `"tool_result"` or anything newer.
+ * Wire field names are camelCase (`blockType` / `toolUseId` / `isError`):
+ * `claude_adapter.rs`'s `ContentBlock` carries a split `rename_all` —
+ * snake_case on the way in from `claude`, camelCase on the way out to this
+ * interface. `blockType` is an open string — `"text"` / `"tool_use"` /
+ * `"thinking"` / `"tool_result"` or anything newer.
  */
 export interface ContentBlock {
   /** Block kind: `"text"` / `"tool_use"` / `"thinking"` / `"tool_result"` / … */

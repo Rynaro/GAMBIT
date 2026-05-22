@@ -154,10 +154,16 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
 /// optional so any block kind deserialises; the `block_type` discriminator
 /// tells the UI which fields to read.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+// Split rename: deserialise from `claude`'s snake_case wire, serialise to the
+// frontend as camelCase. The TS `ContentBlock` mirror reads `blockType` /
+// `toolUseId` / `isError` — a plain `rename_all = "camelCase"` would also flip
+// deserialisation and break parsing `claude`'s `tool_use_id` / `is_error`.
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
 pub struct ContentBlock {
     /// The block kind: `"text"`, `"tool_use"`, `"thinking"`, `"tool_result"`,
-    /// or anything newer.
-    #[serde(default, rename = "type")]
+    /// or anything newer. Deserialised from `claude`'s `type`; serialised to
+    /// the frontend as `blockType` (via the struct's split rename_all).
+    #[serde(default, rename(deserialize = "type"))]
     pub block_type: String,
     /// Text payload — present on `text` blocks.
     #[serde(default)]
@@ -188,7 +194,11 @@ pub struct ContentBlock {
 }
 
 /// Token-usage accounting carried on the terminal `result` event.
+///
+/// Deserialised from `claude`'s snake_case wire; serialised to the frontend as
+/// camelCase (`inputTokens`, …) to match the TS `Usage` mirror.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
 pub struct Usage {
     /// Input tokens billed for the turn.
     #[serde(default)]
@@ -800,6 +810,42 @@ mod tests {
             }
             other => panic!("expected Assistant, got {other:?}"),
         }
+    }
+
+    /// REGRESSION (VIGIL root-cause-report): the `session-event` payload's
+    /// `parsed` field is `serde_json::to_value(&ParsedEvent)`. The serialised
+    /// `ContentBlock` MUST be camelCase (`blockType`) — the frontend's
+    /// `AssistantBlock` switches on `block.blockType`. A snake_case `type`
+    /// made every assistant block render as nothing.
+    #[test]
+    fn assistant_content_serialises_camelcase_for_the_frontend() {
+        let line = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"},{"type":"tool_use","id":"tu_1","name":"Read","input":{}}]}}"#;
+        let value = serde_json::to_value(parse_line(line)).expect("serialise");
+        let blocks = value
+            .get("Assistant")
+            .and_then(|a| a.get("content"))
+            .and_then(|c| c.as_array())
+            .expect("Assistant.content array");
+        assert_eq!(blocks[0].get("blockType").and_then(|v| v.as_str()), Some("text"));
+        assert!(blocks[0].get("type").is_none(), "must not serialise as `type`");
+        assert_eq!(blocks[1].get("blockType").and_then(|v| v.as_str()), Some("tool_use"));
+    }
+
+    /// REGRESSION: a `tool_result` block must serialise `tool_use_id`→`toolUseId`
+    /// and `is_error`→`isError`, or the frontend tool-result index stays empty.
+    #[test]
+    fn tool_result_block_serialises_camelcase() {
+        let line = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu_1","content":"out","is_error":true}]}}"#;
+        let value = serde_json::to_value(parse_line(line)).expect("serialise");
+        let content = value
+            .get("User")
+            .and_then(|u| u.get("content"))
+            .and_then(|c| c.as_array())
+            .expect("User.content array");
+        let block = &content[0];
+        assert_eq!(block.get("toolUseId").and_then(|v| v.as_str()), Some("tu_1"));
+        assert_eq!(block.get("isError").and_then(|v| v.as_bool()), Some(true));
+        assert!(block.get("tool_use_id").is_none(), "must not serialise as `tool_use_id`");
     }
 
     /// `user` carrying a `tool_result` block → `ParsedEvent::User`.
