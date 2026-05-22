@@ -1,26 +1,29 @@
 // SessionsRoute.tsx — the user-facing "Sessions" surface.
 //
-// Story S2: the route no longer OWNS session state. It consumes the
-// `useSessions` store (lifted to the App shell, prop-drilled in) and selects a
-// single session via `useSession(store, activeSessionId)`. Because the store
-// lives ABOVE the router, navigating away and back no longer destroys the
-// transcript — the route-change transcript-loss bug is structurally fixed.
+// Story S3 restructures the route from a 3-state single-session screen into a
+// LIST<->DETAIL shell:
 //
-// The route still renders three states (the list<->detail restructure is S3):
+//   * no project        — empty state, mirrors sibling routes.
+//   * list<->detail      — a persistent left rail (`SessionList`: every session
+//                          + a "New session" button) beside a detail pane.
+//       - a session selected → the turn-grouped card pipeline + composer.
+//       - none selected      → the composer in CREATE mode, centered.
 //
-//   1. No project       — empty state, mirrors sibling routes.
-//   2. No active session — a PRE-LAUNCH panel: an Eidolon picker populated via
-//      `readProjectEidolons` (S3), a `--permission-mode` select, a first-prompt
-//      textarea, and a Launch button. R1: the chosen Eidolon's allow-list is
-//      shown with a clear "headless mode aborts on an out-of-list tool call"
-//      warning. R2: `checkAuth()` gates Launch — a not-logged-in `claude`
-//      disables it.
-//   3. Active session   — the transcript as Eidolon-themed cards grouped by
-//      turn, plus a SessionComposer for follow-up turns.
+// The v0.3.1 pre-launch FORM is GONE: the composer ("a common chatting place")
+// both creates a session and sends every turn. With no session selected, ⌘↵
+// creates one and that text is turn 1; the Eidolon picker + permission-mode
+// select collapse into the composer's optional disclosure panel.
 //
-// The FRONTEND supplies the persona text: Launch reads the chosen Eidolon's
-// `agent.md` and passes its full content as `appendSystemPrompt` — Rust never
-// re-reads it (per S3 / session.types.ts).
+// cwd resolution (FORGE-mandated, spec §5) — before a composer-created
+// session's turn 1, an absolute `project_path` is resolved, ordered:
+//   1. the currently-selected project (`projectPath` prop), if non-null;
+//   2. else the `projectPath` of the most-recently-active existing session;
+//   3. else a blocked "select a project first" state.
+// A session is NEVER created without a resolved absolute `project_path`; the
+// resolved path is passed in `start`'s params and pinned for the session life.
+//
+// The FRONTEND supplies the persona text: a create reads the chosen Eidolon's
+// `agent.md` and passes its full content as `appendSystemPrompt`.
 
 import { RouteHeader } from "@/components/RouteHeader";
 import { AssistantText } from "@/components/session/AssistantText";
@@ -28,6 +31,7 @@ import { RawNdjsonToggle } from "@/components/session/RawNdjsonToggle";
 import { ResultCard } from "@/components/session/ResultCard";
 import { SessionCard } from "@/components/session/SessionCard";
 import { SessionComposer } from "@/components/session/SessionComposer";
+import { SessionList } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
@@ -41,7 +45,7 @@ import type {
 } from "@/lib/session.types";
 import type { TranscriptEntry, UseSessionResult } from "@/lib/useSession";
 import { useSession } from "@/lib/useSession";
-import type { UseSessionsResult } from "@/lib/useSessions";
+import type { SessionSlice, UseSessionsResult } from "@/lib/useSessions";
 import { getRoute } from "@/routes/index";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useState } from "react";
@@ -54,8 +58,60 @@ import "./SessionsRoute.css";
 
 const ROUTE = getRoute("sessions");
 
-/** `--permission-mode` options surfaced in the pre-launch select. */
+/** `--permission-mode` options surfaced in the composer's options panel. */
 const PERMISSION_MODES = ["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"];
+
+// ---------------------------------------------------------------------------
+// cwd resolution (spec §5)
+// ---------------------------------------------------------------------------
+
+/** The outcome of resolving the cwd for a composer-created session. */
+interface CwdResolution {
+  /** The resolved absolute project path, or `null` when none could be found. */
+  path: string | null;
+  /** Which §5 rule produced the path — for diagnostics / tests. */
+  source: "selected-project" | "recent-session" | "none";
+}
+
+/**
+ * Resolve the absolute `project_path` a composer-created session pins, per the
+ * FORGE-mandated §5 order: selected project → most-recently-active session's
+ * project → none. Pure so it is directly unit-testable.
+ *
+ * A `null` `path` means rule 3 — the composer is blocked; no session is ever
+ * created without a resolved absolute path.
+ */
+export function resolveCwd(
+  projectPath: string | null,
+  sessions: Record<string, SessionSlice>,
+): CwdResolution {
+  // Rule 1 — the currently-selected project.
+  if (projectPath && projectPath.trim().length > 0) {
+    return { path: projectPath, source: "selected-project" };
+  }
+
+  // Rule 2 — the project of the most-recently-active existing session.
+  let bestPath: string | null = null;
+  let bestStamp = Number.NEGATIVE_INFINITY;
+  for (const slice of Object.values(sessions)) {
+    const candidate = slice.summary?.projectPath || slice.sessionInfo?.projectPath || "";
+    if (!candidate) continue;
+    const iso =
+      slice.summary?.lastActiveAt ?? slice.summary?.createdAt ?? slice.sessionInfo?.createdAt ?? "";
+    const stamp = Date.parse(iso);
+    const ms = Number.isNaN(stamp) ? 0 : stamp;
+    if (ms >= bestStamp) {
+      bestStamp = ms;
+      bestPath = candidate;
+    }
+  }
+  if (bestPath) {
+    return { path: bestPath, source: "recent-session" };
+  }
+
+  // Rule 3 — no project selected AND no prior session: blocked.
+  return { path: null, source: "none" };
+}
 
 // ---------------------------------------------------------------------------
 // Transcript-grouping helpers
@@ -145,28 +201,35 @@ interface SessionsRouteProps {
 // ---------------------------------------------------------------------------
 
 export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
-  // S2: the route still shows ONE session (the list<->detail shell is S3), but
-  // the session state lives in the store. `activeSessionId` selects which.
+  // S3: the route is a list<->detail shell. `activeSessionId` selects the
+  // detail session; `null` puts the composer into create mode.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const session = useSession(store, activeSessionId);
-  const { status, authStatus } = session;
 
-  // The Roster "Launch" handoff name now comes from the store, not a prop.
+  // The Roster "Launch" handoff name comes from the store (S2).
   const initialEidolonName = store.pendingEidolon;
 
-  // Pre-launch panel form state. `selectedName` seeds from the Roster handoff
-  // (`store.pendingEidolon`) when present, else stays empty for the roster
-  // load to auto-select the first Eidolon.
+  // Composer create-mode form state. The Eidolon picker + permission select
+  // are now an optional disclosure inside the composer (story S3).
   const [eidolons, setEidolons] = useState<ProjectEidolon[]>([]);
   const [eidolonsLoaded, setEidolonsLoaded] = useState(false);
   const [selectedName, setSelectedName] = useState<string>(initialEidolonName ?? "");
   const [permissionMode, setPermissionMode] = useState<string>("default");
-  const [firstPrompt, setFirstPrompt] = useState<string>("");
-  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // -------------------------------------------------------------------------
+  // cwd resolution (spec §5) — the path a composer-created session pins.
+  // -------------------------------------------------------------------------
+  const cwd = useMemo(() => resolveCwd(projectPath, store.sessions), [projectPath, store.sessions]);
+
+  // The Eidolon roster loads from whichever project the cwd resolution landed
+  // on — the selected project, or the most-recent session's project (so the
+  // picker is populated even with no project selected but prior sessions).
+  const rosterPath = cwd.path;
 
   // Load the project's Eidolons + run the auth pre-flight when a project opens.
   useEffect(() => {
-    if (!projectPath) {
+    if (!rosterPath) {
       setEidolons([]);
       setEidolonsLoaded(false);
       setSelectedName("");
@@ -175,12 +238,12 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
 
     let cancelled = false;
     setEidolonsLoaded(false);
-    readProjectEidolons(projectPath)
+    readProjectEidolons(rosterPath)
       .then((roster) => {
         if (cancelled) return;
         setEidolons(roster);
-        // Prefer the S8 handoff name when it matches a project Eidolon, else
-        // keep any prior selection, else auto-select the first (S7 behaviour).
+        // Prefer the Roster handoff name when it matches a project Eidolon,
+        // else keep any prior selection, else auto-select the first.
         const handoff =
           initialEidolonName && roster.some((e) => e.name === initialEidolonName)
             ? initialEidolonName
@@ -194,53 +257,80 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
         if (!cancelled) setEidolonsLoaded(true);
       });
 
-    // R2: pre-flight the `claude` login so the Launch gate is ready.
-    session.checkAuth();
+    // Pre-flight the `claude` login so the create gate is ready.
+    store.checkAuth();
 
     return () => {
       cancelled = true;
     };
-    // session.checkAuth is a stable useCallback; projectPath drives the reload.
-    // initialEidolonName re-runs the load so a fresh S8 handoff re-seeds the pick.
-  }, [projectPath, initialEidolonName]);
+    // store.checkAuth is a stable useCallback; rosterPath drives the reload,
+    // initialEidolonName re-runs the load so a fresh handoff re-seeds the pick.
+  }, [rosterPath, initialEidolonName]);
 
   const selectedEidolon = useMemo(
     () => eidolons.find((e) => e.name === selectedName) ?? null,
     [eidolons, selectedName],
   );
 
-  // R2: a not-logged-in `claude` disables Launch.
-  const loggedIn = authStatus?.loggedIn === true;
-  const canLaunch =
-    Boolean(projectPath) && Boolean(selectedEidolon) && firstPrompt.trim().length > 0 && loggedIn;
+  // The create action is ready only when the cwd resolved AND `claude` is
+  // logged in (spec §5 step 3 — no session without a resolved abs path).
+  const loggedIn = store.authStatus?.loggedIn === true;
+  const createReady = cwd.path !== null && loggedIn;
 
-  async function handleLaunch() {
-    if (!projectPath || !selectedEidolon) return;
-    setLaunchError(null);
+  /** The human reason create is blocked — empty when ready. */
+  const cwdBlockedReason = useMemo(() => {
+    if (cwd.path === null) {
+      return "Select a project folder from the sidebar to start a session.";
+    }
+    if (!loggedIn && store.authStatus) {
+      return store.authStatus.detail || "Not logged in to claude — run `claude` once to log in.";
+    }
+    return "";
+  }, [cwd.path, loggedIn, store.authStatus]);
+
+  // -------------------------------------------------------------------------
+  // Composer actions
+  // -------------------------------------------------------------------------
+
+  /**
+   * Create a session from the composer (create mode) and dispatch turn 1.
+   *
+   * cwd resolution (§5) has ALREADY run — `cwd.path` is the resolved absolute
+   * path, immutably pinned into the session via `start`'s `projectPath`. The
+   * create is BLOCKED when `cwd.path` is `null`, so a session is never started
+   * without a resolved absolute project path.
+   */
+  async function handleCreate(prompt: string, opts: { eidolonName: string }) {
+    // §5 P0 gate — never create without a resolved absolute project path.
+    if (cwd.path === null) return;
+    setCreateError(null);
 
     // The FRONTEND resolves the persona text — read the chosen Eidolon's
     // agent.md and pass its full content as appendSystemPrompt.
     let appendSystemPrompt = "";
-    try {
-      appendSystemPrompt = await readTextFile(selectedEidolon.agentMdPath);
-    } catch {
-      // agent.md unreadable — proceed with an empty persona rather than abort;
-      // surface a soft note so the user knows the persona did not load.
-      setLaunchError(
-        `Could not read ${selectedEidolon.agentMdPath} — launching without a persona prompt.`,
-      );
+    let allowedTools: string[] = [];
+    const eidolon = eidolons.find((e) => e.name === opts.eidolonName) ?? selectedEidolon;
+    if (eidolon) {
+      allowedTools = eidolon.allowedTools;
+      try {
+        appendSystemPrompt = await readTextFile(eidolon.agentMdPath);
+      } catch {
+        // agent.md unreadable — proceed with an empty persona; surface a note.
+        setCreateError(
+          `Could not read ${eidolon.agentMdPath} — launching without a persona prompt.`,
+        );
+      }
     }
 
-    // S2: `start` ADDS a session to the store and returns its id — select it
-    // so the route switches to the active-session view. The Roster handoff is
-    // consumed once the session opens.
+    // `start` ADDS a session to the store and returns its id — select it so
+    // the detail pane opens. The resolved cwd is pinned here, before turn 1.
     const newId = await store.start({
-      projectPath,
-      eidolonName: selectedEidolon.name,
+      projectPath: cwd.path,
+      eidolonName: eidolon?.name ?? "",
       permissionMode,
       appendSystemPrompt,
-      allowedTools: selectedEidolon.allowedTools,
-      firstPrompt: firstPrompt.trim(),
+      allowedTools,
+      firstPrompt: prompt,
     });
     if (newId) {
       setActiveSessionId(newId);
@@ -248,10 +338,21 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     }
   }
 
+  /** Select a session row — open its detail; reopen it if not yet hydrated. */
+  function handleSelect(sessionId: string) {
+    setActiveSessionId(sessionId);
+    const slice = store.sessions[sessionId];
+    if (slice && !slice.hydrated) {
+      void store.reopen(sessionId);
+    }
+  }
+
   // ------------------------------------------------------------------
-  // State 1 — no project
+  // State 1 — no project AND no prior session: the no-project empty state
   // ------------------------------------------------------------------
-  if (!projectPath) {
+  // The shell still renders once a project OR a prior session exists — the
+  // empty state is reserved for a truly fresh, project-less app.
+  if (!projectPath && Object.keys(store.sessions).length === 0) {
     return (
       <div className="route-pane">
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
@@ -266,181 +367,55 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
   }
 
   // ------------------------------------------------------------------
-  // State 3 — an active (or just-failed) session: transcript + composer
-  // ------------------------------------------------------------------
-  // A session is active iff one is selected AND still present in the store
-  // (it could have been removed elsewhere). Deselecting returns to the
-  // pre-launch panel WITHOUT destroying the session — it stays in the store.
-  const hasSession = activeSessionId !== null && status !== "idle";
-  if (hasSession) {
-    return (
-      <ActiveSession
-        session={session}
-        eidolon={selectedEidolon}
-        permissionMode={permissionMode}
-        onEnd={() => setActiveSessionId(null)}
-      />
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // State 2 — no active session: the PRE-LAUNCH panel
+  // State 2 — the list<->detail shell
   // ------------------------------------------------------------------
   return (
-    <div className="route-pane">
+    <div className="route-pane session-shell">
       <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
 
-      <div className="session-prelaunch">
-        {/* R2 — auth gate */}
-        {authStatus && !loggedIn && (
-          <div className="session-auth-banner" data-tone="error" role="alert">
-            <span className="session-auth-glyph" aria-hidden="true">
-              ⚠
-            </span>
-            <div className="session-auth-text">
-              <strong>Not logged in to claude.</strong>
-              <span>
-                {authStatus.detail || "Run `claude` once in a terminal to log in."} Launch is
-                disabled until the `claude` CLI reports a logged-in account.
-              </span>
-            </div>
-            <button
-              type="button"
-              className="route-verb-btn"
-              onClick={() => session.checkAuth()}
-              aria-label="Re-check claude login"
-            >
-              Re-check
-            </button>
-          </div>
-        )}
-        {authStatus && loggedIn && (
-          <div className="session-auth-banner" data-tone="ok">
-            <span className="session-auth-glyph" aria-hidden="true">
-              ✓
-            </span>
-            <div className="session-auth-text">
-              <span>{authStatus.detail || "Logged in to claude."}</span>
-            </div>
-          </div>
-        )}
+      <div className="session-shell-body">
+        <SessionList
+          sessions={store.sessions}
+          activeSessionId={activeSessionId}
+          onSelect={handleSelect}
+          onNewSession={() => setActiveSessionId(null)}
+          onRemove={(id) => {
+            void store.remove(id);
+            if (id === activeSessionId) setActiveSessionId(null);
+          }}
+        />
 
-        {/* Eidolon picker */}
-        <div className="session-field">
-          <label className="session-field-label" htmlFor="session-eidolon-select">
-            Eidolon
-          </label>
-          {eidolonsLoaded && eidolons.length === 0 ? (
-            <p className="session-field-note">
-              No Eidolons found in this project. Add members to <code>eidolons.yaml</code> first.
-            </p>
+        <div className="session-detail">
+          {activeSessionId !== null && session.status !== "idle" ? (
+            <DetailPane session={session} />
           ) : (
-            <select
-              id="session-eidolon-select"
-              className="session-select"
-              value={selectedName}
-              onChange={(e) => setSelectedName(e.target.value)}
-              aria-label="Select an Eidolon to launch"
-            >
-              {!eidolonsLoaded && <option value="">Loading…</option>}
-              {eidolons.map((e) => (
-                <option key={e.name} value={e.name}>
-                  {e.name}
-                  {e.role ? ` — ${e.role}` : ""}
-                </option>
-              ))}
-            </select>
+            <CreatePane
+              authBlocked={Boolean(store.authStatus) && !loggedIn}
+              authDetail={store.authStatus?.detail ?? ""}
+              onRecheckAuth={() => store.checkAuth()}
+              createError={createError}
+              composer={
+                <SessionComposer
+                  mode="create"
+                  canSend={false}
+                  turnRunning={false}
+                  onSend={() => {}}
+                  onCancel={() => {}}
+                  onCreate={(prompt, opts) => void handleCreate(prompt, opts)}
+                  createReady={createReady}
+                  cwdBlockedReason={cwdBlockedReason}
+                  resolvedProjectPath={cwd.path}
+                  eidolons={eidolons}
+                  eidolonsLoaded={eidolonsLoaded}
+                  selectedEidolon={selectedName}
+                  onSelectEidolon={setSelectedName}
+                  permissionModes={PERMISSION_MODES}
+                  permissionMode={permissionMode}
+                  onSelectPermissionMode={setPermissionMode}
+                />
+              }
+            />
           )}
-          {selectedEidolon?.description && (
-            <p className="session-field-note">{selectedEidolon.description}</p>
-          )}
-        </div>
-
-        {/* R1 — allow-list + headless-abort warning */}
-        {selectedEidolon && (
-          <div className="session-allowlist" role="note">
-            <div className="session-allowlist-head">
-              <span className="session-allowlist-title">Allowed tools</span>
-              <span className="session-allowlist-count">
-                {selectedEidolon.allowedTools.length} tool
-                {selectedEidolon.allowedTools.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            {selectedEidolon.allowedTools.length > 0 ? (
-              <div className="session-allowlist-tags">
-                {selectedEidolon.allowedTools.map((tool) => (
-                  <span key={tool} className="session-tool-tag">
-                    {tool}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="session-field-note">
-                This Eidolon declares no tools — it will run text-only.
-              </p>
-            )}
-            <p className="session-allowlist-warn">
-              <span aria-hidden="true">⚠ </span>
-              Headless mode: a tool call <strong>outside this allow-list aborts the run</strong>.
-              There is no interactive approval in v0.3 — widen the Eidolon's{" "}
-              <code>allowed-tools</code> in its <code>agent.md</code> if a turn needs more.
-            </p>
-          </div>
-        )}
-
-        {/* Permission mode */}
-        <div className="session-field">
-          <label className="session-field-label" htmlFor="session-mode-select">
-            Permission mode
-          </label>
-          <select
-            id="session-mode-select"
-            className="session-select"
-            value={permissionMode}
-            onChange={(e) => setPermissionMode(e.target.value)}
-            aria-label="Select the permission mode"
-          >
-            {PERMISSION_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* First prompt */}
-        <div className="session-field">
-          <label className="session-field-label" htmlFor="session-first-prompt">
-            First prompt
-          </label>
-          <textarea
-            id="session-first-prompt"
-            className="session-composer-input"
-            placeholder="What should the Eidolon do first?"
-            value={firstPrompt}
-            onChange={(e) => setFirstPrompt(e.target.value)}
-            rows={4}
-            aria-label="First prompt for the session"
-          />
-        </div>
-
-        {launchError && (
-          <p className="session-field-note" data-tone="warn">
-            {launchError}
-          </p>
-        )}
-
-        {/* Launch */}
-        <div className="session-prelaunch-actions">
-          <button
-            type="button"
-            className="session-send-btn"
-            onClick={() => void handleLaunch()}
-            disabled={!canLaunch}
-            aria-label="Launch the Eidolon session"
-          >
-            Launch session
-          </button>
         </div>
       </div>
     </div>
@@ -448,22 +423,80 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
 }
 
 // ---------------------------------------------------------------------------
-// ActiveSession — transcript + composer for a live (or finished) session
+// CreatePane — the empty/create detail state, centered on the composer
 // ---------------------------------------------------------------------------
 
-interface ActiveSessionProps {
-  session: UseSessionResult;
-  eidolon: ProjectEidolon | null;
-  permissionMode: string;
-  /**
-   * Deselect the session and return to the pre-launch panel. S2: this does
-   * NOT destroy the session — it stays live in the store, so re-selecting it
-   * (or a route change) keeps its transcript.
-   */
-  onEnd: () => void;
+interface CreatePaneProps {
+  authBlocked: boolean;
+  authDetail: string;
+  onRecheckAuth: () => void;
+  createError: string | null;
+  composer: React.ReactNode;
 }
 
-function ActiveSession({ session, eidolon, permissionMode, onEnd }: ActiveSessionProps) {
+function CreatePane({
+  authBlocked,
+  authDetail,
+  onRecheckAuth,
+  createError,
+  composer,
+}: CreatePaneProps) {
+  return (
+    <div className="session-create">
+      <div className="session-create-intro">
+        <span className="session-create-glyph" aria-hidden="true">
+          ⬡
+        </span>
+        <p className="session-create-heading">Start a session</p>
+        <p className="session-create-body">
+          Type what you want to do and press <kbd>⌘↵</kbd> — the session opens on your first
+          message. Pick a specific Eidolon under Options, or just send.
+        </p>
+      </div>
+
+      {authBlocked && (
+        <div className="session-auth-banner" data-tone="error" role="alert">
+          <span className="session-auth-glyph" aria-hidden="true">
+            ⚠
+          </span>
+          <div className="session-auth-text">
+            <strong>Not logged in to claude.</strong>
+            <span>
+              {authDetail || "Run `claude` once in a terminal to log in."} Starting a session is
+              disabled until the `claude` CLI reports a logged-in account.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="route-verb-btn"
+            onClick={onRecheckAuth}
+            aria-label="Re-check claude login"
+          >
+            Re-check
+          </button>
+        </div>
+      )}
+
+      {createError && (
+        <p className="session-field-note" data-tone="warn">
+          {createError}
+        </p>
+      )}
+
+      {composer}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DetailPane — transcript + composer for a live (or finished) session
+// ---------------------------------------------------------------------------
+
+interface DetailPaneProps {
+  session: UseSessionResult;
+}
+
+function DetailPane({ session }: DetailPaneProps) {
   const { status, transcript, sessionInfo } = session;
 
   // Model + tools come from the `init` event once it lands.
@@ -476,28 +509,20 @@ function ActiveSession({ session, eidolon, permissionMode, onEnd }: ActiveSessio
   const turns = useMemo(() => groupByTurn(transcript), [transcript]);
   const toolResults = useMemo(() => indexToolResults(transcript), [transcript]);
 
-  const eidolonName = sessionInfo?.eidolonName ?? eidolon?.name ?? "Eidolon";
+  const eidolonName = sessionInfo?.eidolonName || "Eidolon";
   const turnRunning = status === "turn-running" || status === "launching";
   const canSend = status === "awaiting-input";
+  // The Eidolon role line is not carried on `SessionInfo` — left blank here
+  // (the v0.3.0 pre-launch panel sourced it from the picked `ProjectEidolon`,
+  // which the list<->detail shell no longer threads into the detail pane).
+  const eidolonRole = "";
 
   return (
-    <div className="route-pane">
-      <div className="session-active-head">
-        <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
-        <button
-          type="button"
-          className="route-verb-btn"
-          onClick={onEnd}
-          aria-label="Return to the launcher (the session stays open)"
-        >
-          Back to launcher
-        </button>
-      </div>
-
+    <div className="session-detail-inner">
       <SessionCard
         eidolonName={eidolonName}
-        role={eidolon?.role ?? ""}
-        permissionMode={sessionInfo?.permissionMode ?? permissionMode}
+        role={eidolonRole}
+        permissionMode={sessionInfo?.permissionMode ?? "default"}
         model={init?.model ?? null}
         tools={init?.tools ?? []}
         status={status}
@@ -530,10 +555,23 @@ function ActiveSession({ session, eidolon, permissionMode, onEnd }: ActiveSessio
       <RawNdjsonToggle transcript={transcript} />
 
       <SessionComposer
+        mode="detail"
         canSend={canSend}
         turnRunning={turnRunning}
         onSend={(prompt) => session.sendTurn(prompt)}
         onCancel={() => session.cancel()}
+        // create-mode props are unused in detail mode — supplied inert.
+        onCreate={() => {}}
+        createReady={false}
+        cwdBlockedReason=""
+        resolvedProjectPath={null}
+        eidolons={[]}
+        eidolonsLoaded={true}
+        selectedEidolon=""
+        onSelectEidolon={() => {}}
+        permissionModes={PERMISSION_MODES}
+        permissionMode="default"
+        onSelectPermissionMode={() => {}}
       />
     </div>
   );

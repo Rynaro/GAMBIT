@@ -180,9 +180,9 @@ function infoFromSummary(s: SessionSummary): SessionInfo {
   return {
     sessionId: s.uuid,
     eidolonName: s.eidolonName,
-    // projectPath / permissionMode are not in the summary — filled by
-    // `load_session` when the session is opened. Empty until then.
-    projectPath: "",
+    // projectPath rides the summary (story S3) so the rail / cwd-resolution
+    // can read it pre-open; permissionMode is still filled by `load_session`.
+    projectPath: s.projectPath,
     permissionMode: "",
     status: s.status,
     createdAt: s.createdAt,

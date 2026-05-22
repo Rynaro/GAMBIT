@@ -187,6 +187,7 @@ impl SessionRecord {
             eidolon_name: self.eidolon_name.clone(),
             is_cortex: self.is_cortex,
             title: self.title.clone(),
+            project_path: self.project_path.clone(),
             status: self.status.clone(),
             model: self.model.clone(),
             created_at: self.created_at.clone(),
@@ -215,6 +216,13 @@ pub struct SessionSummary {
     pub is_cortex: bool,
     /// Title — derived from the turn-1 prompt or user-set.
     pub title: String,
+    /// The pinned absolute working directory `claude` was spawned in.
+    ///
+    /// Surfaced on the summary (story S3) so the composer-as-creator cwd
+    /// resolution can default to the most-recently-active session's project
+    /// without a `load_session` round trip.
+    #[serde(default)]
+    pub project_path: String,
     /// Coarse status: `idle` / `running` / `ended` / `failed`.
     pub status: String,
     /// The serving model, or `None` if not yet captured.
@@ -545,6 +553,7 @@ mod tests {
             "eidolonName",
             "isCortex",
             "title",
+            "projectPath",
             "status",
             "model",
             "createdAt",
@@ -571,6 +580,7 @@ mod tests {
         assert_eq!(summary.uuid, record.uuid);
         assert_eq!(summary.eidolon_name, record.eidolon_name);
         assert_eq!(summary.title, record.title);
+        assert_eq!(summary.project_path, record.project_path);
         assert_eq!(summary.status, record.status);
         assert_eq!(summary.model, record.model);
         assert_eq!(summary.cumulative_input_tokens, 1500);

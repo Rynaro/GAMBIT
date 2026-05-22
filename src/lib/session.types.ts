@@ -318,6 +318,15 @@ export interface SessionSummary {
   isCortex: boolean;
   /** Title — derived from the turn-1 prompt or user-set. */
   title: string;
+  /**
+   * The pinned absolute working directory `claude` was spawned in.
+   *
+   * Surfaced on the summary (story S3) so the composer-as-creator cwd
+   * resolution can default to the most-recently-active session's project
+   * without a `load_session` round trip. May be `""` on an index entry
+   * written by an older build (the Rust field is `#[serde(default)]`).
+   */
+  projectPath: string;
   /** Coarse status: `idle` / `running` / `ended` / `failed`. */
   status: string;
   /** The serving model, or null if not yet captured. */
