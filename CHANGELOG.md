@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-05-22
+
+The fourth v0.4.x minor — power-user features. Completes the v0.4.x round.
+
+### Added
+
+- **Conversation forking** — fork a session to explore an alternate path; the
+  fork inherits the original's conversation (via claude-code's `--fork-session`)
+  and its configuration, leaving the original untouched.
+- **@-file mentions** — type `@` in the composer to pick a project file from a
+  filtered dropdown; selecting it inserts the relative path.
+- **Session + transcript search** — a filter box on the session rail, and an
+  in-conversation find (⌘/Ctrl+F) that highlights matches and steps through
+  them with a count.
+
 ## [0.4.3] — 2026-05-22
 
 The third v0.4.x minor — session interaction.
