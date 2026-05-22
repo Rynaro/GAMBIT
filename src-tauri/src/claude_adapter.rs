@@ -204,6 +204,68 @@ pub struct Usage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
+/// The cozy delta pre-extracted from a `stream_event`'s inner `event` (story
+/// S6/S7).
+///
+/// `claude --include-partial-messages` emits Anthropic SSE-shaped inner events
+/// (`message_start`, `content_block_start`, `content_block_delta`,
+/// `message_delta`, …). [`extract_stream_delta`] recognises only the four the
+/// cozy UI needs and folds them into this enum; every other inner shape — and
+/// every malformed one — yields `None` so the event is a safe no-op.
+///
+/// `parent_tool_use_id` is carried alongside (on [`StreamEvent`]'s extraction)
+/// rather than inside each variant: a non-null value means the inner event
+/// originated from a self-routed subagent, which the UI renders nested.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum StreamDelta {
+    /// `content_block_delta` with `delta.type == "text_delta"` — an
+    /// incremental assistant-text fragment.
+    Text {
+        /// The text fragment to append to the in-flight assistant block.
+        text: String,
+    },
+    /// `content_block_delta` with `delta.type == "input_json_delta"` — an
+    /// incremental fragment of a `tool_use` block's JSON input.
+    ToolInput {
+        /// The content block's index within the message (the `tool_use` id is
+        /// only on the paired `content_block_start`, so the index correlates).
+        index: u64,
+        /// The `partial_json` fragment — concatenate across deltas to rebuild
+        /// the tool input.
+        partial_json: String,
+    },
+    /// `content_block_start` with `content_block.type == "tool_use"` — a tool
+    /// call is beginning; the UI shows a live "running" chip from here.
+    ToolStart {
+        /// The content block's index within the message.
+        index: u64,
+        /// The tool-use id (`tool_use.id`) — pairs with the eventual
+        /// `tool_result.tool_use_id`.
+        tool_use_id: String,
+        /// The tool name.
+        tool_name: String,
+    },
+    /// `message_start` / `message_delta` — incremental token usage (story S7's
+    /// live mid-turn context-gauge feed).
+    Usage {
+        /// The incremental usage block carried on the inner event.
+        usage: Usage,
+    },
+}
+
+/// The result of extracting a cozy delta from a `stream_event` inner `event`.
+///
+/// Pairs the optional [`StreamDelta`] with the inner event's top-level
+/// `parent_tool_use_id`: a non-null id means the inner event came from a
+/// self-routed subagent, so the UI renders the activity nested.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StreamDeltaExtraction {
+    /// The recognised cozy delta, or `None` for an unmodelled inner shape.
+    pub delta: Option<StreamDelta>,
+    /// The inner event's `parent_tool_use_id`, when non-null — a subagent marker.
+    pub parent_tool_use_id: Option<String>,
+}
+
 /// The typed taxonomy of `claude` stream-json NDJSON lines.
 ///
 /// Covers what a cozy session UI needs; anything unrecognised falls through
@@ -238,11 +300,25 @@ pub enum ParsedEvent {
         content: Vec<ContentBlock>,
     },
     /// `type: "stream_event"` — a partial-message delta (only present with
-    /// `--include-partial-messages`). The raw inner event rides along so the
-    /// UI can render incremental text without us modelling every delta shape.
+    /// `--include-partial-messages`).
+    ///
+    /// Story S6/S7 stops treating the inner `event` as fully opaque: the raw
+    /// `event` still rides along verbatim (so nothing is lost), but the cozy
+    /// deltas the UI needs are pre-extracted into [`StreamDelta`]. The
+    /// extraction is permissive — an unrecognised inner shape yields
+    /// `delta = None` and the event degrades to a harmless no-op, never an
+    /// error (see [`extract_stream_delta`]).
     StreamEvent {
-        /// The raw `event` payload, verbatim.
+        /// The raw `event` payload, verbatim — kept for forward-compat / the
+        /// raw NDJSON toggle.
         event: Option<serde_json::Value>,
+        /// The pre-extracted cozy delta, when the inner shape is one we model
+        /// (text fragment / tool input fragment / tool start / usage). `None`
+        /// for an unmodelled inner shape — the caller emits nothing.
+        delta: Option<StreamDelta>,
+        /// The inner event's top-level `parent_tool_use_id`, when non-null — a
+        /// self-routed-subagent marker the UI renders nested.
+        parent_tool_use_id: Option<String>,
     },
     /// `type: "result"` — the terminal event ending a turn.
     Result {
@@ -317,10 +393,157 @@ struct MessageLine {
 }
 
 /// Permissive shape for `stream_event` lines.
+///
+/// `parent_tool_use_id` rides on the OUTER line envelope (alongside
+/// `type: "stream_event"`) — claude-code stamps it there when the partial
+/// message originates from a self-routed subagent. It may ALSO appear on the
+/// inner `event`; [`extract_stream_delta`] checks the inner copy and the outer
+/// one wins when both are present.
 #[derive(Debug, Default, Deserialize)]
 struct StreamEventLine {
     #[serde(default)]
     event: Option<serde_json::Value>,
+    #[serde(default)]
+    parent_tool_use_id: Option<String>,
+}
+
+// --- stream_event inner-event extraction (story S6 / S7) -------------------
+//
+// The inner `event` is an Anthropic SSE-shaped object. Every struct below is
+// fully permissive (`#[serde(default)]`, all fields optional) so an unknown
+// or partial inner shape deserialises silently — `extract_stream_delta` then
+// degrades to `delta = None` rather than failing.
+
+/// Permissive shape for a `stream_event`'s inner `event` object.
+#[derive(Debug, Default, Deserialize)]
+struct InnerStreamEvent {
+    /// Inner event kind: `message_start` / `content_block_start` /
+    /// `content_block_delta` / `message_delta` / `content_block_stop` / …
+    #[serde(default, rename = "type")]
+    kind: String,
+    /// Content-block index — present on `content_block_start` / `_delta`.
+    #[serde(default)]
+    index: Option<u64>,
+    /// The per-block delta — present on `content_block_delta`.
+    #[serde(default)]
+    delta: Option<InnerDelta>,
+    /// The starting content block — present on `content_block_start`.
+    #[serde(default)]
+    content_block: Option<InnerContentBlock>,
+    /// The message envelope — present on `message_start` (carries `usage`).
+    #[serde(default)]
+    message: Option<InnerMessageUsage>,
+    /// Token usage — present directly on `message_delta`.
+    #[serde(default)]
+    usage: Option<Usage>,
+    /// Non-null when the inner event originated from a self-routed subagent.
+    #[serde(default)]
+    parent_tool_use_id: Option<String>,
+}
+
+/// Permissive shape for a `content_block_delta`'s `delta` object.
+#[derive(Debug, Default, Deserialize)]
+struct InnerDelta {
+    /// Delta kind: `text_delta` / `input_json_delta` / `thinking_delta` / …
+    #[serde(default, rename = "type")]
+    kind: String,
+    /// Text fragment — present on a `text_delta`.
+    #[serde(default)]
+    text: Option<String>,
+    /// JSON-input fragment — present on an `input_json_delta`.
+    #[serde(default)]
+    partial_json: Option<String>,
+}
+
+/// Permissive shape for a `content_block_start`'s `content_block` object.
+#[derive(Debug, Default, Deserialize)]
+struct InnerContentBlock {
+    /// Block kind: `tool_use` / `text` / `thinking` / …
+    #[serde(default, rename = "type")]
+    kind: String,
+    /// Tool-use id — present on a `tool_use` block.
+    #[serde(default)]
+    id: Option<String>,
+    /// Tool name — present on a `tool_use` block.
+    #[serde(default)]
+    name: Option<String>,
+}
+
+/// Permissive shape for a `message_start`'s `message` object — only the
+/// `usage` block is of interest.
+#[derive(Debug, Default, Deserialize)]
+struct InnerMessageUsage {
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+/// Extract the cozy [`StreamDelta`] from a `stream_event`'s inner `event`.
+///
+/// Permissive and total: every recognised inner shape folds into a
+/// [`StreamDelta`]; an unrecognised inner shape, a missing `event`, or a value
+/// that fails the (already very permissive) deserialise all yield
+/// `delta = None`. The inner event's `parent_tool_use_id` is carried out
+/// regardless of whether a delta was recognised — a non-null value marks the
+/// activity as self-routed-subagent work.
+///
+/// Recognised shapes (story S6/S7):
+///   * `content_block_delta` + `delta.type == "text_delta"`        → `Text`
+///   * `content_block_delta` + `delta.type == "input_json_delta"`  → `ToolInput`
+///   * `content_block_start` + `content_block.type == "tool_use"`  → `ToolStart`
+///   * `message_start` / `message_delta` carrying `usage`          → `Usage`
+pub fn extract_stream_delta(event: Option<&serde_json::Value>) -> StreamDeltaExtraction {
+    let Some(value) = event else {
+        return StreamDeltaExtraction::default();
+    };
+    let inner: InnerStreamEvent = match serde_json::from_value(value.clone()) {
+        Ok(i) => i,
+        // A non-object / unexpected inner value — degrade to a no-op.
+        Err(_) => return StreamDeltaExtraction::default(),
+    };
+
+    let parent_tool_use_id = inner
+        .parent_tool_use_id
+        .filter(|s| !s.is_empty());
+
+    let delta = match inner.kind.as_str() {
+        "content_block_delta" => match inner.delta {
+            Some(d) => match d.kind.as_str() {
+                "text_delta" => d.text.map(|text| StreamDelta::Text { text }),
+                "input_json_delta" => d.partial_json.map(|partial_json| StreamDelta::ToolInput {
+                    index: inner.index.unwrap_or(0),
+                    partial_json,
+                }),
+                // `thinking_delta` and friends are not modelled — no-op.
+                _ => None,
+            },
+            None => None,
+        },
+        "content_block_start" => match inner.content_block {
+            Some(cb) if cb.kind == "tool_use" => match (cb.id, cb.name) {
+                (Some(tool_use_id), Some(tool_name)) => Some(StreamDelta::ToolStart {
+                    index: inner.index.unwrap_or(0),
+                    tool_use_id,
+                    tool_name,
+                }),
+                // A `tool_use` start missing id or name — cannot pair it; skip.
+                _ => None,
+            },
+            // A `text` / `thinking` block start carries no cozy delta.
+            _ => None,
+        },
+        "message_start" => inner
+            .message
+            .and_then(|m| m.usage)
+            .map(|usage| StreamDelta::Usage { usage }),
+        "message_delta" => inner.usage.map(|usage| StreamDelta::Usage { usage }),
+        // `content_block_stop`, `message_stop`, `ping`, anything newer — no-op.
+        _ => None,
+    };
+
+    StreamDeltaExtraction {
+        delta,
+        parent_tool_use_id,
+    }
 }
 
 /// Permissive shape for the terminal `result` line.
@@ -397,7 +620,23 @@ pub fn parse_line(line: &str) -> ParsedEvent {
             Err(_) => unknown(line),
         },
         "stream_event" => match serde_json::from_str::<StreamEventLine>(line) {
-            Ok(s) => ParsedEvent::StreamEvent { event: s.event },
+            Ok(s) => {
+                // Story S6/S7 — pre-extract the cozy delta from the inner
+                // event. The extraction is permissive: an unmodelled inner
+                // shape simply yields `delta = None`, never an error.
+                let extraction = extract_stream_delta(s.event.as_ref());
+                // `parent_tool_use_id` rides on the OUTER envelope; the outer
+                // copy wins, the inner one is the fallback (self-routed marker).
+                let parent_tool_use_id = s
+                    .parent_tool_use_id
+                    .filter(|p| !p.is_empty())
+                    .or(extraction.parent_tool_use_id);
+                ParsedEvent::StreamEvent {
+                    event: s.event,
+                    delta: extraction.delta,
+                    parent_tool_use_id,
+                }
+            }
             Err(_) => unknown(line),
         },
         "result" => match serde_json::from_str::<ResultLine>(line) {
@@ -578,16 +817,159 @@ mod tests {
         }
     }
 
-    /// `stream_event` partial delta → `ParsedEvent::StreamEvent`.
+    /// `stream_event` text delta → `ParsedEvent::StreamEvent` with a `Text`
+    /// delta pre-extracted; the raw `event` still rides along.
     #[test]
-    fn parse_line_stream_event() {
-        let line = r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"par"}}}"#;
+    fn parse_line_stream_event_text_delta() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"par"}}}"#;
         match parse_line(line) {
-            ParsedEvent::StreamEvent { event } => {
-                assert!(event.is_some());
+            ParsedEvent::StreamEvent {
+                event,
+                delta,
+                parent_tool_use_id,
+            } => {
+                assert!(event.is_some(), "raw event preserved");
+                assert_eq!(delta, Some(StreamDelta::Text { text: "par".into() }));
+                assert_eq!(parent_tool_use_id, None);
             }
             other => panic!("expected StreamEvent, got {other:?}"),
         }
+    }
+
+    /// `stream_event` `input_json_delta` → a `ToolInput` delta carrying the
+    /// block index + the `partial_json` fragment.
+    #[test]
+    fn parse_line_stream_event_input_json_delta() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"file"}}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { delta, .. } => {
+                assert_eq!(
+                    delta,
+                    Some(StreamDelta::ToolInput {
+                        index: 2,
+                        partial_json: "{\"file".into(),
+                    })
+                );
+            }
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// `stream_event` `content_block_start(tool_use)` → a `ToolStart` delta
+    /// carrying the tool id + name.
+    #[test]
+    fn parse_line_stream_event_tool_start() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tu_42","name":"Read"}}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { delta, .. } => {
+                assert_eq!(
+                    delta,
+                    Some(StreamDelta::ToolStart {
+                        index: 1,
+                        tool_use_id: "tu_42".into(),
+                        tool_name: "Read".into(),
+                    })
+                );
+            }
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// `stream_event` `message_delta` → a `Usage` delta (story S7's live feed).
+    #[test]
+    fn parse_line_stream_event_message_delta_usage() {
+        let line = r#"{"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":1200,"output_tokens":48,"cache_read_input_tokens":900}}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { delta, .. } => match delta {
+                Some(StreamDelta::Usage { usage }) => {
+                    assert_eq!(usage.input_tokens, Some(1200));
+                    assert_eq!(usage.output_tokens, Some(48));
+                    assert_eq!(usage.cache_read_input_tokens, Some(900));
+                }
+                other => panic!("expected Usage delta, got {other:?}"),
+            },
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// `stream_event` `message_start` carrying nested `message.usage` → a
+    /// `Usage` delta.
+    #[test]
+    fn parse_line_stream_event_message_start_usage() {
+        let line = r#"{"type":"stream_event","event":{"type":"message_start","message":{"role":"assistant","usage":{"input_tokens":500}}}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { delta, .. } => match delta {
+                Some(StreamDelta::Usage { usage }) => {
+                    assert_eq!(usage.input_tokens, Some(500));
+                }
+                other => panic!("expected Usage delta, got {other:?}"),
+            },
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// A `stream_event` carrying `parent_tool_use_id` surfaces it — the
+    /// self-routed-subagent marker — alongside the delta.
+    #[test]
+    fn parse_line_stream_event_parent_tool_use_id() {
+        let line = r#"{"type":"stream_event","parent_tool_use_id":"tu_parent","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"sub"}}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent {
+                delta,
+                parent_tool_use_id,
+                ..
+            } => {
+                assert_eq!(delta, Some(StreamDelta::Text { text: "sub".into() }));
+                assert_eq!(parent_tool_use_id.as_deref(), Some("tu_parent"));
+            }
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// An UNRECOGNISED inner `stream_event` shape is a safe no-op — the event
+    /// still parses, but `delta` is `None` (never an error).
+    #[test]
+    fn parse_line_stream_event_unknown_inner_is_noop() {
+        let line = r#"{"type":"stream_event","event":{"type":"content_block_stop","index":0}}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { event, delta, .. } => {
+                assert!(event.is_some(), "raw event still preserved");
+                assert_eq!(delta, None, "unmodelled inner shape → no delta");
+            }
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+
+        // A `thinking_delta` content_block_delta is also unmodelled.
+        let thinking = r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"hmm"}}}"#;
+        match parse_line(thinking) {
+            ParsedEvent::StreamEvent { delta, .. } => assert_eq!(delta, None),
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// A `stream_event` with NO `event` at all degrades to a no-op delta.
+    #[test]
+    fn parse_line_stream_event_missing_event() {
+        let line = r#"{"type":"stream_event"}"#;
+        match parse_line(line) {
+            ParsedEvent::StreamEvent { event, delta, .. } => {
+                assert!(event.is_none());
+                assert_eq!(delta, None);
+            }
+            other => panic!("expected StreamEvent, got {other:?}"),
+        }
+    }
+
+    /// `extract_stream_delta` on a non-object inner value never panics — it
+    /// just yields an empty extraction.
+    #[test]
+    fn extract_stream_delta_tolerates_garbage() {
+        let garbage = serde_json::json!("not an object");
+        assert_eq!(
+            extract_stream_delta(Some(&garbage)),
+            StreamDeltaExtraction::default()
+        );
+        assert_eq!(extract_stream_delta(None), StreamDeltaExtraction::default());
     }
 
     /// `result` → `ParsedEvent::Result` with terminal fields populated.

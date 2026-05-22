@@ -17,7 +17,8 @@
 // session components.
 
 import type { AuthStatus, ParsedEvent, SessionInfo, StartSessionParams } from "@/lib/session.types";
-import type { UseSessionsResult } from "@/lib/useSessions";
+import type { SessionLiveState, UseSessionsResult } from "@/lib/useSessions";
+import { EMPTY_LIVE_STATE } from "@/lib/useSessions";
 
 // ---------------------------------------------------------------------------
 // Shared session vocabulary
@@ -82,6 +83,11 @@ export interface UseSessionResult {
   transcript: TranscriptEntry[];
   /** Descriptor for the selected session; null when none is selected. */
   sessionInfo: SessionInfo | null;
+  /**
+   * EPHEMERAL live state for the in-flight turn (story S6/S7) — streaming
+   * assistant text, live tool calls, mid-turn usage. Empty when idle.
+   */
+  live: SessionLiveState;
   /** Result of the last `checkAuth()`; null until first checked. */
   authStatus: AuthStatus | null;
   /** Open a new session and spawn turn 1 (adds to the store). */
@@ -118,6 +124,7 @@ export function useSession(store: UseSessionsResult, sessionId: string | null): 
     status: slice?.status ?? "idle",
     transcript: slice?.transcript ?? [],
     sessionInfo: slice?.sessionInfo ?? null,
+    live: slice?.live ?? EMPTY_LIVE_STATE,
     authStatus: store.authStatus,
     start: (params: StartSessionParams) => {
       void store.start(params);

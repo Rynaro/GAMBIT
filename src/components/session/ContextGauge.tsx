@@ -22,9 +22,17 @@
 //     `cumulativeUsage` / `cumulativeCostUsd` when present). The cost is a
 //     client-side estimate, not billing-authoritative, and is labelled "est.".
 //
-// Turn-granular by design: the gauge moves only when a `result` lands (the
-// slice's transcript changes). Live mid-turn updates are story S7 — OUT of
-// scope here. With no completed turn the gauge renders a neutral empty state.
+// Story S7 — live mid-turn updates: the same `stream_event` parser pass that
+// feeds S6 also extracts incremental `usage` from `message_start` /
+// `message_delta`, surfaced on the slice's EPHEMERAL `live.usage`. When a
+// live figure is present AND belongs to a turn newer than the latest `result`,
+// the bar PREVIEWS it — so the gauge moves mid-turn. The authoritative
+// `result` usage re-baselines the bar at turn end (the store clears `live` on
+// `session-turn-complete`), so there is no double-counting: the live figure is
+// strictly a preview the `result` supersedes.
+//
+// With no completed turn AND no live usage the gauge renders a neutral empty
+// state.
 
 import { contextWindowFor } from "@/lib/contextWindow";
 import type { ParsedInit, ParsedResult, Usage } from "@/lib/session.types";
@@ -137,6 +145,7 @@ export function deriveGaugeReading(slice: SessionSlice | null): GaugeReading {
   // Walk every `result` entry: the LAST one drives the bar; all of them sum
   // into the transcript-derived cumulative fallback.
   let latestUsage: Usage | null = null;
+  let latestResultTurn = 0;
   let summedInput = 0;
   let summedOutput = 0;
   let summedCost = 0;
@@ -145,6 +154,7 @@ export function deriveGaugeReading(slice: SessionSlice | null): GaugeReading {
     const result = (entry.parsed as ParsedResult).Result;
     if (!result) continue;
     latestUsage = result.usage ?? {};
+    latestResultTurn = entry.turn;
     const u = result.usage ?? {};
     summedInput +=
       (u.inputTokens ?? 0) + (u.cacheReadInputTokens ?? 0) + (u.cacheCreationInputTokens ?? 0);
@@ -152,8 +162,22 @@ export function deriveGaugeReading(slice: SessionSlice | null): GaugeReading {
     summedCost += result.totalCostUsd ?? 0;
   }
 
+  // Story S7 — live mid-turn preview: an ephemeral `live.usage` from a turn
+  // NEWER than the latest finalised `result` drives the bar instead, so the
+  // gauge advances mid-turn. The `result` re-baselines once the turn ends.
+  const liveUsage = slice.live.usage;
+  const liveIsAhead = liveUsage != null && slice.live.turn > latestResultTurn;
+  if (liveIsAhead) {
+    latestUsage = {
+      inputTokens: liveUsage.inputTokens ?? undefined,
+      outputTokens: liveUsage.outputTokens ?? undefined,
+      cacheReadInputTokens: liveUsage.cacheReadInputTokens ?? undefined,
+      cacheCreationInputTokens: liveUsage.cacheCreationInputTokens ?? undefined,
+    };
+  }
+
   if (!latestUsage) {
-    // No completed turn yet — neutral empty gauge, but keep any model we saw.
+    // No completed turn AND no live usage — neutral empty gauge, keep model.
     return { ...empty, model };
   }
 

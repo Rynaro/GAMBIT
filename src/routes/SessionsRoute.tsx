@@ -53,7 +53,7 @@ import type {
 } from "@/lib/session.types";
 import type { TranscriptEntry, UseSessionResult } from "@/lib/useSession";
 import { useSession } from "@/lib/useSession";
-import type { SessionSlice, UseSessionsResult } from "@/lib/useSessions";
+import type { SessionLiveState, SessionSlice, UseSessionsResult } from "@/lib/useSessions";
 import { getRoute } from "@/routes/index";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useState } from "react";
@@ -546,7 +546,7 @@ interface DetailPaneProps {
 }
 
 function DetailPane({ session, slice }: DetailPaneProps) {
-  const { status, transcript, sessionInfo } = session;
+  const { status, transcript, sessionInfo, live } = session;
 
   // Model + tools come from the `init` event once it lands.
   const init = useMemo(() => {
@@ -600,12 +600,7 @@ function DetailPane({ session, slice }: DetailPaneProps) {
           </div>
         ))}
         {turnRunning && (
-          <div className="session-pending" aria-live="polite" aria-busy="true">
-            <span className="session-pending-glyph" aria-hidden="true">
-              ⬡
-            </span>
-            <span>{eidolonName} is working…</span>
-          </div>
+          <LiveTurn live={live} eidolonName={eidolonName} toolResults={toolResults} />
         )}
       </div>
 
@@ -632,6 +627,93 @@ function DetailPane({ session, slice }: DetailPaneProps) {
       />
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// LiveTurn — the in-flight turn rendered from EPHEMERAL live state (story S6)
+// ---------------------------------------------------------------------------
+
+interface LiveTurnProps {
+  /** The session's ephemeral live state for the in-flight turn. */
+  live: SessionLiveState;
+  eidolonName: string;
+  /** `tool_result` index — a live chip resolves early if its result lands. */
+  toolResults: Map<string, { text: string; isError: boolean }>;
+}
+
+/**
+ * Render the in-flight turn from the store's EPHEMERAL `live` state: the
+ * streaming assistant text (token-by-token) and the live `ToolUseChip`s
+ * (spinner + elapsed time). On `session-turn-complete` the store CLEARS
+ * `live`, and the persisted `assistant` / `user` cards re-render the turn —
+ * so this component and the persisted cards never both show the same text.
+ *
+ * Self-routed-subagent tools (a non-null `parentToolUseId`) render NESTED
+ * under a subagent group; top-level tools render flush. This is what makes
+ * cortex / TRANCE self-routing visible mid-turn.
+ */
+function LiveTurn({ live, eidolonName, toolResults }: LiveTurnProps) {
+  const calls = Object.values(live.toolCalls);
+  const topLevel = calls.filter((c) => !c.parentToolUseId);
+  const nested = calls.filter((c) => c.parentToolUseId);
+  const hasText = live.streamingText.length > 0;
+  const hasTools = calls.length > 0;
+
+  // Nothing has streamed yet — keep the cozy "working…" affordance.
+  if (!hasText && !hasTools) {
+    return (
+      <div className="session-pending" aria-live="polite" aria-busy="true">
+        <span className="session-pending-glyph" aria-hidden="true">
+          ⬡
+        </span>
+        <span>{eidolonName} is working…</span>
+      </div>
+    );
+  }
+
+  const renderChip = (call: SessionLiveState["toolCalls"][string]) => {
+    // A live chip resolves early if its `tool_result` already landed in the
+    // persisted transcript (the paired `user` event can arrive before the
+    // turn completes).
+    const result = toolResults.get(call.toolUseId);
+    return (
+      <ToolUseChip
+        key={call.toolUseId}
+        name={call.toolName}
+        input={call.partialInput ? safeParse(call.partialInput) : undefined}
+        result={result}
+        running={!result}
+        startedAt={call.startedAt}
+        subagent={Boolean(call.parentToolUseId)}
+      />
+    );
+  };
+
+  return (
+    <div className="session-turn session-turn-live" aria-live="polite" aria-busy="true">
+      <div className="session-turn-marker">Turn {live.turn} · live</div>
+      {hasText && (
+        <AssistantText eidolonName={eidolonName} text={live.streamingText} streaming={true} />
+      )}
+      {topLevel.map(renderChip)}
+      {nested.length > 0 && (
+        <div className="session-subagent-group" aria-label="Self-routed subagent activity">
+          <div className="session-subagent-label">Subagent activity</div>
+          {nested.map(renderChip)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Best-effort JSON parse of an accumulated `partial_json` string. */
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // The streamed JSON may still be incomplete — show the raw fragment.
+    return text;
+  }
 }
 
 // ---------------------------------------------------------------------------

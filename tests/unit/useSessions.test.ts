@@ -153,6 +153,49 @@ function emitTurnComplete(
   });
 }
 
+/** Emit a `session-delta` (story S6) — text or toolInput fragment. */
+function emitDelta(
+  sessionId: string,
+  payload: {
+    turn: number;
+    deltaKind: string;
+    text?: string;
+    blockIndex?: number;
+    partialJson?: string;
+    parentToolUseId?: string;
+  },
+) {
+  act(() => {
+    eventHandlers["session-delta"]?.({ payload: { sessionId, ts: TS, ...payload } });
+  });
+}
+
+/** Emit a `session-tool-start` (story S6). */
+function emitToolStart(
+  sessionId: string,
+  payload: {
+    turn: number;
+    blockIndex: number;
+    toolUseId: string;
+    toolName: string;
+    parentToolUseId?: string;
+  },
+) {
+  act(() => {
+    eventHandlers["session-tool-start"]?.({ payload: { sessionId, ts: TS, ...payload } });
+  });
+}
+
+/** Emit a `session-usage` (story S7). */
+function emitUsage(
+  sessionId: string,
+  payload: { turn: number; inputTokens?: number; outputTokens?: number },
+) {
+  act(() => {
+    eventHandlers["session-usage"]?.({ payload: { sessionId, ts: TS, ...payload } });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -185,22 +228,27 @@ describe("useSessions", () => {
   });
 
   // --- listeners attached EXACTLY ONCE --------------------------------------
-  it("attaches the 3 session listeners exactly once for the store's lifetime", async () => {
+  it("attaches the 6 session listeners exactly once for the store's lifetime", async () => {
     const { rerender } = renderHook(() => useSessions());
     await flush();
 
-    // Each listener registered exactly once.
-    const eventCalls = mockListen.mock.calls.filter((c) => c[0] === "session-event");
-    const stderrCalls = mockListen.mock.calls.filter((c) => c[0] === "session-stderr");
-    const completeCalls = mockListen.mock.calls.filter((c) => c[0] === "session-turn-complete");
-    expect(eventCalls).toHaveLength(1);
-    expect(stderrCalls).toHaveLength(1);
-    expect(completeCalls).toHaveLength(1);
+    // Each of the six listeners registered exactly once (3 from S2 + the 3
+    // S6/S7 ephemeral-stream listeners).
+    for (const name of [
+      "session-event",
+      "session-stderr",
+      "session-turn-complete",
+      "session-delta",
+      "session-tool-start",
+      "session-usage",
+    ]) {
+      expect(mockListen.mock.calls.filter((c) => c[0] === name)).toHaveLength(1);
+    }
 
     // A re-render must NOT re-attach — the listeners are store-lifetime.
     rerender();
     await flush();
-    expect(mockListen.mock.calls.filter((c) => c[0] === "session-event")).toHaveLength(1);
+    expect(mockListen.mock.calls.filter((c) => c[0] === "session-delta")).toHaveLength(1);
   });
 
   // --- start ADDS a session --------------------------------------------------
@@ -456,6 +504,142 @@ describe("useSessions", () => {
     await flush();
     unmount();
     expect(mockUnlisten).toHaveBeenCalled();
+  });
+
+  // --- S6/S7: EPHEMERAL live state ------------------------------------------
+
+  /** Start a single session A on turn 1 so live state can be exercised. */
+  async function startSessionA(result: ReturnType<typeof renderHook<unknown, unknown>>["result"]) {
+    await act(async () => {
+      await (result.current as { start: (p: unknown) => Promise<unknown> }).start({
+        projectPath: "/p",
+        eidolonName: "Sage",
+        permissionMode: "default",
+        appendSystemPrompt: "",
+        allowedTools: [],
+        firstPrompt: "go",
+      });
+    });
+  }
+
+  it("accumulates session-delta text fragments into the live buffer for turn N", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "Hel" });
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "lo!" });
+
+    // Text accumulated into the EPHEMERAL live buffer — not the transcript.
+    expect(result.current.sessions[SESSION_A].live.streamingText).toBe("Hello!");
+    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(0);
+  });
+
+  it("registers a live tool call from session-tool-start and accumulates its input", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    emitToolStart(SESSION_A, { turn: 1, blockIndex: 0, toolUseId: "tu_1", toolName: "Read" });
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "toolInput", blockIndex: 0, partialJson: '{"f' });
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "toolInput", blockIndex: 0, partialJson: 'oo"}' });
+
+    const call = result.current.sessions[SESSION_A].live.toolCalls.tu_1;
+    expect(call.toolName).toBe("Read");
+    expect(call.partialInput).toBe('{"foo"}');
+    expect(call.parentToolUseId).toBe(null);
+  });
+
+  it("tags a parentToolUseId tool call as self-routed-subagent work", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    emitToolStart(SESSION_A, {
+      turn: 1,
+      blockIndex: 1,
+      toolUseId: "tu_sub",
+      toolName: "Grep",
+      parentToolUseId: "tu_parent",
+    });
+    expect(result.current.sessions[SESSION_A].live.toolCalls.tu_sub.parentToolUseId).toBe(
+      "tu_parent",
+    );
+  });
+
+  it("session-usage feeds the live mid-turn usage (story S7)", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    emitUsage(SESSION_A, { turn: 1, inputTokens: 12_000, outputTokens: 30 });
+    expect(result.current.sessions[SESSION_A].live.usage?.inputTokens).toBe(12_000);
+  });
+
+  it("session-turn-complete CLEARS the live state (ephemerality gate)", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "streaming" });
+    emitToolStart(SESSION_A, { turn: 1, blockIndex: 0, toolUseId: "tu_1", toolName: "Read" });
+    emitUsage(SESSION_A, { turn: 1, inputTokens: 9_000 });
+    expect(result.current.sessions[SESSION_A].live.streamingText).toBe("streaming");
+
+    // The turn finishes — live state must be wiped wholesale.
+    emitTurnComplete(SESSION_A, { exitCode: 0, hadResult: true, isError: false });
+    const live = result.current.sessions[SESSION_A].live;
+    expect(live.streamingText).toBe("");
+    expect(live.toolCalls).toEqual({});
+    expect(live.usage).toBe(null);
+    expect(live.turn).toBe(0);
+  });
+
+  it("a session-delta for session A does NOT touch session B", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A), summary(SESSION_B)]);
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+
+    emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "for A only" });
+    emitToolStart(SESSION_A, { turn: 1, blockIndex: 0, toolUseId: "tu_a", toolName: "Read" });
+
+    expect(result.current.sessions[SESSION_A].live.streamingText).toBe("for A only");
+    expect(result.current.sessions[SESSION_B].live.streamingText).toBe("");
+    expect(result.current.sessions[SESSION_B].live.toolCalls).toEqual({});
   });
 });
 

@@ -22,10 +22,19 @@
 //   failed         — a turn finished in error
 //
 // IPC contract (mirrors session.rs / session_store.rs):
-//   Events  : session-event / session-stderr / session-turn-complete
-//             — attached ONCE for the store's lifetime; each handler routes
-//               the payload to map[payload.sessionId]. Rust events already
-//               carry sessionId (FINDING-013), so no single-session filter.
+//   Events  : session-event / session-stderr / session-turn-complete, plus
+//             session-delta / session-tool-start / session-usage (story
+//             S6/S7) — six listeners, all attached ONCE for the store's
+//             lifetime; each handler routes the payload to
+//             map[payload.sessionId]. Rust events already carry sessionId
+//             (FINDING-013), so no single-session filter.
+//
+// EPHEMERAL live state (story S6/S7):
+//   session-delta / session-tool-start / session-usage feed a per-session
+//   `live` slice (streaming text + live tool calls + mid-turn usage). It is
+//   NOT part of the durable SessionRecord and is CLEARED wholesale on
+//   session-turn-complete — the persisted assistant/user/result entries are
+//   then the single source of truth (no double-rendered text).
 //   Commands: start_session   (params)            → SessionInfo
 //             send_turn       (sessionId, prompt)  → void
 //             reopen_session  (sessionId)          → SessionInfo
@@ -41,12 +50,15 @@
 import type {
   AuthStatus,
   PersistedEntry,
+  SessionDeltaPayload,
   SessionEventPayload,
   SessionInfo,
   SessionRecord,
   SessionStderrPayload,
   SessionSummary,
+  SessionToolStartPayload,
   SessionTurnCompletePayload,
+  SessionUsagePayload,
   StartSessionParams,
 } from "@/lib/session.types";
 import type { SessionState as SessionMachineState, TranscriptEntry } from "@/lib/useSession";
@@ -58,6 +70,58 @@ import { toast } from "sonner";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/**
+ * One live tool call observed mid-turn from `session-tool-start` /
+ * `session-delta(toolInput)` (story S6).
+ *
+ * EPHEMERAL: held only for the in-flight turn and cleared on
+ * `session-turn-complete`. `running` flips to `false` once the paired
+ * `tool_result` lands in the persisted transcript (`toolUseId` ↔
+ * `tool_result.toolUseId`) — the UI resolves the chip from there.
+ */
+export interface LiveToolCall {
+  /** The `tool_use` id — pairs with the eventual `tool_result.toolUseId`. */
+  toolUseId: string;
+  /** The tool name. */
+  toolName: string;
+  /** The content-block index — `toolInput` deltas are matched on this. */
+  blockIndex: number;
+  /** Non-null when this is self-routed-subagent work (renders nested). */
+  parentToolUseId: string | null;
+  /** Epoch-ms the tool call started — drives the elapsed-time readout. */
+  startedAt: number;
+  /** Accumulated `partial_json` input fragments (best-effort, may be partial). */
+  partialInput: string;
+}
+
+/**
+ * The EPHEMERAL per-session live state for the in-flight turn (story S6/S7).
+ *
+ * NOT part of the durable `SessionRecord` and NOT persisted: it is populated
+ * from the `session-delta` / `session-tool-start` / `session-usage` events
+ * and CLEARED wholesale on `session-turn-complete`. After a turn finishes the
+ * persisted `assistant` / `user` / `result` `session-event` entries are the
+ * single source of truth — so the streamed text does not double-render.
+ */
+export interface SessionLiveState {
+  /** The turn these live fragments belong to (`0` when idle / cleared). */
+  turn: number;
+  /** Accumulated streaming assistant text for the in-flight turn. */
+  streamingText: string;
+  /** Live tool calls keyed by `toolUseId`. */
+  toolCalls: Record<string, LiveToolCall>;
+  /** The latest mid-turn `usage` preview (story S7); `null` until one lands. */
+  usage: SessionUsagePayload | null;
+}
+
+/** The empty live state — a freshly-idle or just-completed turn. */
+export const EMPTY_LIVE_STATE: SessionLiveState = {
+  turn: 0,
+  streamingText: "",
+  toolCalls: {},
+  usage: null,
+};
 
 /**
  * The per-session slice held in the store's map.
@@ -89,6 +153,12 @@ export interface SessionSlice {
    * from disk. Summary-only sessions are `false` until first opened.
    */
   hydrated: boolean;
+  /**
+   * EPHEMERAL live state for the in-flight turn (story S6/S7) — streaming
+   * text, live tool calls, the latest mid-turn usage. NOT persisted; CLEARED
+   * on `session-turn-complete`. See {@link SessionLiveState}.
+   */
+  live: SessionLiveState;
 }
 
 /** A record of session slices keyed by `sessionId`. */
@@ -142,6 +212,89 @@ function transcriptFromPersisted(entries: PersistedEntry[]): TranscriptEntry[] {
     line: e.line,
     ts: e.ts,
   }));
+}
+
+/**
+ * Apply a `session-delta` to a session slice's EPHEMERAL live state (S6/S7).
+ *
+ * A `text` delta appends to the streaming-text buffer; a `toolInput` delta
+ * appends its `partialJson` fragment onto the matching live tool call (matched
+ * by `blockIndex` — the `tool_use` id is only on the paired tool-start). The
+ * persisted `transcript` is never touched: a delta is purely live state.
+ *
+ * Defensive against turn skew: a delta whose `turn` is older than the live
+ * state's turn is ignored (a late straggler from a finished turn).
+ */
+export function applyDelta(slice: SessionSlice, payload: SessionDeltaPayload): SessionSlice {
+  // Drop a straggler from an already-cleared / older turn.
+  if (slice.live.turn !== 0 && payload.turn < slice.live.turn) return slice;
+  // A delta for a turn the live state has not opened yet adopts that turn.
+  const turn = Math.max(slice.live.turn, payload.turn);
+
+  if (payload.deltaKind === "text") {
+    return {
+      ...slice,
+      live: {
+        ...slice.live,
+        turn,
+        streamingText: slice.live.streamingText + (payload.text ?? ""),
+      },
+    };
+  }
+
+  if (payload.deltaKind === "toolInput") {
+    // Match the tool call by block index — the toolUseId rides on tool-start.
+    const idx = payload.blockIndex ?? -1;
+    const entry = Object.entries(slice.live.toolCalls).find(([, call]) => call.blockIndex === idx);
+    if (!entry) return { ...slice, live: { ...slice.live, turn } };
+    const [id, call] = entry;
+    return {
+      ...slice,
+      live: {
+        ...slice.live,
+        turn,
+        toolCalls: {
+          ...slice.live.toolCalls,
+          [id]: { ...call, partialInput: call.partialInput + (payload.partialJson ?? "") },
+        },
+      },
+    };
+  }
+
+  // An unmodelled deltaKind — keep the slice unchanged.
+  return slice;
+}
+
+/**
+ * Apply a `session-tool-start` to a session slice's live state (story S6).
+ *
+ * Registers a new {@link LiveToolCall} keyed by `toolUseId` so the UI can show
+ * a running chip; `parentToolUseId` marks self-routed-subagent work.
+ */
+export function applyToolStart(
+  slice: SessionSlice,
+  payload: SessionToolStartPayload,
+): SessionSlice {
+  if (slice.live.turn !== 0 && payload.turn < slice.live.turn) return slice;
+  const turn = Math.max(slice.live.turn, payload.turn);
+  return {
+    ...slice,
+    live: {
+      ...slice.live,
+      turn,
+      toolCalls: {
+        ...slice.live.toolCalls,
+        [payload.toolUseId]: {
+          toolUseId: payload.toolUseId,
+          toolName: payload.toolName,
+          blockIndex: payload.blockIndex,
+          parentToolUseId: payload.parentToolUseId ?? null,
+          startedAt: Date.now(),
+          partialInput: "",
+        },
+      },
+    },
+  };
 }
 
 /**
@@ -218,7 +371,7 @@ export function useSessions(): UseSessionsResult {
   // state read would close over a stale value.
   const turnRefs = useRef<Record<string, number>>({});
 
-  // Unlisten refs — the 3 store-lifetime listeners, detached only on unmount.
+  // Unlisten refs — the 6 store-lifetime listeners, detached only on unmount.
   const unlistenRefs = useRef<UnlistenFn[]>([]);
   // Guards the once-only listener attach against React 18 StrictMode's
   // double-invoked mount effect.
@@ -290,6 +443,33 @@ export function useSessions(): UseSessionsResult {
         }));
       });
 
+      // session-delta — an EPHEMERAL streaming fragment (story S6/S7). Routed
+      // to the owning session's `live` state; NEVER appended to `transcript`.
+      const unlistenDelta = await listen<SessionDeltaPayload>("session-delta", (ev) => {
+        const { sessionId } = ev.payload;
+        patchSession(sessionId, (slice) => applyDelta(slice, ev.payload));
+      });
+
+      // session-tool-start — a tool call is beginning (story S6). Adds a live
+      // `LiveToolCall` to the owning session's ephemeral state.
+      const unlistenToolStart = await listen<SessionToolStartPayload>(
+        "session-tool-start",
+        (ev) => {
+          const { sessionId } = ev.payload;
+          patchSession(sessionId, (slice) => applyToolStart(slice, ev.payload));
+        },
+      );
+
+      // session-usage — a live mid-turn token-usage preview (story S7). The
+      // authoritative `result` usage supersedes it at turn end.
+      const unlistenUsage = await listen<SessionUsagePayload>("session-usage", (ev) => {
+        const { sessionId } = ev.payload;
+        patchSession(sessionId, (slice) => ({
+          ...slice,
+          live: { ...slice.live, usage: ev.payload },
+        }));
+      });
+
       // session-turn-complete — finalise the owning session's current turn.
       const unlistenComplete = await listen<SessionTurnCompletePayload>(
         "session-turn-complete",
@@ -302,6 +482,12 @@ export function useSessions(): UseSessionsResult {
           patchSession(sessionId, (slice) => ({
             ...slice,
             status: isError ? "failed" : "awaiting-input",
+            // EPHEMERALITY GATE — clear the live state. The streamed text /
+            // tool calls / mid-turn usage are now superseded by the persisted
+            // `assistant` / `user` / `result` `session-event` entries, which
+            // are the durable source of truth. Not clearing here would
+            // double-render the final assistant message.
+            live: EMPTY_LIVE_STATE,
           }));
 
           if (isError) {
@@ -321,10 +507,20 @@ export function useSessions(): UseSessionsResult {
         // The component unmounted before attach resolved — detach immediately.
         unlistenEvent();
         unlistenStderr();
+        unlistenDelta();
+        unlistenToolStart();
+        unlistenUsage();
         unlistenComplete();
         return;
       }
-      unlistenRefs.current = [unlistenEvent, unlistenStderr, unlistenComplete];
+      unlistenRefs.current = [
+        unlistenEvent,
+        unlistenStderr,
+        unlistenDelta,
+        unlistenToolStart,
+        unlistenUsage,
+        unlistenComplete,
+      ];
     }
 
     void attach();
@@ -359,6 +555,7 @@ export function useSessions(): UseSessionsResult {
             summary: s,
             turn: 0,
             hydrated: false,
+            live: EMPTY_LIVE_STATE,
           };
         }
         setSessions(map);
@@ -403,6 +600,8 @@ export function useSessions(): UseSessionsResult {
           summary: null,
           turn: 1,
           hydrated: true,
+          // Turn 1 starts with empty live state; deltas accumulate into it.
+          live: { ...EMPTY_LIVE_STATE, turn: 1 },
         },
       }));
       return info.sessionId;
@@ -429,7 +628,14 @@ export function useSessions(): UseSessionsResult {
       // turn-running. The ref is the source of truth for event stamping.
       const nextTurn = (turnRefs.current[sessionId] ?? slice.turn) + 1;
       turnRefs.current[sessionId] = nextTurn;
-      patchSession(sessionId, (s) => ({ ...s, status: "turn-running", turn: nextTurn }));
+      patchSession(sessionId, (s) => ({
+        ...s,
+        status: "turn-running",
+        turn: nextTurn,
+        // A fresh turn starts with empty live state — the prior turn's
+        // streamed text / tool calls are now persisted entries.
+        live: { ...EMPTY_LIVE_STATE, turn: nextTurn },
+      }));
 
       invoke("send_turn", { sessionId, prompt }).catch((err) => {
         const msg = typeof err === "string" ? err : JSON.stringify(err);
@@ -500,6 +706,8 @@ export function useSessions(): UseSessionsResult {
           summary: prev[sessionId]?.summary ?? null,
           turn: lastTurn,
           hydrated: true,
+          // A rehydrated session has no in-flight turn — live state is empty.
+          live: EMPTY_LIVE_STATE,
         },
       }));
     } catch (err) {

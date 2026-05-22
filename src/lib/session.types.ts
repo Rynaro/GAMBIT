@@ -107,11 +107,32 @@ export interface ParsedUser {
   };
 }
 
+/**
+ * The cozy delta pre-extracted from a `stream_event`'s inner `event` (story
+ * S6/S7), mirroring Rust's externally-tagged `StreamDelta` enum.
+ *
+ * Permissive: a consumer should switch on the single object key. An unmodelled
+ * inner `stream_event` shape yields no `StreamDelta` at all (`delta` is
+ * `null`).
+ */
+export type StreamDelta =
+  | { Text: { text: string } }
+  | { ToolInput: { index: number; partialJson: string } }
+  | { ToolStart: { index: number; toolUseId: string; toolName: string } }
+  | { Usage: { usage: Usage } };
+
 /** `type: "stream_event"` — a partial-message delta. */
 export interface ParsedStreamEvent {
   StreamEvent: {
     /** The raw inner `event` payload, verbatim. */
     event?: unknown;
+    /**
+     * The pre-extracted cozy delta — `null`/absent for an unmodelled inner
+     * shape (story S6/S7).
+     */
+    delta?: StreamDelta | null;
+    /** Non-null when the inner event came from a self-routed subagent. */
+    parentToolUseId?: string | null;
   };
 }
 
@@ -396,4 +417,82 @@ export interface SessionTurnCompletePayload {
    * with `isError: true`).
    */
   isError: boolean;
+}
+
+/**
+ * `session-delta` — an EPHEMERAL streaming fragment (story S6/S7).
+ *
+ * Carries an incremental assistant-text fragment (`deltaKind === "text"`) or a
+ * `tool_use` JSON-input fragment (`deltaKind === "toolInput"`). EPHEMERAL by
+ * contract — the store accumulates these into per-turn live state and CLEARS
+ * that state on `session-turn-complete`; the persisted `assistant` / `user`
+ * `session-event` entries are the durable source of truth.
+ */
+export interface SessionDeltaPayload {
+  /** The owning session's UUID. */
+  sessionId: string;
+  /** The 1-based turn this delta belongs to. */
+  turn: number;
+  /** `"text"` for an assistant-text fragment, `"toolInput"` for a tool-input
+   * fragment. Open string for forward-compat. */
+  deltaKind: string;
+  /** The text fragment — present when `deltaKind === "text"`. */
+  text?: string | null;
+  /** The owning `tool_use` block's index — present for `"toolInput"`. */
+  blockIndex?: number | null;
+  /** The `partial_json` fragment — present when `deltaKind === "toolInput"`. */
+  partialJson?: string | null;
+  /** Non-null when the fragment came from a self-routed subagent. */
+  parentToolUseId?: string | null;
+  /** RFC-3339 emit timestamp. */
+  ts: string;
+}
+
+/**
+ * `session-tool-start` — an EPHEMERAL "a tool call is beginning" marker
+ * (story S6).
+ *
+ * Fires on a `stream_event` `content_block_start(tool_use)` so the UI can show
+ * a live "running" `ToolUseChip` (spinner + elapsed time) before the paired
+ * `tool_result` lands. EPHEMERAL — cleared on `session-turn-complete`.
+ */
+export interface SessionToolStartPayload {
+  /** The owning session's UUID. */
+  sessionId: string;
+  /** The 1-based turn this tool call belongs to. */
+  turn: number;
+  /** The content-block index — correlates the `toolInput` deltas back. */
+  blockIndex: number;
+  /** The `tool_use` id — pairs with the eventual `tool_result.toolUseId`. */
+  toolUseId: string;
+  /** The tool name. */
+  toolName: string;
+  /** Non-null when the tool call is self-routed-subagent work. */
+  parentToolUseId?: string | null;
+  /** RFC-3339 emit timestamp. */
+  ts: string;
+}
+
+/**
+ * `session-usage` — an EPHEMERAL live mid-turn token-usage update (story S7).
+ *
+ * Carries the incremental `usage` from a `stream_event`'s `message_start` /
+ * `message_delta`, feeding the `ContextGauge` so the temperature bar moves
+ * mid-turn. EPHEMERAL — the authoritative `result` usage supersedes it.
+ */
+export interface SessionUsagePayload {
+  /** The owning session's UUID. */
+  sessionId: string;
+  /** The 1-based turn this usage belongs to. */
+  turn: number;
+  /** Input tokens reported so far this turn. */
+  inputTokens?: number | null;
+  /** Output tokens reported so far this turn. */
+  outputTokens?: number | null;
+  /** Cache-read input tokens reported so far this turn. */
+  cacheReadInputTokens?: number | null;
+  /** Cache-creation input tokens reported so far this turn. */
+  cacheCreationInputTokens?: number | null;
+  /** RFC-3339 emit timestamp. */
+  ts: string;
 }

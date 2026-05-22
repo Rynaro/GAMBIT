@@ -138,6 +138,7 @@ function makeSlice(
     },
     turn: 1,
     hydrated: false,
+    live: { turn: 0, streamingText: "", toolCalls: {}, usage: null },
   };
 }
 

@@ -65,7 +65,7 @@
 // without reworking S4.
 
 use crate::binary;
-use crate::claude_adapter::{self, ParsedEvent, TurnArgs, TurnKind};
+use crate::claude_adapter::{self, ParsedEvent, StreamDelta, TurnArgs, TurnKind};
 use crate::session_store::{self, CumulativeUsage, PersistedEntry, SessionRecord, TurnRecord};
 use crate::spawn_core;
 use serde::{Deserialize, Serialize};
@@ -280,6 +280,101 @@ struct SessionStderrPayload {
     ts: String,
 }
 
+/// `session-delta` — an EPHEMERAL streaming fragment (story S6/S7).
+///
+/// Carries the cozy deltas pre-extracted from a `stream_event`'s inner event:
+/// an incremental assistant-text fragment (`deltaKind == "text"`) or an
+/// incremental `tool_use` JSON-input fragment (`deltaKind == "toolInput"`).
+///
+/// EPHEMERAL by contract: emitted live from the stdout reader but NEVER
+/// appended to the persisted transcript / `SessionRecord` — the final
+/// `assistant` / `user` `session-event` entries remain the durable source of
+/// truth. `parentToolUseId` is non-null when the fragment came from a
+/// self-routed subagent.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionDeltaPayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this delta belongs to.
+    turn: u32,
+    /// `"text"` for an assistant-text fragment, `"toolInput"` for a `tool_use`
+    /// JSON-input fragment.
+    delta_kind: String,
+    /// The text fragment — set when `deltaKind == "text"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    /// The owning `tool_use` block's index — set when `deltaKind == "toolInput"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_index: Option<u64>,
+    /// The `partial_json` fragment — set when `deltaKind == "toolInput"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    partial_json: Option<String>,
+    /// Non-null when the fragment came from a self-routed subagent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_tool_use_id: Option<String>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
+/// `session-tool-start` — an EPHEMERAL "a tool call is beginning" marker
+/// (story S6).
+///
+/// Fired on a `stream_event` `content_block_start(tool_use)` so the UI can
+/// show a live "running" `ToolUseChip` (spinner + elapsed time) BEFORE the
+/// paired `tool_result` arrives. EPHEMERAL — never persisted; the durable
+/// `assistant`(`tool_use`) / `user`(`tool_result`) `session-event`s are the
+/// source of truth once the turn completes.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionToolStartPayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this tool call belongs to.
+    turn: u32,
+    /// The content-block index — correlates the eventual `toolInput` deltas
+    /// (which carry only the index) back to this tool call.
+    block_index: u64,
+    /// The `tool_use` id — pairs with the eventual `tool_result.toolUseId`.
+    tool_use_id: String,
+    /// The tool name.
+    tool_name: String,
+    /// Non-null when the tool call is self-routed-subagent work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_tool_use_id: Option<String>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
+/// `session-usage` — an EPHEMERAL live mid-turn token-usage update (story S7).
+///
+/// Carries the incremental `usage` extracted from a `stream_event`'s
+/// `message_start` / `message_delta`, feeding the `ContextGauge` so the
+/// temperature bar moves mid-turn instead of only on the terminal `result`.
+/// EPHEMERAL — the authoritative `result` usage supersedes it at turn end.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionUsagePayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this usage belongs to.
+    turn: u32,
+    /// Input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input_tokens: Option<u64>,
+    /// Output tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_tokens: Option<u64>,
+    /// Cache-read input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_read_input_tokens: Option<u64>,
+    /// Cache-creation input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_creation_input_tokens: Option<u64>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
 /// `session-turn-complete` — a turn finished (dual-finalize: result OR exit).
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -314,6 +409,97 @@ fn event_kind(event: &ParsedEvent) -> &'static str {
         ParsedEvent::Result { .. } => "result",
         ParsedEvent::Unknown { .. } => "unknown",
         ParsedEvent::Malformed { .. } => "unknown",
+    }
+}
+
+/// Emit the EPHEMERAL streaming events for one extracted [`StreamDelta`]
+/// (story S6/S7).
+///
+/// Called from the stdout reader for every `stream_event` line that carried a
+/// recognised cozy delta. It maps the delta to one of the three new events:
+///   * [`StreamDelta::Text`]      → `session-delta` (`deltaKind: "text"`)
+///   * [`StreamDelta::ToolInput`] → `session-delta` (`deltaKind: "toolInput"`)
+///   * [`StreamDelta::ToolStart`] → `session-tool-start`
+///   * [`StreamDelta::Usage`]     → `session-usage`
+///
+/// EPHEMERAL by contract: this only `emit`s — it touches no persistence
+/// buffer, so the deltas never reach the `SessionRecord`. An `emit` failure
+/// is swallowed (`let _ =`), mirroring the other event emits in this module.
+fn emit_stream_delta(
+    app: &AppHandle,
+    session_id: &str,
+    turn: u32,
+    delta: &StreamDelta,
+    parent_tool_use_id: Option<&str>,
+) {
+    let ts = chrono::Utc::now().to_rfc3339();
+    let parent = parent_tool_use_id.map(str::to_string);
+    match delta {
+        StreamDelta::Text { text } => {
+            let _ = app.emit(
+                "session-delta",
+                SessionDeltaPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    delta_kind: "text".to_string(),
+                    text: Some(text.clone()),
+                    block_index: None,
+                    partial_json: None,
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::ToolInput {
+            index,
+            partial_json,
+        } => {
+            let _ = app.emit(
+                "session-delta",
+                SessionDeltaPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    delta_kind: "toolInput".to_string(),
+                    text: None,
+                    block_index: Some(*index),
+                    partial_json: Some(partial_json.clone()),
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::ToolStart {
+            index,
+            tool_use_id,
+            tool_name,
+        } => {
+            let _ = app.emit(
+                "session-tool-start",
+                SessionToolStartPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    block_index: *index,
+                    tool_use_id: tool_use_id.clone(),
+                    tool_name: tool_name.clone(),
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::Usage { usage } => {
+            let _ = app.emit(
+                "session-usage",
+                SessionUsagePayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    input_tokens: usage.input_tokens,
+                    output_tokens: usage.output_tokens,
+                    cache_read_input_tokens: usage.cache_read_input_tokens,
+                    cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                    ts,
+                },
+            );
+        }
     }
 }
 
@@ -582,6 +768,27 @@ fn run_turn(
                 if slot.is_none() {
                     *slot = Some(m.clone());
                 }
+            }
+            ParsedEvent::StreamEvent {
+                delta: Some(delta),
+                parent_tool_use_id,
+                ..
+            } => {
+                // Story S6/S7 — emit the EPHEMERAL streaming events. These are
+                // emitted but DELIBERATELY NOT folded into any persistence
+                // buffer: the `stream_event` line still rides into `transcript`
+                // as a `streamEvent` `session-event` below (story S1), but the
+                // *deltas* never become durable state. The cumulative usage on
+                // the `SessionRecord` is only ever advanced by a terminal
+                // `result` (above) — `session-usage` is a live preview the
+                // `result` supersedes, so there is no double-counting.
+                emit_stream_delta(
+                    &app_stdout,
+                    &sid_stdout,
+                    turn,
+                    delta,
+                    parent_tool_use_id.as_deref(),
+                );
             }
             _ => {}
         }
@@ -1287,7 +1494,11 @@ mod tests {
             "user"
         );
         assert_eq!(
-            event_kind(&ParsedEvent::StreamEvent { event: None }),
+            event_kind(&ParsedEvent::StreamEvent {
+                event: None,
+                delta: None,
+                parent_tool_use_id: None,
+            }),
             "streamEvent"
         );
         assert_eq!(

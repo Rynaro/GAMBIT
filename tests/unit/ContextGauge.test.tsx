@@ -42,8 +42,11 @@ function resultEntry(usage: Usage, costUsd: number, turn = 1): TranscriptEntry {
   return { source: "event", turn, kind: "result", parsed, line: "{}", ts: "2026-05-22T10:01:00Z" };
 }
 
-/** Build a `SessionSlice` around a transcript. */
-function makeSlice(transcript: TranscriptEntry[]): SessionSlice {
+/** Build a `SessionSlice` around a transcript (+ optional live state, S7). */
+function makeSlice(
+  transcript: TranscriptEntry[],
+  live?: Partial<SessionSlice["live"]>,
+): SessionSlice {
   return {
     sessionId: "s1",
     status: "awaiting-input",
@@ -52,6 +55,7 @@ function makeSlice(transcript: TranscriptEntry[]): SessionSlice {
     summary: null,
     turn: transcript.length,
     hydrated: true,
+    live: { turn: 0, streamingText: "", toolCalls: {}, usage: null, ...live },
   };
 }
 
@@ -148,5 +152,61 @@ describe("deriveGaugeReading", () => {
     // input-side(1000) + output(200) + input-side(2000) + output(300) = 3500.
     expect(r.cumulativeTokens).toBe(3_500);
     expect(r.cumulativeCostUsd).toBeCloseTo(0.05, 5);
+  });
+
+  // --- S7: live mid-turn usage drives the gauge ----------------------------
+  it("previews a live mid-turn usage from a turn newer than the last result", () => {
+    // Turn 1 finalised at 100k; turn 2 is in flight with a live 400k figure.
+    const t1 = resultEntry({ inputTokens: 100_000 }, 0.01, 1);
+    const r = deriveGaugeReading(
+      makeSlice([initEntry("claude-opus-4-7"), t1], {
+        turn: 2,
+        usage: {
+          sessionId: "s1",
+          turn: 2,
+          inputTokens: 400_000,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          ts: "2026-05-22T10:03:00Z",
+        },
+      }),
+    );
+    // The live 400k / 1M = 0.4 preview supersedes turn 1's 100k.
+    expect(r.latestInputTokens).toBe(400_000);
+    expect(r.temperature).toBeCloseTo(0.4, 5);
+  });
+
+  it("does NOT use a live usage that belongs to an already-finalised turn", () => {
+    // The live turn is 1 and a result for turn 1 already landed — the result
+    // is authoritative; a stale live figure must not override it.
+    const t1 = resultEntry({ inputTokens: 100_000 }, 0.01, 1);
+    const r = deriveGaugeReading(
+      makeSlice([initEntry("claude-opus-4-7"), t1], {
+        turn: 1,
+        usage: {
+          sessionId: "s1",
+          turn: 1,
+          inputTokens: 999_000,
+          ts: "2026-05-22T10:03:00Z",
+        },
+      }),
+    );
+    expect(r.latestInputTokens).toBe(100_000);
+  });
+
+  it("shows a live gauge before any result when only live usage exists", () => {
+    const r = deriveGaugeReading(
+      makeSlice([initEntry("claude-opus-4-7")], {
+        turn: 1,
+        usage: {
+          sessionId: "s1",
+          turn: 1,
+          inputTokens: 250_000,
+          ts: "2026-05-22T10:03:00Z",
+        },
+      }),
+    );
+    expect(r.hasTurn).toBe(true);
+    expect(r.temperature).toBeCloseTo(0.25, 5);
   });
 });
