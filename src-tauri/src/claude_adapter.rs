@@ -35,7 +35,7 @@
 
 #![allow(dead_code)] // wired up by S4 (session.rs)
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // (a) Flag construction
@@ -153,7 +153,7 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
 /// `thinking`, `tool_result`, plus others we do not model. All fields are
 /// optional so any block kind deserialises; the `block_type` discriminator
 /// tells the UI which fields to read.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ContentBlock {
     /// The block kind: `"text"`, `"tool_use"`, `"thinking"`, `"tool_result"`,
     /// or anything newer.
@@ -188,7 +188,7 @@ pub struct ContentBlock {
 }
 
 /// Token-usage accounting carried on the terminal `result` event.
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct Usage {
     /// Input tokens billed for the turn.
     #[serde(default)]
@@ -209,7 +209,7 @@ pub struct Usage {
 /// Covers what a cozy session UI needs; anything unrecognised falls through
 /// to [`ParsedEvent::Unknown`] (unknown `type`) or [`ParsedEvent::Malformed`]
 /// (not valid JSON). `parse_line` is total — it always returns one of these.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum ParsedEvent {
     /// `type: "system", subtype: "init"` — the session handshake.
     Init {

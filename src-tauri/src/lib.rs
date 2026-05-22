@@ -4,6 +4,7 @@ pub mod claude_adapter;
 pub mod doctor;
 pub mod extract;
 pub mod mcp;
+pub mod session;
 pub mod spawn_core;
 pub mod sync;
 pub mod upgrade;
@@ -11,6 +12,7 @@ pub mod watcher;
 
 use doctor::DoctorState;
 use mcp::McpStoreState;
+use session::SessionRegistry;
 use sync::SyncState;
 use upgrade::UpgradeState;
 use watcher::WatcherState;
@@ -31,6 +33,7 @@ pub fn run() {
         .manage(DoctorState::new())
         .manage(UpgradeState::new())
         .manage(McpStoreState::new())
+        .manage(SessionRegistry::new())
         .setup(|app| {
             // Extract the bundled eidolons CLI tarball on first launch (idempotent).
             // If no tarball is bundled (dev mode) this is a silent no-op.
@@ -74,6 +77,8 @@ pub fn run() {
             mcp::mcp_uninstall,
             mcp::mcp_cancel,
             binary::binary_status,
+            session::start_session,
+            session::send_turn,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");
