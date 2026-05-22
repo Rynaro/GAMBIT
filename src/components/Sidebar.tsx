@@ -12,6 +12,7 @@ const DESTINATIONS = [
   { id: "harness", label: "Harness" },
   { id: "doctor", label: "Doctor" },
   { id: "methodology", label: "Methodology" },
+  { id: "sessions", label: "Sessions" },
   // system group — divider before this in v0.1
   { id: "settings", label: "Settings" },
 ] as const;

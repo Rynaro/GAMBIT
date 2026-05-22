@@ -15,6 +15,7 @@ export type RouteId =
   | "harness"
   | "doctor"
   | "methodology"
+  | "sessions"
   | "settings";
 
 const STORAGE_KEY = "gambit:activeRoute";
@@ -46,6 +47,7 @@ function isRouteId(value: string): boolean {
     "harness",
     "doctor",
     "methodology",
+    "sessions",
     "settings",
   ].includes(value);
 }

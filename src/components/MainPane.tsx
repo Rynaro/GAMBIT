@@ -13,6 +13,7 @@ import { McpStoreRoute } from "@/routes/McpStoreRoute";
 import { MethodologyRoute } from "@/routes/MethodologyRoute";
 import { ProjectRoute } from "@/routes/ProjectRoute";
 import { RosterRoute } from "@/routes/RosterRoute";
+import { SessionsRoute } from "@/routes/SessionsRoute";
 import { SettingsRoute } from "@/routes/SettingsRoute";
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,8 @@ function RouteRenderer({
       return <DoctorRoute projectPath={projectPath} doctor={doctor} />;
     case "methodology":
       return <MethodologyRoute projectPath={projectPath} />;
+    case "sessions":
+      return <SessionsRoute projectPath={projectPath} />;
     case "settings":
       return (
         <SettingsRoute

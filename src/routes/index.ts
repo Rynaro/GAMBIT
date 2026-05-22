@@ -42,6 +42,11 @@ export const ROUTES: RouteEntry[] = [
     subtitle: "Read each Eidolon's agent.md and methodology notes.",
   },
   {
+    id: "sessions",
+    label: "Sessions",
+    subtitle: "Launch a project Eidolon and converse with it across turns.",
+  },
+  {
     id: "settings",
     label: "Settings",
     subtitle: "Project picker, appearance, and about.",
