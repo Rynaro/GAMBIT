@@ -117,7 +117,10 @@ describe("useSession", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    // clearAllMocks, NOT restoreAllMocks: restore wipes the module-level
+    // mockListen implementation, so subsequent tests' listen() returns
+    // undefined and detachListeners crashes on a non-function unlisten.
+    vi.clearAllMocks();
   });
 
   it("starts in idle state", () => {

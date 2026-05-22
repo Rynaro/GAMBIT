@@ -50,9 +50,10 @@ function emitStderr(line: string, ts = "2026-05-21T00:00:00Z") {
   });
 }
 
-function emitComplete(exit_code: number) {
+function emitComplete(exitCode: number) {
   act(() => {
-    eventHandlers["sync-complete"]?.({ payload: { exit_code } });
+    // Wire field is camelCase `exitCode` (serde rename_all on CompletePayload).
+    eventHandlers["sync-complete"]?.({ payload: { exitCode } });
   });
 }
 
@@ -70,7 +71,10 @@ describe("useSync", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    // clearAllMocks, NOT restoreAllMocks: restore wipes the module-level
+    // mockListen implementation, so subsequent tests' listen() returns
+    // undefined and detachListeners crashes on a non-function unlisten.
+    vi.clearAllMocks();
   });
 
   it("starts in idle state", () => {
