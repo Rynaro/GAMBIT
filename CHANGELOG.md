@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-22
+
+The first v0.4.x minor — transcript comfort. Planned via a TRANCE chain; round
+plan at `.junction/plans/v0-4-x-sessions.json`.
+
+### Added
+
+- **Collapsible session sidebar** — collapse the left rail to give the chat the
+  full window width; the choice persists across reloads.
+- **Transcript autoscroll** — the conversation sticks to the bottom as output
+  streams in, pauses when you scroll up to read, and offers a "jump to latest"
+  pill to re-engage.
+- **Copy buttons** — hover-to-copy on assistant messages, tool-result bodies,
+  and code fences.
+- **Quieter tool chips** — a collapsed tool chip is now just a name + an
+  outcome dot; the input peek is revealed on expand. Plus an
+  expand-all / collapse-all control for every tool chip and thinking block in
+  the conversation.
+
+### Fixed
+
+- **The user's own prompt is now shown in the transcript.** Previously a turn's
+  prompt was sent but never displayed — you lost track of what you asked. Each
+  turn's prompt now appears as a bubble heading its turn group, and persists
+  across a session reopen.
+
 ## [0.3.6] — 2026-05-22
 
 ### Fixed

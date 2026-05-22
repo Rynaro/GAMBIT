@@ -1,0 +1,174 @@
+{
+  "thread_id": "5795ffe7-be5d-407d-80f9-7febe4899a7a",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "round": "v0.4.x — session augmentation & productivity",
+  "provenance": {
+    "scout": ".atlas/scout-report.md",
+    "chain": "ATLAS scout + research -> orchestrator roadmap",
+    "note": "Roadmap is the orchestrator's recommended cut, approved by the user."
+  },
+  "releases": {
+    "0.4.1": ["R1", "R2", "P3", "R4", "P2", "P5"],
+    "0.4.2": ["R3", "R5"],
+    "0.4.3": ["P1", "P4", "P7"],
+    "0.4.4": ["P8", "P9", "P10"]
+  },
+  "steps": [
+    {
+      "step_id": "R1",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Collapsible Sessions sidebar — a collapse toggle on the list<->detail shell so the chat pane gets full width. Frontend-only: railCollapsed state in SessionsRoute, data-collapsed on .session-shell-body, a toggle control; collapsed = thin strip. Optionally persist the bit to localStorage.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "R2",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Tool chips quieter by default — the ToolUseChip result body already collapses; also gate the always-on 120-char input peek behind expand so a collapsed chip is a bare name + outcome dot.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P3",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Bulk collapse/expand all tools + thinking blocks — a transcript- or turn-level expand-all/collapse-all control. Companion to R2; the real quiet-transcript lever.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "R4",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Render the user's own prompt in the transcript (defect fix — the prompt is sent but never shown). Append a synthetic prompt TranscriptEntry on turn dispatch (start + sendTurn) + a TranscriptRow prompt branch (right-aligned user bubble). Add a Rust PersistedEntry append in run_turn so the prompt survives a restart/reopen.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P2",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Transcript autoscroll + jump-to-latest — stick-to-bottom as streaming deltas append, pausing on user scroll-up, with a jump-to-latest pill.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P5",
+      "release": "0.4.1",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Copy affordances — hover copy buttons on assistant text cards, tool-result bodies, and code fences.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "R3",
+      "release": "0.4.2",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Model + thinking-effort selection. build_args gains --model (aliases opus/sonnet/haiku/opusplan/default + [1m]) and --effort (low/medium/high/xhigh/max); optional --fallback-model; an ultrathink per-prompt toggle. New StartSessionParams + SessionHandle + SessionRecord/SessionSummary fields (rebuilt on --resume). Composer options-disclosure model + effort selects. Set showThinkingSummaries so Opus 4.7 thinking blocks are not empty. Flags verified against official claude-code docs.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "R5",
+      "release": "0.4.2",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Prompt token estimate — a new estimateTokens.ts heuristic (~chars/4) showing a labelled '~N tokens' for the composer draft; optionally a projected '+N this turn' overlay on the ContextGauge.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P1",
+      "release": "0.4.3",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Stop / interrupt a running turn — a UI control that cancels the in-flight turn via the existing cancel_session command, surfaced prominently while a turn streams.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P4",
+      "release": "0.4.3",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Retry / edit-and-resend a turn — a control on a user prompt bubble (R4) to resend that prompt, or edit it and resend, as a fresh turn.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P7",
+      "release": "0.4.3",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Keyboard navigation — an Enter-to-send preference toggle, Esc to cancel a running turn, and a session-cycle shortcut across the rail.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P8",
+      "release": "0.4.4",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Conversation forking — branch a session via claude-code's --fork-session (a new session id on resume), so a user can explore an alternate path without losing the original.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P9",
+      "release": "0.4.4",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "@-file mentions — typing @path in the composer pulls a project file reference into the prompt.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "P10",
+      "release": "0.4.4",
+      "from": {"eidolon": "atlas", "version": "1.5.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Session + transcript search — a filter box on the session rail and an in-conversation find within a transcript.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    }
+  ]
+}
