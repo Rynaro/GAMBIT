@@ -5,6 +5,7 @@ pub mod doctor;
 pub mod extract;
 pub mod mcp;
 pub mod session;
+pub mod session_store;
 pub mod spawn_core;
 pub mod sync;
 pub mod upgrade;
@@ -81,6 +82,9 @@ pub fn run() {
             session::send_turn,
             session::claude_auth_status,
             session::cancel_session,
+            session_store::list_sessions,
+            session_store::load_session,
+            session_store::delete_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GAMBIT application");

@@ -66,12 +66,13 @@
 
 use crate::binary;
 use crate::claude_adapter::{self, ParsedEvent, TurnArgs, TurnKind};
+use crate::session_store::{self, CumulativeUsage, PersistedEntry, SessionRecord, TurnRecord};
 use crate::spawn_core;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{AppHandle, Emitter, State};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
@@ -116,6 +117,39 @@ pub struct SessionHandle {
     /// running one. An `Arc<AtomicBool>` so the wait task can clear it on
     /// turn completion without re-locking the registry map.
     pub turn_in_flight: Arc<AtomicBool>,
+
+    // --- v0.3.1 persistence state ------------------------------------------
+    // Story S1 makes Rust the transcript owner: it already parses every
+    // NDJSON line, so it accumulates the durable `SessionRecord` content
+    // here and flushes a full record per turn (see `run_turn`). These are
+    // `Arc`s so the per-turn reader/wait tasks can touch them without
+    // re-locking the registry map.
+    /// `true` for a cortex-routed default session. The cortex launch path is
+    /// story S4 — this field exists now so the record carries it.
+    pub is_cortex: bool,
+    /// Session title — derived from the turn-1 prompt at `start_session`.
+    pub title: String,
+    /// RFC-3339 creation timestamp.
+    pub created_at: String,
+    /// The serving model — captured from the first `system/init` event seen.
+    /// A synchronous `std::sync::Mutex`: the per-turn reader/wait tasks touch
+    /// it only in short non-`await` critical sections (the stdout reader is a
+    /// synchronous `FnMut`), so a tokio mutex would be the wrong tool here.
+    pub model: Arc<StdMutex<Option<String>>>,
+    /// The accumulating transcript buffer. Each reader task appends the
+    /// `PersistedEntry` equivalent of every `session-event` / `session-stderr`
+    /// it emits; the wait task flushes the whole buffer into the record.
+    pub transcript: Arc<StdMutex<Vec<PersistedEntry>>>,
+    /// Per-turn finalisation log — one [`TurnRecord`] appended by the wait
+    /// task per turn, carrying the partial-turn-safety `result_seen` flag.
+    pub per_turn: Arc<StdMutex<Vec<TurnRecord>>>,
+    /// Cumulative token usage summed across every turn's `result` event.
+    pub cumulative_usage: Arc<StdMutex<CumulativeUsage>>,
+    /// Cumulative estimated cost summed across every turn's `total_cost_usd`.
+    pub cumulative_cost_usd: Arc<StdMutex<Option<f64>>>,
+    /// Monotonic turn counter — incremented per turn so each reader/wait task
+    /// stamps its `PersistedEntry`s and `TurnRecord` with the right number.
+    pub turn_counter: Arc<AtomicU32>,
 }
 
 /// Tauri-managed registry of live Eidolon sessions, keyed by UUID.
@@ -166,6 +200,15 @@ pub struct StartSessionParams {
     pub allowed_tools: Vec<String>,
     /// The prompt for turn 1.
     pub first_prompt: String,
+    /// `true` for a cortex-routed default session. Optional — defaults to
+    /// `false`. The cortex launch path is story S4; the field exists now so
+    /// the persisted `SessionRecord` carries it from v0.3.1.
+    #[serde(default)]
+    pub is_cortex: bool,
+    /// Optional explicit session title. When absent, the title is derived
+    /// from `first_prompt` (first ~60 chars).
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// Returned by [`start_session`]: the addressable session descriptor.
@@ -182,6 +225,10 @@ pub struct SessionInfo {
     pub permission_mode: String,
     /// Session status at return time (`"running"` — turn 1 was just spawned).
     pub status: String,
+    /// RFC-3339 creation timestamp — also written into the `SessionRecord`.
+    pub created_at: String,
+    /// `true` for a cortex-routed default session (story S4 launch path).
+    pub is_cortex: bool,
 }
 
 /// Returned by [`claude_auth_status`]: the `claude` CLI login pre-flight.
@@ -309,6 +356,92 @@ fn auth_status_from_output(exit_code: i32, stdout: &str, stderr: &str) -> AuthSt
 }
 
 // ---------------------------------------------------------------------------
+// Persistence plumbing (story S1)
+// ---------------------------------------------------------------------------
+
+/// Immutable per-session metadata snapshotted into a turn's reader/wait tasks.
+///
+/// `SessionHandle` lives in the registry behind a map mutex; cloning these
+/// owned fields out once (under the map guard, then dropped) lets the spawned
+/// tasks build a [`SessionRecord`] at flush time WITHOUT re-locking the map.
+#[derive(Clone)]
+struct SessionMeta {
+    uuid: String,
+    eidolon_name: String,
+    is_cortex: bool,
+    title: String,
+    project_path: String,
+    permission_mode: String,
+    append_system_prompt: String,
+    allowed_tools: Vec<String>,
+    created_at: String,
+}
+
+/// The shared persistence `Arc`s a turn's reader/wait tasks accumulate into.
+///
+/// Cloned out of the [`SessionHandle`] alongside [`SessionMeta`]; the reader
+/// tasks append to `transcript`, the wait task folds usage/cost and appends
+/// the per-turn [`TurnRecord`], then flushes a full [`SessionRecord`]. All
+/// `std::sync::Mutex` — every critical section is synchronous and short, and
+/// no guard is ever held across an `.await`.
+#[derive(Clone)]
+struct PersistState {
+    model: Arc<StdMutex<Option<String>>>,
+    transcript: Arc<StdMutex<Vec<PersistedEntry>>>,
+    per_turn: Arc<StdMutex<Vec<TurnRecord>>>,
+    cumulative_usage: Arc<StdMutex<CumulativeUsage>>,
+    cumulative_cost_usd: Arc<StdMutex<Option<f64>>>,
+}
+
+/// Build the current [`SessionRecord`] from the session's metadata + the
+/// accumulated persistence state. Called by the wait-task tail per turn.
+///
+/// `status` is the post-turn status string (`idle` / `failed`). Each lock is
+/// taken, read into an owned value, and dropped within its own statement —
+/// no guard is ever held across an `.await`.
+fn build_record(meta: &SessionMeta, persist: &PersistState, status: &str) -> SessionRecord {
+    let model = persist.model.lock().expect("model mutex poisoned").clone();
+    let transcript = persist
+        .transcript
+        .lock()
+        .expect("transcript mutex poisoned")
+        .clone();
+    let per_turn = persist
+        .per_turn
+        .lock()
+        .expect("per_turn mutex poisoned")
+        .clone();
+    let cumulative_usage = persist
+        .cumulative_usage
+        .lock()
+        .expect("cumulative_usage mutex poisoned")
+        .clone();
+    let cumulative_cost_usd = *persist
+        .cumulative_cost_usd
+        .lock()
+        .expect("cumulative_cost mutex poisoned");
+
+    SessionRecord {
+        uuid: meta.uuid.clone(),
+        eidolon_name: meta.eidolon_name.clone(),
+        is_cortex: meta.is_cortex,
+        title: meta.title.clone(),
+        project_path: meta.project_path.clone(),
+        permission_mode: meta.permission_mode.clone(),
+        append_system_prompt: meta.append_system_prompt.clone(),
+        allowed_tools: meta.allowed_tools.clone(),
+        status: status.to_string(),
+        model,
+        created_at: meta.created_at.clone(),
+        last_active_at: chrono::Utc::now().to_rfc3339(),
+        transcript,
+        cumulative_usage,
+        cumulative_cost_usd,
+        per_turn,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-turn machinery
 // ---------------------------------------------------------------------------
 
@@ -324,12 +457,25 @@ fn auth_status_from_output(exit_code: i32, stdout: &str, stderr: &str) -> AuthSt
 ///
 /// R6 dual-finalize: `result_seen` is the shared flag — the stdout reader sets
 /// it on a `ParsedEvent::Result`, the wait task reads it for `hadResult`.
+///
+/// Story S1 — persistence: `turn` is this turn's 1-based number; the reader
+/// tasks append a [`PersistedEntry`] to `persist.transcript` for every
+/// `session-event` / `session-stderr` they emit (Rust is the transcript
+/// owner). The wait-task tail folds the turn's usage/cost, appends a
+/// [`TurnRecord`] (with `result_seen` — `false` when the turn exited WITHOUT
+/// a terminal `result`, the crash/SIGKILL safety case), and flushes the FULL
+/// [`SessionRecord`] + `index.json` entry right before the
+/// `session-turn-complete` emit.
+#[allow(clippy::too_many_arguments)]
 fn run_turn(
     app: AppHandle,
     session_id: Uuid,
     spawned: spawn_core::SpawnedChild,
     child_slot: Arc<Mutex<Option<Child>>>,
     turn_in_flight: Arc<AtomicBool>,
+    meta: SessionMeta,
+    persist: PersistState,
+    turn: u32,
 ) {
     let spawn_core::SpawnedChild {
         child,
@@ -348,29 +494,89 @@ fn run_turn(
 
     // --- stdout reader -----------------------------------------------------
     // Each line → parse_line → `session-event`. On a `Result` event, flip the
-    // shared dual-finalize flags. `read_lines`'s closure is `FnMut + Send`;
-    // it owns its clones, so nothing is borrowed across the task boundary.
+    // shared dual-finalize flags AND fold its usage/cost into the cumulative
+    // totals. On an `Init` event, capture the serving model. Every line is
+    // also appended to the transcript buffer (Rust is the transcript owner).
+    // `read_lines`'s closure is a synchronous `FnMut + Send`; the persistence
+    // mutexes are `std::sync::Mutex` so their short critical sections need no
+    // `.await` — nothing is held across a yield point.
     let app_stdout = app.clone();
     let sid_stdout = session_id_str.clone();
     let result_seen_rd = result_seen.clone();
     let result_error_rd = result_error.clone();
+    let persist_stdout = persist.clone();
     let stdout_task = spawn_core::read_lines(stdout, move |line| {
         let parsed = claude_adapter::parse_line(&line);
-        if let ParsedEvent::Result { is_error, .. } = &parsed {
-            // R6: a terminal `result` was observed — record it for the wait
-            // task. `Ordering::SeqCst` is more than enough here; these flags
-            // are read exactly once, after the reader task has fully joined.
-            if *is_error {
-                result_error_rd.store(true, Ordering::SeqCst);
+        match &parsed {
+            ParsedEvent::Result {
+                is_error,
+                usage,
+                total_cost_usd,
+                ..
+            } => {
+                // R6: a terminal `result` was observed — record it for the
+                // wait task. `Ordering::SeqCst` is more than enough here;
+                // these flags are read once, after the reader fully joins.
+                if *is_error {
+                    result_error_rd.store(true, Ordering::SeqCst);
+                }
+                result_seen_rd.store(true, Ordering::SeqCst);
+
+                // Accumulate cumulative usage + cost across turns.
+                persist_stdout
+                    .cumulative_usage
+                    .lock()
+                    .expect("cumulative_usage mutex poisoned")
+                    .add(usage);
+                if let Some(cost) = total_cost_usd {
+                    let mut acc = persist_stdout
+                        .cumulative_cost_usd
+                        .lock()
+                        .expect("cumulative_cost mutex poisoned");
+                    *acc = Some(acc.unwrap_or(0.0) + cost);
+                }
             }
-            result_seen_rd.store(true, Ordering::SeqCst);
+            ParsedEvent::Init {
+                model: Some(m), ..
+            } => {
+                // Capture the serving model the first time `init` reports one.
+                let mut slot = persist_stdout
+                    .model
+                    .lock()
+                    .expect("model mutex poisoned");
+                if slot.is_none() {
+                    *slot = Some(m.clone());
+                }
+            }
+            _ => {}
         }
+
+        let ts = chrono::Utc::now().to_rfc3339();
+        let kind = event_kind(&parsed).to_string();
+
+        // Append the durable transcript entry before emitting — the parsed
+        // event is serialised to a `Value` so the store never depends on the
+        // `ParsedEvent` enum shape.
+        let parsed_value = serde_json::to_value(&parsed).ok();
+        persist_stdout
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "event".to_string(),
+                turn,
+                kind: Some(kind.clone()),
+                parsed: parsed_value,
+                line: line.clone(),
+                ts: ts.clone(),
+            });
+
         let payload = SessionEventPayload {
             session_id: sid_stdout.clone(),
-            kind: event_kind(&parsed).to_string(),
+            kind,
             raw: line,
             parsed,
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts,
         };
         let _ = app_stdout.emit("session-event", payload);
     });
@@ -378,11 +584,28 @@ fn run_turn(
     // --- stderr reader -----------------------------------------------------
     let app_stderr = app.clone();
     let sid_stderr = session_id_str.clone();
+    let persist_stderr = persist.clone();
     let stderr_task = spawn_core::read_lines(stderr, move |line| {
+        let ts = chrono::Utc::now().to_rfc3339();
+
+        // A stderr entry carries no `kind` / `parsed` — just the raw line.
+        persist_stderr
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "stderr".to_string(),
+                turn,
+                kind: None,
+                parsed: None,
+                line: line.clone(),
+                ts: ts.clone(),
+            });
+
         let payload = SessionStderrPayload {
             session_id: sid_stderr.clone(),
             line,
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts,
         };
         let _ = app_stderr.emit("session-stderr", payload);
     });
@@ -391,12 +614,8 @@ fn run_turn(
     // Scoped: the guard is dropped before the wait task is spawned, and the
     // wait task re-locks it independently — no guard is ever held across an
     // `.await`.
-    //
-    // We block_on the store inside the wait task's prelude instead of here so
-    // `run_turn` itself stays synchronous (its callers are `async fn`s but the
-    // store is fast and lock-free contention is nil). Simpler: do it in the
-    // wait task before the join.
     let app_complete = app.clone();
+    let app_persist = app.clone();
     let child_slot_wait = child_slot.clone();
     tokio::spawn(async move {
         // Publish the child into the session slot so S5's cancel can reach it.
@@ -435,6 +654,32 @@ fn run_turn(
             *guard = None;
         }
         turn_in_flight.store(false, Ordering::SeqCst);
+
+        // --- Story S1: per-turn durable flush --------------------------------
+        // Append this turn's finalisation record. `result_seen` carries the
+        // partial-turn-safety signal: a turn that exited WITHOUT a terminal
+        // `result` event (crash / SIGKILL / dropped result) flushes here with
+        // `result_seen: false` so re-entry (story S2) offers a fresh
+        // continuation rather than restoring a half-written turn.
+        {
+            let mut log = persist
+                .per_turn
+                .lock()
+                .expect("per_turn mutex poisoned");
+            log.push(TurnRecord {
+                turn,
+                result_seen: had_result,
+            });
+        }
+
+        // Flush the FULL SessionRecord (transcript buffer included) + refresh
+        // the index.json entry. A flush failure is logged, not fatal — the
+        // turn still completes and the UI still receives `session-turn-complete`.
+        let status = if is_error { "failed" } else { "idle" };
+        let record = build_record(&meta, &persist, status);
+        if let Err(e) = session_store::persist_record(&app_persist, &record) {
+            eprintln!("[session-store] warn: per-turn flush failed for {session_id_str}: {e}");
+        }
 
         let payload = TurnCompletePayload {
             session_id: session_id_str,
@@ -499,9 +744,28 @@ pub async fn start_session(
     cmd.args(&args).current_dir(&project_dir);
     let spawned = spawn_core::spawn_piped(cmd, &claude_bin)?;
 
+    // --- Derive the title + creation timestamp (story S1 persistence) ---
+    // The title is the caller-supplied one if present, else derived from the
+    // turn-1 prompt (first ~60 chars). `created_at` is fixed for the session's
+    // life; `last_active_at` is bumped on every per-turn flush.
+    let title = match &params.title {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => session_store::derive_title(&params.first_prompt),
+    };
+    let created_at = chrono::Utc::now().to_rfc3339();
+
     // --- Register the SessionHandle ---
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let turn_in_flight = Arc::new(AtomicBool::new(true));
+    let turn_counter = Arc::new(AtomicU32::new(0));
+    // Story S1 persistence buffers — Rust owns the durable transcript.
+    let model: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(None));
+    let transcript: Arc<StdMutex<Vec<PersistedEntry>>> = Arc::new(StdMutex::new(Vec::new()));
+    let per_turn: Arc<StdMutex<Vec<TurnRecord>>> = Arc::new(StdMutex::new(Vec::new()));
+    let cumulative_usage: Arc<StdMutex<CumulativeUsage>> =
+        Arc::new(StdMutex::new(CumulativeUsage::default()));
+    let cumulative_cost_usd: Arc<StdMutex<Option<f64>>> = Arc::new(StdMutex::new(None));
+
     let handle = SessionHandle {
         eidolon_name: params.eidolon_name.clone(),
         project_path: project_dir.clone(),
@@ -511,6 +775,15 @@ pub async fn start_session(
         status: "running".to_string(),
         child: child_slot.clone(),
         turn_in_flight: turn_in_flight.clone(),
+        is_cortex: params.is_cortex,
+        title: title.clone(),
+        created_at: created_at.clone(),
+        model: model.clone(),
+        transcript: transcript.clone(),
+        per_turn: per_turn.clone(),
+        cumulative_usage: cumulative_usage.clone(),
+        cumulative_cost_usd: cumulative_cost_usd.clone(),
+        turn_counter: turn_counter.clone(),
     };
     {
         // Guard scoped to the synchronous insert — dropped before `run_turn`.
@@ -518,13 +791,48 @@ pub async fn start_session(
         sessions.insert(session_id, handle);
     }
 
-    // --- Start the per-turn reader + wait tasks ---
+    // --- Snapshot the persistence context for turn 1 ---
+    let meta = SessionMeta {
+        uuid: session_id_str.clone(),
+        eidolon_name: params.eidolon_name.clone(),
+        is_cortex: params.is_cortex,
+        title: title.clone(),
+        project_path: params.project_path.clone(),
+        permission_mode: params.permission_mode.clone(),
+        append_system_prompt: params.append_system_prompt.clone(),
+        allowed_tools: params.allowed_tools.clone(),
+        created_at: created_at.clone(),
+    };
+    let persist = PersistState {
+        model,
+        transcript,
+        per_turn,
+        cumulative_usage,
+        cumulative_cost_usd,
+    };
+
+    // --- Write the initial SessionRecord + index.json entry ---
+    // The session is durable from birth — even if turn 1 crashes before its
+    // per-turn flush, `list_sessions` already sees it. A write failure is
+    // logged, not fatal: the in-memory session still runs.
+    {
+        let initial = build_record(&meta, &persist, "running");
+        if let Err(e) = session_store::persist_record(&app, &initial) {
+            eprintln!("[session-store] warn: initial record write failed for {session_id_str}: {e}");
+        }
+    }
+
+    // --- Start the per-turn reader + wait tasks (turn 1) ---
+    let turn = turn_counter.fetch_add(1, Ordering::SeqCst) + 1;
     run_turn(
         app.clone(),
         session_id,
         spawned,
         child_slot,
         turn_in_flight,
+        meta,
+        persist,
+        turn,
     );
 
     Ok(SessionInfo {
@@ -533,6 +841,8 @@ pub async fn start_session(
         project_path: params.project_path,
         permission_mode: params.permission_mode,
         status: "running".to_string(),
+        created_at,
+        is_cortex: params.is_cortex,
     })
 }
 
@@ -561,8 +871,10 @@ pub async fn send_turn(
 
     // --- Look the session up, claim the in-flight slot, copy out args ---
     // All of this happens under the map guard; the guard is dropped at the
-    // end of this block, BEFORE any spawn or `.await` on the child.
-    let (claude_args, project_dir, child_slot, turn_in_flight) = {
+    // end of this block, BEFORE any spawn or `.await` on the child. The
+    // persistence context (`meta` + `persist` + the next turn number) is
+    // snapshotted here too — story S1 threads it into `run_turn`'s flush.
+    let (claude_args, project_dir, child_slot, turn_in_flight, meta, persist, turn) = {
         let sessions = state.sessions.lock().await;
         let handle = sessions
             .get(&uuid)
@@ -591,11 +903,34 @@ pub async fn send_turn(
             session_id: &session_id,
             turn_kind: TurnKind::Resumed,
         };
+        let meta = SessionMeta {
+            uuid: session_id.clone(),
+            eidolon_name: handle.eidolon_name.clone(),
+            is_cortex: handle.is_cortex,
+            title: handle.title.clone(),
+            project_path: handle.project_path.to_string_lossy().to_string(),
+            permission_mode: handle.permission_mode.clone(),
+            append_system_prompt: handle.append_system_prompt.clone(),
+            allowed_tools: handle.allowed_tools.clone(),
+            created_at: handle.created_at.clone(),
+        };
+        let persist = PersistState {
+            model: handle.model.clone(),
+            transcript: handle.transcript.clone(),
+            per_turn: handle.per_turn.clone(),
+            cumulative_usage: handle.cumulative_usage.clone(),
+            cumulative_cost_usd: handle.cumulative_cost_usd.clone(),
+        };
+        // The next 1-based turn number for this session.
+        let turn = handle.turn_counter.fetch_add(1, Ordering::SeqCst) + 1;
         (
             claude_adapter::build_args(&turn_args),
             handle.project_path.clone(),
             handle.child.clone(),
             handle.turn_in_flight.clone(),
+            meta,
+            persist,
+            turn,
         )
         // map guard dropped here
     };
@@ -620,7 +955,16 @@ pub async fn send_turn(
     };
 
     // --- Start the per-turn reader + wait tasks ---
-    run_turn(app.clone(), uuid, spawned, child_slot, turn_in_flight);
+    run_turn(
+        app.clone(),
+        uuid,
+        spawned,
+        child_slot,
+        turn_in_flight,
+        meta,
+        persist,
+        turn,
+    );
 
     Ok(())
 }
@@ -757,6 +1101,15 @@ mod tests {
             status: "idle".to_string(),
             child: Arc::new(Mutex::new(None)),
             turn_in_flight: Arc::new(AtomicBool::new(false)),
+            is_cortex: false,
+            title: "Test session".to_string(),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            model: Arc::new(StdMutex::new(None)),
+            transcript: Arc::new(StdMutex::new(Vec::new())),
+            per_turn: Arc::new(StdMutex::new(Vec::new())),
+            cumulative_usage: Arc::new(StdMutex::new(CumulativeUsage::default())),
+            cumulative_cost_usd: Arc::new(StdMutex::new(None)),
+            turn_counter: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -877,6 +1230,8 @@ mod tests {
             project_path: "/tmp/project".to_string(),
             permission_mode: "acceptEdits".to_string(),
             status: "running".to_string(),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            is_cortex: false,
         };
         assert_eq!(info.session_id, id.to_string());
         assert_eq!(info.eidolon_name, "Sage");
@@ -889,8 +1244,11 @@ mod tests {
         assert!(json.get("projectPath").is_some());
         assert!(json.get("permissionMode").is_some());
         assert!(json.get("status").is_some());
+        assert!(json.get("createdAt").is_some());
+        assert!(json.get("isCortex").is_some());
         // snake_case keys must NOT leak through.
         assert!(json.get("session_id").is_none());
+        assert!(json.get("created_at").is_none());
     }
 
     /// The `turn_in_flight` claim is atomic: the first `compare_exchange`
