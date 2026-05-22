@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-05-22
+
+The second v0.4.x minor — session controls.
+
+### Added
+
+- **Model selection** — choose the model for a session at launch: Opus, Sonnet,
+  Haiku, `opusplan`, the 1M-context variants, or the account default. The choice
+  is pinned for the session and replayed on every `--resume` turn.
+- **Thinking-effort selection** — pick a reasoning effort (`low` / `medium` /
+  `high` / `xhigh` / `max`); claude-code auto-downgrades to the model's top
+  supported level.
+- Sessions now pass `showThinkingSummaries`, so Opus 4.7 thinking blocks stream
+  real reasoning text rather than empty placeholders.
+- Optional **fallback model** — auto-downgrade when the primary model is
+  overloaded (honored in headless mode).
+- **Prompt token estimate** — the composer shows a live `~N tokens` estimate of
+  the draft as you type. A heuristic, clearly labelled approximate.
+
 ## [0.4.1] — 2026-05-22
 
 The first v0.4.x minor — transcript comfort. Planned via a TRANCE chain; round
