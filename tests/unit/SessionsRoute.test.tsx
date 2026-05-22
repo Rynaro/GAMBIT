@@ -515,6 +515,31 @@ describe("SessionsRoute", () => {
   });
 
   // -------------------------------------------------------------------------
+  // R5 — prompt token estimate in the composer
+  // -------------------------------------------------------------------------
+
+  it("R5: typing into the draft updates the ~N tokens estimate label", async () => {
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+
+    // An empty draft reads ~0 tokens.
+    expect(screen.getByText("~0 tokens")).toBeDefined();
+
+    // Typing raises the estimate; the label updates live.
+    fireEvent.change(textarea, { target: { value: "the quick brown fox" } });
+    expect(screen.queryByText("~0 tokens")).toBeNull();
+    const label = screen.getByText(/^~[\d,]+ tokens$/);
+    expect(label.textContent).not.toBe("~0 tokens");
+
+    // A much longer draft estimates higher than a short one.
+    const shortEstimate = label.textContent;
+    fireEvent.change(textarea, { target: { value: "the quick brown fox ".repeat(50) } });
+    expect(screen.getByText(/^~[\d,]+ tokens$/).textContent).not.toBe(shortEstimate);
+  });
+
+  // -------------------------------------------------------------------------
   // R1 — collapsible Sessions rail
   // -------------------------------------------------------------------------
 

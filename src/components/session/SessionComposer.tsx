@@ -30,7 +30,8 @@
 import { EFFORT_OPTIONS, MODEL_OPTIONS } from "@/lib/claudeModels";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_DISPLAY_NAME } from "@/lib/eidolonRoster";
-import { type KeyboardEvent, useState } from "react";
+import { estimateTokens } from "@/lib/estimateTokens";
+import { type KeyboardEvent, useMemo, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -142,6 +143,11 @@ export function SessionComposer({
   const isCreate = mode === "create";
   // Whether the compose action can fire at all (independent of draft text).
   const actionEnabled = isCreate ? createReady : canSend;
+
+  // R5 — a deliberately-approximate token estimate of the draft, recomputed on
+  // every keystroke. The draft is only a FRACTION of the true request, so this
+  // is a "ballpark" figure and is labelled with a leading `~`.
+  const tokenEstimate = useMemo(() => estimateTokens(draft), [draft]);
 
   function handleCompose() {
     const prompt = draft.trim();
@@ -331,6 +337,14 @@ export function SessionComposer({
       )}
 
       <div className="session-composer-actions">
+        {/* R5 — approximate token estimate of the draft; `~` + a thousands
+            separator make clear it is a ballpark, not an exact count. */}
+        <span
+          className="session-composer-estimate"
+          title="Approximate token count of your draft — an estimate, not exact"
+        >
+          ~{tokenEstimate.toLocaleString("en-US")} tokens
+        </span>
         {turnRunning && (
           <button
             type="button"

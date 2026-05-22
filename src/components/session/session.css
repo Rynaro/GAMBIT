@@ -596,8 +596,17 @@
 
 .session-composer-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-4);
+}
+
+/* R5 — approximate token estimate; sits at the row's left edge. */
+.session-composer-estimate {
+  margin-right: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
 .session-send-btn {
