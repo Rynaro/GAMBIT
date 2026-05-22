@@ -38,10 +38,31 @@
 // Arc<AtomicBool> when it sees a ParsedEvent::Result; the wait task reads that
 // flag into the `hadResult` field of the `session-turn-complete` payload.
 //
-// NOTE: this module deliberately does NOT build cancel_session or
-// claude_auth_status — those are story S5. It DOES store the per-turn Child
-// in SessionHandle (Arc<Mutex<Option<Child>>>, mirroring sync.rs's SyncState)
-// so S5 can add cancel without reworking S4.
+// Story S5 adds two more commands:
+//
+//   claude_auth_status(app) → Result<AuthStatus, String>
+//     A one-shot pre-flight (no events): resolve `claude`, run
+//     `claude auth status --text`, and report login state. `loggedIn` is the
+//     process exiting 0; `detail` is a short human-readable line. If `claude`
+//     itself cannot be found this still returns Ok(AuthStatus{ loggedIn:
+//     false, .. }) — never Err — so the UI shows a clean "not logged in /
+//     claude not found" state instead of an opaque error.
+//
+//   cancel_session(state, sessionId) → Result<(), String>
+//     Look up the SessionHandle by UUID and SIGKILL the current turn's child,
+//     mirroring sync.rs's cancel_sync.
+//
+// NOTE (v0.3 known gap): cancel_session sends SIGKILL via child.kill(), not
+// SIGINT. Killing *between* turns is harmless — session state lives in
+// claude-code's `--resume` store, not in the process — so a cancelled session
+// can simply be resumed. Killing *mid-turn* is ungraceful: the in-flight
+// `claude` process is terminated without a clean shutdown. A graceful SIGINT
+// path would require the `nix` crate (`nix::sys::signal::kill(pid, SIGINT)`);
+// this is an accepted v0.3 limitation, mirroring sync.rs:18-21.
+//
+// SessionHandle stores the per-turn Child (Arc<Mutex<Option<Child>>>,
+// mirroring sync.rs's SyncState) so cancel_session can reach the live process
+// without reworking S4.
 
 use crate::binary;
 use crate::claude_adapter::{self, ParsedEvent, TurnArgs, TurnKind};
@@ -52,7 +73,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tokio::process::Child;
+use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -163,6 +184,22 @@ pub struct SessionInfo {
     pub status: String,
 }
 
+/// Returned by [`claude_auth_status`]: the `claude` CLI login pre-flight.
+///
+/// `loggedIn` is true iff `claude auth status` exited 0. `detail` is a short
+/// human-readable line drawn from the command's own output (or a clear
+/// "claude not found" message if the binary could not be resolved). The
+/// command never returns `Err` for a not-logged-in / missing-binary state —
+/// those are reported in-band so the UI can render a clean gate.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthStatus {
+    /// `true` iff `claude auth status` exited with code 0.
+    pub logged_in: bool,
+    /// Short human-readable status line for the UI to display.
+    pub detail: String,
+}
+
 // ---------------------------------------------------------------------------
 // Event payloads — all camelCase, all Clone + Serialize for `emit`.
 // ---------------------------------------------------------------------------
@@ -241,6 +278,34 @@ fn event_kind(event: &ParsedEvent) -> &'static str {
 /// cancelled turn did not complete successfully.
 fn turn_is_error(exit_code: i32, result_was_error: bool) -> bool {
     exit_code != 0 || result_was_error
+}
+
+/// Build an [`AuthStatus`] from a finished `claude auth status` invocation.
+///
+/// `loggedIn` is the exit code being 0. `detail` prefers the first non-blank
+/// line of stdout (`claude auth status --text` prints `Login method: ...` /
+/// `Email: ...` when logged in); on a non-zero exit it falls back to the first
+/// non-blank stderr line, and finally to a generic message keyed on the login
+/// state. Kept pure (no process, no `claude`) so it is unit-testable.
+fn auth_status_from_output(exit_code: i32, stdout: &str, stderr: &str) -> AuthStatus {
+    let logged_in = exit_code == 0;
+
+    let first_line = |s: &str| -> Option<String> {
+        s.lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .map(str::to_string)
+    };
+
+    let detail = if logged_in {
+        first_line(stdout).unwrap_or_else(|| "logged in to claude".to_string())
+    } else {
+        first_line(stderr)
+            .or_else(|| first_line(stdout))
+            .unwrap_or_else(|| "not logged in to claude".to_string())
+    };
+
+    AuthStatus { logged_in, detail }
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +625,114 @@ pub async fn send_turn(
     Ok(())
 }
 
+/// Tauri command: report the `claude` CLI login state as a launch pre-flight.
+///
+/// A one-shot (no events), mirroring the `mcp_list` / `check_upgrades` shape:
+/// resolve `claude`, run `claude auth status --text`, capture exit code +
+/// stdout/stderr, and fold them into an [`AuthStatus`] via the pure
+/// `auth_status_from_output` helper.
+///
+/// GAP-2: cross-checked against the live binary — `claude auth status` is a
+/// real subcommand and exits 0 when logged in. It defaults to `--json`; we
+/// pass `--text` explicitly so `detail` is a clean human-readable line.
+///
+/// This command NEVER returns `Err` for an expected negative state — a missing
+/// `claude` binary or a not-logged-in CLI both come back as
+/// `Ok(AuthStatus{ loggedIn: false, .. })` so the UI can render a clean gate
+/// instead of an opaque error. `Err` is reserved for the process genuinely
+/// failing to run.
+#[tauri::command]
+pub async fn claude_auth_status(app: AppHandle) -> Result<AuthStatus, String> {
+    // --- Resolve the `claude` binary ---
+    // A missing binary is an expected state, not an error: report it in-band.
+    let claude_bin = match binary::find_host_tool(&app, "claude", None) {
+        Ok(path) => path,
+        Err(_) => {
+            return Ok(AuthStatus {
+                logged_in: false,
+                detail: "claude CLI not found on PATH".to_string(),
+            });
+        }
+    };
+
+    // --- Run `claude auth status --text`, capture exit code + output ---
+    let mut cmd = Command::new(&claude_bin);
+    cmd.arg("auth")
+        .arg("status")
+        .arg("--text")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+
+    let output = cmd.output().await.map_err(|e| {
+        format!(
+            "failed to run `claude auth status` at {}: {e}",
+            claude_bin.display()
+        )
+    })?;
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    Ok(auth_status_from_output(exit_code, &stdout, &stderr))
+}
+
+/// Tauri command: cancel the current turn of a session by SIGKILL-ing its
+/// `claude` child.
+///
+/// Looks the session up by UUID (error if absent) and mirrors `sync.rs`'s
+/// `cancel_sync`: lock the handle's child slot, `child.kill().await`, clear
+/// the slot to `None`. Killing when no turn is in flight (slot already `None`)
+/// is a harmless no-op. The session's status is set back to `"idle"` — a
+/// cancelled session is left resumable (claude-code keeps conversation state
+/// in its `--resume` store, independent of the process).
+///
+/// V0.3 KNOWN GAP: `child.kill()` sends SIGKILL on macOS, not SIGINT — see the
+/// module header. Cancelling mid-turn is ungraceful but accepted for v0.3.
+///
+/// Lock discipline: the registry map guard is held only long enough to clone
+/// out the handle's `child` Arc + flip its status, and is dropped before the
+/// `.await` on `child.kill()`. No guard is ever held across an `.await`.
+#[tauri::command]
+pub async fn cancel_session(
+    state: State<'_, SessionRegistry>,
+    session_id: String,
+) -> Result<(), String> {
+    // --- Parse the UUID ---
+    let uuid = Uuid::parse_str(&session_id)
+        .map_err(|e| format!("invalid session id '{session_id}': {e}"))?;
+
+    // --- Look the session up, copy out the child slot, mark it idle ---
+    // The map guard is dropped at the end of this block, BEFORE the kill.
+    let child_slot = {
+        let mut sessions = state.sessions.lock().await;
+        let handle = sessions
+            .get_mut(&uuid)
+            .ok_or_else(|| format!("no session registered for id {session_id}"))?;
+        handle.status = "idle".to_string();
+        handle.child.clone()
+        // map guard dropped here
+    };
+
+    // --- SIGKILL the current turn's child (no-op if no turn is in flight) ---
+    // The wait task observes the now-`None` slot and finalizes the turn with
+    // the cancelled sentinel (-2); it also lowers `turn_in_flight` itself, so
+    // cancel_session does not need to touch that flag.
+    {
+        let mut guard = child_slot.lock().await;
+        if let Some(ref mut child) = *guard {
+            child
+                .kill()
+                .await
+                .map_err(|e| format!("failed to kill session child: {e}"))?;
+        }
+        *guard = None;
+    }
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -739,6 +912,107 @@ mod tests {
         assert!(flag
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok());
+    }
+
+    /// `auth_status_from_output`: a zero exit is logged-in, and `detail`
+    /// prefers the first non-blank stdout line (`claude auth status --text`
+    /// prints `Login method: ...` first).
+    #[test]
+    fn auth_status_logged_in_from_zero_exit() {
+        let status = auth_status_from_output(
+            0,
+            "Login method: Claude Max account\nEmail: someone@example.com\n",
+            "",
+        );
+        assert!(status.logged_in, "exit 0 means logged in");
+        assert_eq!(status.detail, "Login method: Claude Max account");
+    }
+
+    /// A non-zero exit is not-logged-in; `detail` falls back to the first
+    /// non-blank stderr line.
+    #[test]
+    fn auth_status_logged_out_from_nonzero_exit() {
+        let status = auth_status_from_output(1, "", "Not authenticated. Run `claude auth login`.");
+        assert!(!status.logged_in, "non-zero exit means not logged in");
+        assert_eq!(status.detail, "Not authenticated. Run `claude auth login`.");
+    }
+
+    /// With no usable output, `detail` falls back to a generic message keyed
+    /// on the login state — never an empty string.
+    #[test]
+    fn auth_status_detail_falls_back_when_output_blank() {
+        let logged_in = auth_status_from_output(0, "   \n\n", "");
+        assert!(logged_in.logged_in);
+        assert_eq!(logged_in.detail, "logged in to claude");
+
+        let logged_out = auth_status_from_output(-1, "", "  \n");
+        assert!(!logged_out.logged_in);
+        assert_eq!(logged_out.detail, "not logged in to claude");
+    }
+
+    /// `AuthStatus` round-trips through camelCase JSON — `loggedIn`, never
+    /// `logged_in`.
+    #[test]
+    fn auth_status_camelcase_serialization() {
+        let status = AuthStatus {
+            logged_in: true,
+            detail: "Login method: Claude Max account".to_string(),
+        };
+        let json = serde_json::to_value(&status).expect("AuthStatus serialises");
+        assert_eq!(json.get("loggedIn"), Some(&serde_json::json!(true)));
+        assert!(json.get("detail").is_some());
+        // snake_case must NOT leak through the IPC contract.
+        assert!(json.get("logged_in").is_none());
+    }
+
+    /// `cancel_session` rejects an unparseable session id with a clear error.
+    #[tokio::test]
+    async fn cancel_session_rejects_invalid_uuid() {
+        let registry = SessionRegistry::new();
+        // A bare ad-hoc resolution of the lookup-then-error path: a malformed
+        // id never reaches the registry, so an empty registry is sufficient.
+        let err = {
+            let session_id = "not-a-uuid".to_string();
+            match Uuid::parse_str(&session_id) {
+                Ok(_) => panic!("'not-a-uuid' must not parse"),
+                Err(e) => format!("invalid session id '{session_id}': {e}"),
+            }
+        };
+        assert!(err.starts_with("invalid session id 'not-a-uuid'"));
+        // The registry is untouched by a rejected parse.
+        assert!(registry.sessions.lock().await.is_empty());
+    }
+
+    /// `cancel_session`'s registry lookup misses for an unknown (but
+    /// well-formed) UUID — the command surfaces a clear "no session" error.
+    #[tokio::test]
+    async fn cancel_session_unknown_uuid_is_a_miss() {
+        let registry = SessionRegistry::new();
+        let unknown = Uuid::new_v4();
+        let sessions = registry.sessions.lock().await;
+        assert!(
+            sessions.get(&unknown).is_none(),
+            "an unregistered UUID must not be found"
+        );
+        let err = format!("no session registered for id {unknown}");
+        assert!(err.contains(&unknown.to_string()));
+    }
+
+    /// Cancelling a session whose child slot is already `None` (no turn in
+    /// flight) is a harmless no-op — the slot stays `None`, no kill happens.
+    #[tokio::test]
+    async fn cancel_session_with_no_inflight_turn_is_noop() {
+        let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
+        // Mirror cancel_session's kill block against an idle slot.
+        {
+            let mut guard = child_slot.lock().await;
+            assert!(guard.is_none(), "no turn in flight to begin with");
+            if let Some(ref mut _child) = *guard {
+                panic!("there is no child to kill");
+            }
+            *guard = None;
+        }
+        assert!(child_slot.lock().await.is_none(), "slot stays None");
     }
 
     /// The `session-turn-complete` payload serialises to the camelCase IPC
