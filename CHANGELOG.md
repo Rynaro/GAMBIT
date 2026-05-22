@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-05-22
+
+The third v0.3.x minor — cortex-default launch (TRANCE-lite).
+
+### Added
+
+- A new session now defaults to **Cortex**: its system prompt is the cortex
+  routing descriptor (`.eidolons/cortex/EIDOLONS.md`), so claude-code self-routes
+  work across the project's Eidolons rather than running a single fixed persona.
+  Launching is zero-effort type-and-send — picking a specific named Eidolon is
+  an explicit opt-in under the composer's Options. A project with no cortex
+  descriptor degrades gracefully: the Cortex option is shown disabled with a
+  clear note, and a named Eidolon can still be launched.
+
+> TRANCE-lite: v0.3.3 ships descriptor-driven self-routing only. GAMBIT-owned
+> multi-Eidolon orchestration (sequential chains, parallel fan-out) remains
+> deferred to v0.4+.
+
 ## [0.3.2] — 2026-05-22
 
 The second v0.3.x minor — the Sessions surface becomes a chat.

@@ -1,6 +1,6 @@
 {
   "name": "gambit",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "productName": "GAMBIT",
   "private": true,
   "packageManager": "pnpm@10.11.0",
