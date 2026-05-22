@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-05-22
+
+A visibility patch ahead of the **v0.5 Interactive Sessions** milestone — see
+`.junction/plans/v0-5-interactive-sessions.json` (planned: in-app approval of
+mid-turn permission / `AskUserQuestion` / plan prompts, gated on a verification
+spike).
+
+### Added
+
+- **Denied tool calls are now shown on the turn's result card.** When
+  claude-code denies an un-pre-approved tool in headless mode — which it does
+  *silently* — the result card now lists the denied tools and hints to relaunch
+  with a looser permission mode. Until v0.5 lands interactive approval, this at
+  least makes the denial visible instead of an invisible no-op.
+
+### Fixed
+
+- `ParsedEvent` serialised its `Result` fields snake_case (`total_cost_usd`,
+  `num_turns`, `duration_ms`, `is_error`, `session_id`) while the frontend reads
+  camelCase — so the result card's **cost / turns / duration have been blank
+  since v0.3.0**. The enum now carries `rename_all_fields = "camelCase"`; a
+  regression test guards the wire shape. Same class as the v0.3.6 `ContentBlock`
+  fix, which repaired the nested structs but not the enum's own variant fields.
+
 ## [0.4.4] — 2026-05-22
 
 The fourth v0.4.x minor — power-user features. Completes the v0.4.x round.
