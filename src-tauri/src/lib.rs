@@ -1,5 +1,6 @@
 pub mod binary;
 pub mod brand;
+pub mod claude_adapter;
 pub mod doctor;
 pub mod extract;
 pub mod mcp;
