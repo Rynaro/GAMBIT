@@ -1,0 +1,105 @@
+{
+  "thread_id": "4bd55513-00ec-48ce-a593-e47480cfae39",
+  "tier": "trance",
+  "enforce": "warn",
+  "executor": "shell",
+  "round": "v0.3.x — session enhancements",
+  "provenance": {
+    "scout": ".atlas/scout-report.md",
+    "spec": ".spectra/plans/v0-3-x-sessions.yaml",
+    "chain": "ATLAS -> FORGE -> SPECTRA -> roadmap"
+  },
+  "releases": {
+    "0.3.1": ["S1", "S2"],
+    "0.3.2": ["S3"],
+    "0.3.3": ["S4"],
+    "0.3.4": ["S5"],
+    "0.3.5": ["S6", "S7"]
+  },
+  "steps": [
+    {
+      "step_id": "S1",
+      "release": "0.3.1",
+      "depends_on": [],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Rust session-store: a session_store.rs module persisting each session as a SessionRecord JSON file under app_data_dir/sessions/ plus an index.json. start_session writes the initial record; run_turn's wait-task tail flushes metadata/usage/result_seen per turn; transcript flushed debounced. New one-shot commands list_sessions / load_session (delete_session optional). Rust std::fs to app_data_dir is ungated — no new Tauri capability. A turn exiting without a result still flushes result_seen:false. Adds the first Rust unit tests in the repo.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S2",
+      "release": "0.3.1",
+      "depends_on": ["S1"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Replace the singleton useSession with a useSessions store lifted to the App shell (mirrors v0.2's lifted useDoctor/useMcpStore). Map<sessionId,SessionState>; the 3 Tauri listeners attached once routed by sessionId; rehydrates from list_sessions on mount; per-session state slices. New reopen_session command re-inserts a live SessionHandle without spawning a turn. Structurally fixes the route-change transcript-loss TODAY-bug (bug-fix + feature). A result_seen:false session is offered a fresh continuation, not mid-turn restore.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S3",
+      "release": "0.3.2",
+      "depends_on": ["S2"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "SessionsRoute becomes a list-detail shell: a persistent left rail (SessionList + New-session button) + the existing turn-grouped card pipeline + SessionComposer as detail. The pre-launch FORM collapses into one composer — with no session selected, Cmd+Enter creates a session and sends turn 1. cwd-resolution: resolve project_path before turn 1 (selected project -> most-recent session's project -> blocked no-project state) and pin it immutably into the SessionRecord; every --resume replays it (a cwd mismatch silently forks an empty session).",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S4",
+      "release": "0.3.3",
+      "depends_on": ["S2"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Cortex-default launch (TRANCE-lite, FORGE option c): feed .eidolons/cortex/EIDOLONS.md as the session --append-system-prompt so claude-code self-routes across Eidolons. A synthetic 'Cortex (default)' roster entry is the default; the Eidolon picker becomes optional disclosure. Self-routed subagent work renders nested via parent_tool_use_id. Real TRANCE orchestration (chain runner / parallel sessions) is OUT of scope — deferred to v0.4+.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S5",
+      "release": "0.3.4",
+      "depends_on": ["S2"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Turn-granular context-temperature gauge: a ContextGauge always-visible in the detail header, recomputed on each result event. temperature = (input_tokens + cache_read_input_tokens + cache_creation_input_tokens) / context_window(model); model from system/init; a host-side contextWindow.ts model->window table (Opus 4.7/4.6 & Sonnet 4.6 = 1,000,000; Sonnet 4.5/older = 200,000; fallback). Cumulative usage/cost from the SessionRecord; cost labelled an estimate. compact_boundary resets the gauge best-effort with a 'next result re-baselines' fallback.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S6",
+      "release": "0.3.5",
+      "depends_on": ["S2"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Liveness: claude_adapter extracts text deltas, input_json_delta fragments, and content_block_start(tool_use) markers from the currently-opaque stream_event Value, emitting new ephemeral session-delta + session-tool-start events. The UI renders assistant text token-by-token and extends ToolUseChip with a live running state (spinner, elapsed time, tool_use.id<->tool_result.tool_use_id pairing, nested parent_tool_use_id subagent rendering). Deltas are EPHEMERAL — never written to the SessionRecord.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    },
+    {
+      "step_id": "S7",
+      "release": "0.3.5",
+      "depends_on": ["S6"],
+      "from": {"eidolon": "spectra", "version": "4.3.3"},
+      "to": {"eidolon": "apivr", "version": "3.1.3"},
+      "performative": "DELEGATE",
+      "edge_origin": "roster",
+      "objective": "Live mid-turn context gauge: the same stream_event parser pass from S6 also extracts incremental usage from message_start/message_delta, feeding ContextGauge mid-turn. Mid-turn figures reconcile to the authoritative result usage (no double-counting). Rides S6's parser pass — do not open a second claude_adapter pass. Deferrable to a 0.3.6 point release if it slips.",
+      "model_tier_hint": "reasoning-class",
+      "constraints": {"trust_level": "standard", "target_repo": "Rynaro/GAMBIT", "host_platform": "darwin-arm64"}
+    }
+  ]
+}

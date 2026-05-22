@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-05-22
+
+The first v0.3.x minor — session persistence. Sessions now survive app restarts
+*and* route changes (the latter was a v0.3.0 bug). Planned via a TRANCE chain;
+see `.junction/plans/v0-3-x-sessions.json`.
+
+### Added
+
+- On-disk session persistence — each session is written as a `SessionRecord`
+  JSON file under the app-data dir (new `session_store.rs`), alongside an
+  `index.json`. `start_session` writes the record; `run_turn` flushes it per
+  turn — transcript, cumulative usage/cost, and a per-turn `result_seen` flag
+  so a turn killed by a crash/OOM is recoverable rather than mistaken for
+  complete. New commands: `list_sessions`, `load_session`, `delete_session`,
+  `reopen_session` (re-inserts a live session handle from a persisted record
+  without spawning a turn).
+- `useSessions` — a multi-session store lifted to the App shell. Holds every
+  session at once, attaches the three Tauri session listeners exactly once and
+  routes events by `sessionId`, and rehydrates from disk on mount. Replaces the
+  single-session `useSession` hook (now a thin per-session selector).
+
+### Fixed
+
+- Navigating away from the Sessions route no longer destroys the active
+  session's transcript. v0.3.0 mounted session state *inside* the route, so any
+  route change unmounted the hook and lost the transcript. The lifted
+  `useSessions` store (above the router) fixes this structurally.
+
 ## [0.3.0] — 2026-05-22
 
 The "Eidolon Sessions" release. GAMBIT can now run `claude-code` itself — pick a
