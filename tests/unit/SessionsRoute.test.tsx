@@ -446,6 +446,75 @@ describe("SessionsRoute", () => {
   });
 
   // -------------------------------------------------------------------------
+  // R3 — model + thinking-effort selection
+  // -------------------------------------------------------------------------
+
+  it("R3: the composer renders a model select and a thinking-effort select", async () => {
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+
+    // Both selects live in the optional disclosure beside the existing ones.
+    fireEvent.click(screen.getByLabelText("Toggle session options"));
+    const modelSelect = screen.getByLabelText("Select the model") as HTMLSelectElement;
+    const effortSelect = screen.getByLabelText("Select the thinking effort") as HTMLSelectElement;
+
+    // The model select defaults to "default" (claude picks); effort defaults
+    // to "" (claude's own default applies).
+    expect(modelSelect.value).toBe("default");
+    expect(effortSelect.value).toBe("");
+  });
+
+  it("R3: creating with the default model/effort sends null for both", async () => {
+    const startMock = vi.fn(async () => "default-model-session");
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "use claude's default model" } });
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const params = startMock.mock.calls[0][0] as {
+      model: string | null;
+      thinkingEffort: string | null;
+    };
+    // "default" model + empty effort map to null so Rust omits both flags.
+    expect(params.model).toBeNull();
+    expect(params.thinkingEffort).toBeNull();
+  });
+
+  it("R3: an explicit model + effort flow into StartSessionParams", async () => {
+    const startMock = vi.fn(async () => "opus-session");
+    const store = makeStore({ authStatus: LOGGED_IN, start: startMock });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // Pick Opus (1M context) and the "Deep" (high) effort in the disclosure.
+    fireEvent.click(screen.getByLabelText("Toggle session options"));
+    fireEvent.change(screen.getByLabelText("Select the model"), {
+      target: { value: "opus[1m]" },
+    });
+    fireEvent.change(screen.getByLabelText("Select the thinking effort"), {
+      target: { value: "high" },
+    });
+
+    const textarea = screen.getByLabelText("New session prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "think hard about this" } });
+    fireEvent.click(screen.getByLabelText("Start the session"));
+    await flush();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const params = startMock.mock.calls[0][0] as {
+      model: string | null;
+      thinkingEffort: string | null;
+    };
+    expect(params.model).toBe("opus[1m]");
+    expect(params.thinkingEffort).toBe("high");
+  });
+
+  // -------------------------------------------------------------------------
   // R1 — collapsible Sessions rail
   // -------------------------------------------------------------------------
 

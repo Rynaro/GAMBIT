@@ -223,6 +223,24 @@ export interface StartSessionParams {
    * from `firstPrompt` (first ~60 chars).
    */
   title?: string | null;
+  /**
+   * R3 — the model to serve the session, passed to `--model` on every turn.
+   * An alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus the
+   * `[1m]` variants) or a full model id. Optional — absent lets `claude`
+   * apply its own default. Open string for forward-compat (new aliases).
+   */
+  model?: string | null;
+  /**
+   * R3 — the reasoning effort level, passed to `--effort` on every turn
+   * (`low` / `medium` / `high` / `xhigh` / `max`). Optional — absent lets
+   * `claude`'s own default apply. Open string for forward-compat.
+   */
+  thinkingEffort?: string | null;
+  /**
+   * R3 — the fallback model alias, passed to `--fallback-model` (auto-downgrade
+   * when the primary model is overloaded). Optional. Open string.
+   */
+  fallbackModel?: string | null;
 }
 
 /** Returned by `start_session` / `reopen_session`: the session descriptor. */
@@ -314,6 +332,16 @@ export interface SessionRecord {
   status: string;
   /** The serving model, captured from the `system/init` event. */
   model?: string | null;
+  /**
+   * R3 — the user-CHOSEN model (`--model`), distinct from the OBSERVED
+   * `model` above. The launch-time selection, persisted so a reopened session
+   * resumes on the same model. Absent on records written before R3.
+   */
+  chosenModel?: string | null;
+  /** R3 — the reasoning effort level (`--effort`). Absent on pre-R3 records. */
+  thinkingEffort?: string | null;
+  /** R3 — the fallback model alias (`--fallback-model`). Absent pre-R3. */
+  fallbackModel?: string | null;
   /** RFC-3339 creation timestamp. */
   createdAt: string;
   /** RFC-3339 timestamp, bumped on every turn flush. */
@@ -354,6 +382,14 @@ export interface SessionSummary {
   status: string;
   /** The serving model, or null if not yet captured. */
   model?: string | null;
+  /**
+   * R3 — the user-CHOSEN model (`--model`), surfaced on the summary so the
+   * list can show the pinned model before the first `system/init` arrives.
+   * Absent on index entries written before R3.
+   */
+  chosenModel?: string | null;
+  /** R3 — the reasoning effort level (`--effort`). Absent pre-R3. */
+  thinkingEffort?: string | null;
   /** RFC-3339 creation timestamp. */
   createdAt: string;
   /** RFC-3339 timestamp, bumped on every turn flush. */

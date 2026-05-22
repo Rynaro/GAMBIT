@@ -27,6 +27,7 @@
 // state: the create action is disabled and a "select a project" affordance is
 // shown. A session is NEVER created without a resolved absolute project_path.
 
+import { EFFORT_OPTIONS, MODEL_OPTIONS } from "@/lib/claudeModels";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_DISPLAY_NAME } from "@/lib/eidolonRoster";
 import { type KeyboardEvent, useState } from "react";
@@ -56,8 +57,20 @@ interface SessionComposerProps {
   /**
    * Create a session and dispatch turn 1 with `prompt`. The route resolves +
    * pins the cwd before calling `start` — the composer never sees a path.
+   *
+   * R3 — `model` / `thinkingEffort` are the launch-time selections forwarded
+   * to `StartSessionParams`. An empty `thinkingEffort` means "let claude's own
+   * default apply" (the route maps it to an absent `--effort`).
    */
-  onCreate: (prompt: string, opts: { eidolonName: string; permissionMode: string }) => void;
+  onCreate: (
+    prompt: string,
+    opts: {
+      eidolonName: string;
+      permissionMode: string;
+      model: string;
+      thinkingEffort: string;
+    },
+  ) => void;
   /**
    * `true` when create mode has a resolved absolute `project_path` AND `claude`
    * is logged in — i.e. a session can actually be created. `false` blocks the
@@ -85,6 +98,14 @@ interface SessionComposerProps {
   permissionMode: string;
   /** Change the permission mode. */
   onSelectPermissionMode: (mode: string) => void;
+  /** R3 — the selected `--model` value (controlled by the route). */
+  model: string;
+  /** R3 — change the selected model. */
+  onSelectModel: (model: string) => void;
+  /** R3 — the selected `--effort` value, or `""` for claude's own default. */
+  thinkingEffort: string;
+  /** R3 — change the selected thinking-effort level. */
+  onSelectThinkingEffort: (effort: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +129,10 @@ export function SessionComposer({
   permissionModes,
   permissionMode,
   onSelectPermissionMode,
+  model,
+  onSelectModel,
+  thinkingEffort,
+  onSelectThinkingEffort,
 }: SessionComposerProps) {
   const [draft, setDraft] = useState("");
   // The optional FORM disclosure — collapsed by default so the zero-effort
@@ -122,7 +147,12 @@ export function SessionComposer({
     const prompt = draft.trim();
     if (!prompt || !actionEnabled) return;
     if (isCreate) {
-      onCreate(prompt, { eidolonName: selectedEidolon, permissionMode });
+      onCreate(prompt, {
+        eidolonName: selectedEidolon,
+        permissionMode,
+        model,
+        thinkingEffort,
+      });
     } else {
       onSend(prompt);
     }
@@ -248,6 +278,49 @@ export function SessionComposer({
                   {permissionModes.map((m) => (
                     <option key={m} value={m}>
                       {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* R3 — the model is chosen at launch and pinned for the
+                  session; `claude` resolves the aliases CLI-side. */}
+              <div className="session-field">
+                <label className="session-field-label" htmlFor="composer-model-select">
+                  Model
+                </label>
+                <select
+                  id="composer-model-select"
+                  className="session-select"
+                  value={model}
+                  onChange={(e) => onSelectModel(e.target.value)}
+                  aria-label="Select the model"
+                >
+                  {MODEL_OPTIONS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* R3 — thinking effort. The leading "" option lets claude's
+                  own default apply (no `--effort` flag). */}
+              <div className="session-field">
+                <label className="session-field-label" htmlFor="composer-effort-select">
+                  Thinking effort
+                </label>
+                <select
+                  id="composer-effort-select"
+                  className="session-select"
+                  value={thinkingEffort}
+                  onChange={(e) => onSelectThinkingEffort(e.target.value)}
+                  aria-label="Select the thinking effort"
+                >
+                  <option value="">Default (claude picks)</option>
+                  {EFFORT_OPTIONS.map((e) => (
+                    <option key={e.value} value={e.value}>
+                      {e.label}
                     </option>
                   ))}
                 </select>

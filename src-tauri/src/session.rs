@@ -99,6 +99,19 @@ pub struct SessionHandle {
     pub project_path: PathBuf,
     /// Value passed verbatim to `--permission-mode`.
     pub permission_mode: String,
+    /// R3 — the user-CHOSEN model, passed to `--model` on every turn. Distinct
+    /// from the observed [`SessionHandle::model`] (the model `claude` reports
+    /// back on `system/init`): this is the launch-time selection. Lives on the
+    /// handle (not the frontend) so `send_turn` rebuilds the `TurnArgs` with it
+    /// on every `--resume`. `None` omits the flag — `claude`'s default applies.
+    pub chosen_model: Option<String>,
+    /// R3 — the reasoning effort level, passed to `--effort` on every turn.
+    /// Pinned for the session — `send_turn` rebuilds `TurnArgs` from it on
+    /// every `--resume`. `None` omits the flag.
+    pub thinking_effort: Option<String>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` on every
+    /// turn. Pinned for the session's life. `None` omits the flag.
+    pub fallback_model: Option<String>,
     /// Resolved Eidolon persona text — fed to `--append-system-prompt` on
     /// every turn. Resolved once by the frontend, remembered here.
     pub append_system_prompt: String,
@@ -209,6 +222,21 @@ pub struct StartSessionParams {
     /// from `first_prompt` (first ~60 chars).
     #[serde(default)]
     pub title: Option<String>,
+    /// R3 — the model to serve the session, passed to `--model` on every turn.
+    /// An alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus the
+    /// `[1m]` variants) or a full model id. Optional — `None`/absent lets
+    /// `claude` apply its own default. Pinned for the session's life.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// R3 — the reasoning effort level, passed to `--effort` on every turn
+    /// (`low` / `medium` / `high` / `xhigh` / `max`). Optional — `None` lets
+    /// `claude`'s own default apply. Pinned for the session's life.
+    #[serde(default)]
+    pub thinking_effort: Option<String>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` on every
+    /// turn (auto-downgrade when the primary model is overloaded). Optional.
+    #[serde(default)]
+    pub fallback_model: Option<String>,
 }
 
 /// Returned by [`start_session`]: the addressable session descriptor.
@@ -561,6 +589,11 @@ struct SessionMeta {
     append_system_prompt: String,
     allowed_tools: Vec<String>,
     created_at: String,
+    /// R3 — the user-chosen model / effort / fallback, snapshotted so the
+    /// per-turn flush writes them into the durable `SessionRecord`.
+    chosen_model: Option<String>,
+    thinking_effort: Option<String>,
+    fallback_model: Option<String>,
 }
 
 /// The shared persistence `Arc`s a turn's reader/wait tasks accumulate into.
@@ -618,6 +651,11 @@ fn build_record(meta: &SessionMeta, persist: &PersistState, status: &str) -> Ses
         allowed_tools: meta.allowed_tools.clone(),
         status: status.to_string(),
         model,
+        // R3 — persist the launch-time model/effort selection so a reopened
+        // session resumes with the SAME `--model` / `--effort` / fallback.
+        chosen_model: meta.chosen_model.clone(),
+        thinking_effort: meta.thinking_effort.clone(),
+        fallback_model: meta.fallback_model.clone(),
         created_at: meta.created_at.clone(),
         last_active_at: chrono::Utc::now().to_rfc3339(),
         transcript,
@@ -645,6 +683,11 @@ fn handle_from_record(record: &SessionRecord) -> SessionHandle {
         eidolon_name: record.eidolon_name.clone(),
         project_path: PathBuf::from(&record.project_path),
         permission_mode: record.permission_mode.clone(),
+        // R3 — rehydrate the launch-time model/effort selection so a resumed
+        // turn rebuilds `TurnArgs` with the same `--model` / `--effort`.
+        chosen_model: record.chosen_model.clone(),
+        thinking_effort: record.thinking_effort.clone(),
+        fallback_model: record.fallback_model.clone(),
         append_system_prompt: record.append_system_prompt.clone(),
         allowed_tools: record.allowed_tools.clone(),
         status: "idle".to_string(),
@@ -1001,6 +1044,7 @@ pub async fn start_session(
     let claude_bin = binary::find_host_tool(&app, "claude", None)?;
 
     // --- Build the turn-1 arg vector (TurnKind::First → `--session-id`) ---
+    // R3 — the user-chosen model / effort / fallback flow in from `params`.
     let turn_args = TurnArgs {
         prompt: &params.first_prompt,
         append_system_prompt: &params.append_system_prompt,
@@ -1008,6 +1052,9 @@ pub async fn start_session(
         permission_mode: &params.permission_mode,
         session_id: &session_id_str,
         turn_kind: TurnKind::First,
+        model: params.model.as_deref(),
+        thinking_effort: params.thinking_effort.as_deref(),
+        fallback_model: params.fallback_model.as_deref(),
     };
     let args = claude_adapter::build_args(&turn_args);
 
@@ -1042,6 +1089,11 @@ pub async fn start_session(
         eidolon_name: params.eidolon_name.clone(),
         project_path: project_dir.clone(),
         permission_mode: params.permission_mode.clone(),
+        // R3 — pin the launch-time model/effort onto the handle so `send_turn`
+        // rebuilds `TurnArgs` with them on every `--resume`.
+        chosen_model: params.model.clone(),
+        thinking_effort: params.thinking_effort.clone(),
+        fallback_model: params.fallback_model.clone(),
         append_system_prompt: params.append_system_prompt.clone(),
         allowed_tools: params.allowed_tools.clone(),
         status: "running".to_string(),
@@ -1074,6 +1126,9 @@ pub async fn start_session(
         append_system_prompt: params.append_system_prompt.clone(),
         allowed_tools: params.allowed_tools.clone(),
         created_at: created_at.clone(),
+        chosen_model: params.model.clone(),
+        thinking_effort: params.thinking_effort.clone(),
+        fallback_model: params.fallback_model.clone(),
     };
     let persist = PersistState {
         model,
@@ -1167,7 +1222,9 @@ pub async fn send_turn(
         }
 
         // Rebuild the arg vector from the session's remembered persona/tools —
-        // the frontend does NOT re-send these on a follow-up turn.
+        // the frontend does NOT re-send these on a follow-up turn. R3: the
+        // user-chosen model / effort / fallback are read from the handle here
+        // too, so a `--resume` turn runs on the SAME model/effort as turn 1.
         let turn_args = TurnArgs {
             prompt: &prompt,
             append_system_prompt: &handle.append_system_prompt,
@@ -1175,6 +1232,9 @@ pub async fn send_turn(
             permission_mode: &handle.permission_mode,
             session_id: &session_id,
             turn_kind: TurnKind::Resumed,
+            model: handle.chosen_model.as_deref(),
+            thinking_effort: handle.thinking_effort.as_deref(),
+            fallback_model: handle.fallback_model.as_deref(),
         };
         let meta = SessionMeta {
             uuid: session_id.clone(),
@@ -1186,6 +1246,9 @@ pub async fn send_turn(
             append_system_prompt: handle.append_system_prompt.clone(),
             allowed_tools: handle.allowed_tools.clone(),
             created_at: handle.created_at.clone(),
+            chosen_model: handle.chosen_model.clone(),
+            thinking_effort: handle.thinking_effort.clone(),
+            fallback_model: handle.fallback_model.clone(),
         };
         let persist = PersistState {
             model: handle.model.clone(),
@@ -1453,6 +1516,9 @@ mod tests {
             eidolon_name: name.to_string(),
             project_path: PathBuf::from("/tmp/project"),
             permission_mode: "default".to_string(),
+            chosen_model: None,
+            thinking_effort: None,
+            fallback_model: None,
             append_system_prompt: "You are Sage.".to_string(),
             allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
             status: "idle".to_string(),
@@ -1748,6 +1814,9 @@ mod tests {
             allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
             status: "failed".to_string(),
             model: Some("claude-opus-4-7".to_string()),
+            chosen_model: Some("opus".to_string()),
+            thinking_effort: Some("high".to_string()),
+            fallback_model: Some("sonnet".to_string()),
             created_at: "2026-05-22T12:00:00+00:00".to_string(),
             last_active_at: "2026-05-22T12:30:00+00:00".to_string(),
             transcript: vec![PersistedEntry {
@@ -1831,6 +1900,17 @@ mod tests {
             3,
             "next turn after rehydration is turn 3"
         );
+    }
+
+    /// R3 — `handle_from_record` rehydrates the user-chosen model / effort /
+    /// fallback so a `--resume` turn rebuilds `TurnArgs` with the same flags.
+    #[test]
+    fn handle_from_record_rehydrates_chosen_model_and_effort() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+        assert_eq!(handle.chosen_model.as_deref(), Some("opus"));
+        assert_eq!(handle.thinking_effort.as_deref(), Some("high"));
+        assert_eq!(handle.fallback_model.as_deref(), Some("sonnet"));
     }
 
     /// A record with no per-turn entries (a session that never finished a turn)

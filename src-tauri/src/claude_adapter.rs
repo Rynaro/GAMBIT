@@ -77,7 +77,28 @@ pub struct TurnArgs<'a> {
     pub session_id: &'a str,
     /// Whether this is the first turn or a resumed turn.
     pub turn_kind: TurnKind,
+    /// R3 — the model serving the session, passed to `--model`. Accepts a
+    /// short alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus
+    /// the `[1m]` variants) or a full model id. `None` omits the flag entirely
+    /// so `claude` applies its own default.
+    pub model: Option<&'a str>,
+    /// R3 — the reasoning effort level, passed to `--effort` (`low` / `medium`
+    /// / `high` / `xhigh` / `max`). Supported levels vary per model; an
+    /// unsupported level is auto-downgraded CLI-side. `None` omits the flag.
+    pub thinking_effort: Option<&'a str>,
+    /// R3 — the fallback model alias, passed to `--fallback-model` — `claude`
+    /// auto-downgrades to it when the primary model is overloaded (honored in
+    /// `-p` mode). `None` omits the flag.
+    pub fallback_model: Option<&'a str>,
 }
+
+/// The fixed `--settings` JSON payload — R3.
+///
+/// `showThinkingSummaries` is enabled so Opus 4.7 streams `thinking` blocks
+/// with NON-EMPTY content: without it the `thinking` blocks arrive blank and
+/// the cozy `ThinkingBlock` would render nothing. A fixed string is enough —
+/// GAMBIT carries no other host-side `claude` settings.
+const SETTINGS_JSON: &str = r#"{"showThinkingSummaries":true}"#;
 
 /// Build the `claude` argument vector for one turn.
 ///
@@ -87,14 +108,16 @@ pub struct TurnArgs<'a> {
 ///
 /// The vector always contains, in order:
 ///   `-p`, `--output-format stream-json`, `--verbose`,
-///   `--include-partial-messages`, `--append-system-prompt <text>`,
-///   `--allowedTools <comma-separated>`, `--permission-mode <mode>`,
+///   `--include-partial-messages`, `--settings <json>`,
+///   `--append-system-prompt <text>`, `--allowedTools <comma-separated>`,
+///   `--permission-mode <mode>`, optionally `--model <v>` / `--effort <v>` /
+///   `--fallback-model <v>` (each only when its `TurnArgs` field is `Some`),
 ///   exactly one of `--session-id <uuid>` / `--resume <uuid>`,
 ///   and finally the prompt as the trailing positional argument.
 ///
 /// It NEVER contains `--bare` (that flag strips auth + skill discovery).
 pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
-    let mut v: Vec<String> = Vec::with_capacity(16);
+    let mut v: Vec<String> = Vec::with_capacity(24);
 
     // Headless streaming transport.
     v.push("-p".to_string());
@@ -104,6 +127,12 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
     // stream-json NDJSON to carry init/partial events the cozy UI renders.
     v.push("--verbose".to_string());
     v.push("--include-partial-messages".to_string());
+
+    // R3 — always pass `--settings` with `showThinkingSummaries: true` so the
+    // `thinking` content blocks Opus 4.7 streams carry real reasoning text
+    // (without it they arrive empty and the cozy ThinkingBlock renders blank).
+    v.push("--settings".to_string());
+    v.push(SETTINGS_JSON.to_string());
 
     // Eidolon persona — a verbatim string supplied by the caller.
     v.push("--append-system-prompt".to_string());
@@ -117,6 +146,24 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
     // Permission mode — passed through verbatim.
     v.push("--permission-mode".to_string());
     v.push(args.permission_mode.to_string());
+
+    // R3 — optional model / effort / fallback-model. Each flag is appended
+    // ONLY when its `TurnArgs` field is `Some`; a `None` omits the flag
+    // entirely so `claude` applies its own default rather than receiving an
+    // empty value. The model/effort are session-scoped: `send_turn` rebuilds
+    // `TurnArgs` from the `SessionHandle` so they survive every `--resume`.
+    if let Some(model) = args.model {
+        v.push("--model".to_string());
+        v.push(model.to_string());
+    }
+    if let Some(effort) = args.thinking_effort {
+        v.push("--effort".to_string());
+        v.push(effort.to_string());
+    }
+    if let Some(fallback) = args.fallback_model {
+        v.push("--fallback-model".to_string());
+        v.push(fallback.to_string());
+    }
 
     // Exactly one of the session flags, depending on the turn kind.
     match args.turn_kind {
@@ -702,6 +749,9 @@ mod tests {
             permission_mode: "default",
             session_id: "11111111-1111-1111-1111-111111111111",
             turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
         };
         let v = build_args(&args);
 
@@ -738,6 +788,9 @@ mod tests {
             permission_mode: "acceptEdits",
             session_id: "22222222-2222-2222-2222-222222222222",
             turn_kind: TurnKind::Resumed,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
         };
         let v = build_args(&args);
 
@@ -759,9 +812,91 @@ mod tests {
             permission_mode: "default",
             session_id: "33333333-3333-3333-3333-333333333333",
             turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
         };
         let v = build_args(&args);
         assert_eq!(v.last().map(String::as_str), Some("the prompt"));
+    }
+
+    /// R3 — `--settings` carrying `showThinkingSummaries` is ALWAYS present,
+    /// even when no model/effort is chosen, so streamed `thinking` blocks
+    /// carry real reasoning text.
+    #[test]
+    fn build_args_always_passes_settings_with_thinking_summaries() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "44444444-4444-4444-4444-444444444444",
+            turn_kind: TurnKind::First,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+        };
+        let v = build_args(&args);
+        assert!(v.contains(&"--settings".to_string()));
+        assert!(v.contains(&r#"{"showThinkingSummaries":true}"#.to_string()));
+        // `--bare` stays forbidden.
+        assert!(!v.contains(&"--bare".to_string()));
+    }
+
+    /// R3 — when `model` / `thinking_effort` / `fallback_model` are `Some`,
+    /// `build_args` appends `--model` / `--effort` / `--fallback-model` with
+    /// their values.
+    #[test]
+    fn build_args_includes_model_effort_and_fallback_when_set() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "55555555-5555-5555-5555-555555555555",
+            turn_kind: TurnKind::First,
+            model: Some("opus[1m]"),
+            thinking_effort: Some("high"),
+            fallback_model: Some("sonnet"),
+        };
+        let v = build_args(&args);
+
+        // Each flag is followed immediately by its value.
+        let flag_value = |flag: &str| -> Option<&str> {
+            v.iter()
+                .position(|a| a == flag)
+                .and_then(|i| v.get(i + 1))
+                .map(String::as_str)
+        };
+        assert_eq!(flag_value("--model"), Some("opus[1m]"));
+        assert_eq!(flag_value("--effort"), Some("high"));
+        assert_eq!(flag_value("--fallback-model"), Some("sonnet"));
+    }
+
+    /// R3 — when `model` / `thinking_effort` / `fallback_model` are `None`,
+    /// the corresponding flags are omitted ENTIRELY (no empty value passed).
+    #[test]
+    fn build_args_omits_model_effort_and_fallback_when_none() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "66666666-6666-6666-6666-666666666666",
+            turn_kind: TurnKind::Resumed,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+        };
+        let v = build_args(&args);
+        assert!(!v.contains(&"--model".to_string()));
+        assert!(!v.contains(&"--effort".to_string()));
+        assert!(!v.contains(&"--fallback-model".to_string()));
+        // The empty-string value must never leak in.
+        assert!(!v.contains(&String::new()));
     }
 
     /// `system/init` → `ParsedEvent::Init` with session/model/tools populated.

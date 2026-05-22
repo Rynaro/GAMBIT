@@ -43,6 +43,7 @@ import { SessionList } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import type { ExpandSignal } from "@/components/session/ToolUseChip";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
+import { DEFAULT_MODEL, EFFORT_DEFAULT } from "@/lib/claudeModels";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_EIDOLON_NAME, readProjectRoster } from "@/lib/eidolonRoster";
 import { getRailCollapsed, setRailCollapsed } from "@/lib/railStore";
@@ -235,6 +236,10 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     initialEidolonName ?? CORTEX_EIDOLON_NAME,
   );
   const [permissionMode, setPermissionMode] = useState<string>("default");
+  // R3 — launch-time model + thinking-effort selection. `DEFAULT_MODEL`
+  // (`"default"`) and an empty effort both let `claude` apply its own pick.
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  const [thinkingEffort, setThinkingEffort] = useState<string>(EFFORT_DEFAULT);
   const [createError, setCreateError] = useState<string | null>(null);
 
   // R1: the left rail can collapse to a thin strip so the chat pane takes the
@@ -337,7 +342,10 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
    * create is BLOCKED when `cwd.path` is `null`, so a session is never started
    * without a resolved absolute project path.
    */
-  async function handleCreate(prompt: string, opts: { eidolonName: string }) {
+  async function handleCreate(
+    prompt: string,
+    opts: { eidolonName: string; model: string; thinkingEffort: string },
+  ) {
     // §5 P0 gate — never create without a resolved absolute project path.
     if (cwd.path === null) return;
     setCreateError(null);
@@ -385,6 +393,9 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
 
     // `start` ADDS a session to the store and returns its id — select it so
     // the detail pane opens. The resolved cwd is pinned here, before turn 1.
+    // R3 — the launch-time model/effort. `DEFAULT_MODEL` ("default") and an
+    // empty effort both mean "let claude pick" — sent as `null` so Rust omits
+    // the `--model` / `--effort` flag entirely rather than passing a value.
     const newId = await store.start({
       projectPath: cwd.path,
       // A cortex session carries no named-Eidolon identity (eidolonName "").
@@ -394,6 +405,8 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
       allowedTools,
       firstPrompt: prompt,
       isCortex,
+      model: opts.model === DEFAULT_MODEL ? null : opts.model,
+      thinkingEffort: opts.thinkingEffort || null,
     });
     if (newId) {
       setActiveSessionId(newId);
@@ -493,6 +506,10 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
                   permissionModes={PERMISSION_MODES}
                   permissionMode={permissionMode}
                   onSelectPermissionMode={setPermissionMode}
+                  model={model}
+                  onSelectModel={setModel}
+                  thinkingEffort={thinkingEffort}
+                  onSelectThinkingEffort={setThinkingEffort}
                 />
               }
             />
@@ -757,6 +774,10 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
         permissionModes={PERMISSION_MODES}
         permissionMode="default"
         onSelectPermissionMode={() => {}}
+        model={DEFAULT_MODEL}
+        onSelectModel={() => {}}
+        thinkingEffort={EFFORT_DEFAULT}
+        onSelectThinkingEffort={() => {}}
       />
     </div>
   );
