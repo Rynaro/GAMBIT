@@ -27,6 +27,12 @@
 // Graceful: a missing or unparseable `agent.md` for one member does not
 // throw — that member is returned with empty identity fields (matching how
 // the rest of the app degrades on partial data, e.g. HarnessRoute).
+//
+// Story S4 adds the synthetic "Cortex (default)" roster entry — `readProject
+// Roster` prepends it to `readProjectEidolons`. It is shaped as a
+// `ProjectEidolon` whose `agentMdPath` points at `.eidolons/cortex/
+// EIDOLONS.md` (the routing descriptor) and whose `isCortex` flag marks the
+// TRANCE-lite launch path; an absent descriptor yields `unavailable: true`.
 
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { readTextFile } from "@tauri-apps/plugin-fs";
@@ -200,4 +206,91 @@ export async function readProjectEidolons(projectPath: string): Promise<ProjectE
   }
 
   return eidolons;
+}
+
+// ---------------------------------------------------------------------------
+// Cortex (default) — the synthetic TRANCE-lite roster entry (story S4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The sentinel `name` of the synthetic "Cortex (default)" roster entry.
+ *
+ * It is intentionally NOT a name `eidolons.yaml` can ever carry (the leading
+ * `@` is illegal in a member name) so a real Eidolon can never collide with
+ * the sentinel. The composer pre-selects this name; `handleCreate` keys the
+ * `isCortex` launch path off it.
+ */
+export const CORTEX_EIDOLON_NAME = "@cortex";
+
+/** Human-facing label for the synthetic Cortex entry in the picker. */
+export const CORTEX_DISPLAY_NAME = "Cortex (default)";
+
+/**
+ * Absolute path to a project's cortex routing descriptor.
+ *
+ * FORGE fixed TRANCE-in-GAMBIT as option (c): feed this file as the session's
+ * `--append-system-prompt` so `claude` self-routes across the project's
+ * Eidolons. The file is read with the SAME `readTextFile(agentMdPath)` pattern
+ * a named Eidolon's `agent.md` uses — so the launcher needs no extra branch.
+ */
+export function cortexDescriptorPath(projectPath: string): string {
+  return `${projectPath}/.eidolons/cortex/EIDOLONS.md`;
+}
+
+/**
+ * Build the synthetic "Cortex (default)" roster entry for a project.
+ *
+ * Shaped as a `ProjectEidolon` so the composer's existing `<select>` and
+ * `handleCreate`'s `readTextFile(eidolon.agentMdPath)` resolution work
+ * unchanged — `agentMdPath` points at `.eidolons/cortex/EIDOLONS.md` and
+ * `isCortex` marks it the cortex launch path. `allowedTools` is left EMPTY
+ * on purpose: cortex routing is dynamic, so the session takes `claude`'s
+ * default permissive tool posture (the routed Eidolons carry their own
+ * contracts) rather than an over-restricted allow-list.
+ *
+ * Graceful degradation: when `${projectPath}/.eidolons/cortex/EIDOLONS.md` is
+ * absent the entry is returned with `unavailable: true` so the picker can
+ * disable it with a note instead of the launch crashing.
+ */
+export async function readCortexRosterEntry(projectPath: string): Promise<ProjectEidolon> {
+  const agentMdPath = cortexDescriptorPath(projectPath);
+  let unavailable = false;
+  try {
+    // A presence probe — the launcher re-reads the content at create time,
+    // matching the agent.md flow. An empty file still counts as present.
+    await readTextFile(agentMdPath);
+  } catch {
+    unavailable = true;
+  }
+
+  return {
+    name: CORTEX_EIDOLON_NAME,
+    description: unavailable
+      ? "Cortex routing descriptor (.eidolons/cortex/EIDOLONS.md) not found in this project."
+      : "Self-routing default — claude routes work across the project's Eidolons.",
+    role: "Routing cortex",
+    methodology: "TRANCE",
+    methodologyVersion: "",
+    allowedTools: [],
+    handoffs: [],
+    agentMdPath,
+    isCortex: true,
+    unavailable,
+  };
+}
+
+/**
+ * Read a project's roster with the synthetic "Cortex (default)" entry
+ * PREPENDED — the zero-effort launch default (story S4).
+ *
+ * The Cortex entry is always first so the composer can pre-select it without
+ * inspecting the list; named project Eidolons follow in `eidolons.yaml` order
+ * as explicit opt-in overrides.
+ */
+export async function readProjectRoster(projectPath: string): Promise<ProjectEidolon[]> {
+  const [cortex, eidolons] = await Promise.all([
+    readCortexRosterEntry(projectPath),
+    readProjectEidolons(projectPath),
+  ]);
+  return [cortex, ...eidolons];
 }

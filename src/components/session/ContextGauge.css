@@ -1,0 +1,113 @@
+/* ContextGauge.css — always-visible context-temperature gauge (story S5). */
+
+.context-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface-raised);
+}
+
+/* ---- Head row ---- */
+.context-gauge-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.context-gauge-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.context-gauge-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.context-gauge-pct[data-tone="ok"] {
+  color: var(--status-ok);
+}
+
+.context-gauge-pct[data-tone="warn"] {
+  color: var(--status-warn);
+}
+
+.context-gauge-pct[data-tone="error"] {
+  color: var(--status-error);
+}
+
+.context-gauge-empty-note {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.context-gauge-compact {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+/* ---- Temperature bar ---- */
+.context-gauge-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+
+.context-gauge-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--status-ok);
+  transition: width var(--duration-micro) var(--motion-entry);
+}
+
+.context-gauge-fill[data-tone="warn"] {
+  background: var(--status-warn);
+}
+
+.context-gauge-fill[data-tone="error"] {
+  background: var(--status-error);
+}
+
+/* ---- Meta row ---- */
+.context-gauge-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+.context-gauge-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.context-gauge-meta-key {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.context-gauge-meta-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}

@@ -1,0 +1,183 @@
+/* SessionList.css — the Sessions-route left rail (story S3). */
+
+.session-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 248px;
+  flex-shrink: 0;
+  padding-right: var(--space-5);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+/* ---- New-session button ---- */
+.session-rail-new {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px dashed var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color var(--duration-micro) var(--motion-entry);
+}
+
+.session-rail-new:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.session-rail-new[data-active="true"] {
+  border-style: solid;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.session-rail-new-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ---- Empty state ---- */
+.session-rail-empty {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: var(--space-4) var(--space-3);
+}
+
+/* ---- List ---- */
+.session-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-rail-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  border-radius: var(--radius-control);
+}
+
+.session-rail-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-surface) 88%);
+}
+
+.session-rail-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-control);
+  background: transparent;
+  text-align: left;
+}
+
+.session-rail-entry:hover {
+  background: var(--bg-surface-raised);
+}
+
+.session-rail-row[data-selected="true"] .session-rail-entry:hover {
+  background: transparent;
+}
+
+.session-rail-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.session-rail-dot[data-tone="ok"] {
+  background: var(--status-ok);
+}
+
+.session-rail-dot[data-tone="running"] {
+  background: var(--accent-primary);
+}
+
+.session-rail-dot[data-tone="error"] {
+  background: var(--status-error);
+}
+
+.session-rail-dot[data-tone="muted"] {
+  background: var(--text-muted);
+}
+
+.session-rail-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.session-rail-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-rail-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.session-rail-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-rail-time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* ---- Per-row delete ---- */
+.session-rail-remove {
+  flex-shrink: 0;
+  width: 22px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border-radius: var(--radius-control);
+  opacity: 0;
+  transition: opacity var(--duration-micro) var(--motion-entry);
+}
+
+.session-rail-row:hover .session-rail-remove {
+  opacity: 1;
+}
+
+.session-rail-remove:hover {
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}

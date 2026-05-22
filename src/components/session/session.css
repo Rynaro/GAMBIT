@@ -284,6 +284,87 @@
   color: var(--status-error);
 }
 
+/* ---- ToolUseChip live "running" state (story S6) ---- */
+.session-tool-spinner {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid color-mix(in srgb, var(--accent-primary) 30%, transparent 70%);
+  border-top-color: var(--accent-primary);
+  animation: session-tool-spin 0.7s linear infinite;
+}
+
+@keyframes session-tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.session-tool[data-outcome="running"] .session-tool-chip {
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-subtle) 65%);
+}
+
+.session-tool-elapsed {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.session-tool-subagent-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* ---- Live turn group + self-routed-subagent nesting (story S6) ---- */
+.session-turn-live .session-turn-marker {
+  color: var(--accent-primary);
+}
+
+.session-subagent-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-left: var(--space-6);
+  padding-left: var(--space-4);
+  border-left: 2px solid color-mix(in srgb, var(--accent-primary) 30%, var(--border-subtle) 70%);
+}
+
+.session-subagent-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* ---- AssistantText streaming caret (story S6) ---- */
+.session-assistant-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent-primary);
+  animation: session-caret-blink 1s step-end infinite;
+}
+
+@keyframes session-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ---- ThinkingBlock ---- */
 .session-thinking {
   display: flex;

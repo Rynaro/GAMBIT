@@ -7,6 +7,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-05-22
+
+### Fixed
+
+- **Assistant responses never appeared in the session transcript.** A turn would
+  run and complete, but the UI showed nothing. The Rust `ContentBlock` struct
+  serialised its fields snake_case (`type`, `tool_use_id`, `is_error`) while the
+  frontend reads camelCase (`blockType`, `toolUseId`, `isError`) — so
+  `AssistantBlock`'s `switch (block.blockType)` always saw `undefined` and every
+  content block rendered as `null`. `ContentBlock` and `Usage` now carry a
+  split-direction serde `rename_all` (snake_case in from `claude`, camelCase out
+  to the UI). This also repairs `tool_result` pairing — tool chips that were
+  stuck showing "running" now resolve. Root-caused by VIGIL; a serialization
+  regression test guards the wire shape.
+
+## [0.3.5] — 2026-05-22
+
+The fifth v0.3.x minor — liveness. Completes the v0.3.x session round.
+
+### Added
+
+- **Streaming output** — assistant text now renders token-by-token as the
+  Eidolon generates it, instead of appearing all at once at turn end. Driven by
+  claude-code's `stream_event` partial-message deltas, which the backend parsed
+  but the UI previously dropped.
+- **Live tool feedback** — a `ToolUseChip` shows a running spinner and a ticking
+  elapsed-time readout the moment a tool call starts, and resolves to ok/error
+  when its result lands. Subagent tool activity (cortex/TRANCE self-routed work,
+  tagged by `parent_tool_use_id`) renders nested and indented — the routing is
+  now visible as it happens.
+- The context-temperature gauge updates **live mid-turn** from incremental
+  `message_delta` usage, not only when a turn completes; the authoritative
+  `result` re-baselines it at turn end.
+
+## [0.3.4] — 2026-05-22
+
+The fourth v0.3.x minor — the context-temperature gauge.
+
+### Added
+
+- An always-visible **context-temperature gauge** in the session detail header.
+  The bar reads how full the model's context window is — the latest turn's
+  input-side tokens (`input + cache-read + cache-creation`) over a host-side
+  model→window table (Opus 4.7/4.6 & Sonnet 4.6 = 1,000,000 tokens; Sonnet 4.5
+  and older = 200,000; conservative fallback for unknown models). It also shows
+  session-lifetime total tokens and an estimated cost (labelled an estimate —
+  it is client-side, not billing). The gauge helps you stop before
+  context-exhaustion hallucinations. A `compact_boundary` event is detected
+  best-effort; regardless, the next turn's `result` re-baselines the gauge.
+
+## [0.3.3] — 2026-05-22
+
+The third v0.3.x minor — cortex-default launch (TRANCE-lite).
+
+### Added
+
+- A new session now defaults to **Cortex**: its system prompt is the cortex
+  routing descriptor (`.eidolons/cortex/EIDOLONS.md`), so claude-code self-routes
+  work across the project's Eidolons rather than running a single fixed persona.
+  Launching is zero-effort type-and-send — picking a specific named Eidolon is
+  an explicit opt-in under the composer's Options. A project with no cortex
+  descriptor degrades gracefully: the Cortex option is shown disabled with a
+  clear note, and a named Eidolon can still be launched.
+
+> TRANCE-lite: v0.3.3 ships descriptor-driven self-routing only. GAMBIT-owned
+> multi-Eidolon orchestration (sequential chains, parallel fan-out) remains
+> deferred to v0.4+.
+
+## [0.3.2] — 2026-05-22
+
+The second v0.3.x minor — the Sessions surface becomes a chat.
+
+### Added
+
+- The Sessions route is now a list↔detail shell — a persistent left rail lists
+  every session (title, Eidolon/cortex badge, status dot, last-active time)
+  with a "New session" button and a per-row delete.
+- One unified composer. The separate pre-launch form is gone: with no session
+  selected, typing and pressing ⌘↵ creates a session and sends that text as
+  turn 1; the Eidolon picker and permission-mode controls collapse into an
+  optional disclosure. The working directory is resolved and pinned *before*
+  turn 1 (selected project → most-recently-active session's project → blocked
+  if neither), so `--resume` can never silently fork a fresh empty session.
+
+### Changed
+
+- `SessionSummary` now carries `projectPath`, so the session list resolves a
+  working directory without an extra `load_session` round-trip.
+
+## [0.3.1] — 2026-05-22
+
+The first v0.3.x minor — session persistence. Sessions now survive app restarts
+*and* route changes (the latter was a v0.3.0 bug). Planned via a TRANCE chain;
+see `.junction/plans/v0-3-x-sessions.json`.
+
+### Added
+
+- On-disk session persistence — each session is written as a `SessionRecord`
+  JSON file under the app-data dir (new `session_store.rs`), alongside an
+  `index.json`. `start_session` writes the record; `run_turn` flushes it per
+  turn — transcript, cumulative usage/cost, and a per-turn `result_seen` flag
+  so a turn killed by a crash/OOM is recoverable rather than mistaken for
+  complete. New commands: `list_sessions`, `load_session`, `delete_session`,
+  `reopen_session` (re-inserts a live session handle from a persisted record
+  without spawning a turn).
+- `useSessions` — a multi-session store lifted to the App shell. Holds every
+  session at once, attaches the three Tauri session listeners exactly once and
+  routes events by `sessionId`, and rehydrates from disk on mount. Replaces the
+  single-session `useSession` hook (now a thin per-session selector).
+
+### Fixed
+
+- Navigating away from the Sessions route no longer destroys the active
+  session's transcript. v0.3.0 mounted session state *inside* the route, so any
+  route change unmounted the hook and lost the transcript. The lifted
+  `useSessions` store (above the router) fixes this structurally.
+
 ## [0.3.0] — 2026-05-22
 
 The "Eidolon Sessions" release. GAMBIT can now run `claude-code` itself — pick a

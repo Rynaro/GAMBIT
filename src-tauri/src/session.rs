@@ -65,13 +65,14 @@
 // without reworking S4.
 
 use crate::binary;
-use crate::claude_adapter::{self, ParsedEvent, TurnArgs, TurnKind};
+use crate::claude_adapter::{self, ParsedEvent, StreamDelta, TurnArgs, TurnKind};
+use crate::session_store::{self, CumulativeUsage, PersistedEntry, SessionRecord, TurnRecord};
 use crate::spawn_core;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
 use tauri::{AppHandle, Emitter, State};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
@@ -116,6 +117,39 @@ pub struct SessionHandle {
     /// running one. An `Arc<AtomicBool>` so the wait task can clear it on
     /// turn completion without re-locking the registry map.
     pub turn_in_flight: Arc<AtomicBool>,
+
+    // --- v0.3.1 persistence state ------------------------------------------
+    // Story S1 makes Rust the transcript owner: it already parses every
+    // NDJSON line, so it accumulates the durable `SessionRecord` content
+    // here and flushes a full record per turn (see `run_turn`). These are
+    // `Arc`s so the per-turn reader/wait tasks can touch them without
+    // re-locking the registry map.
+    /// `true` for a cortex-routed default session. The cortex launch path is
+    /// story S4 — this field exists now so the record carries it.
+    pub is_cortex: bool,
+    /// Session title — derived from the turn-1 prompt at `start_session`.
+    pub title: String,
+    /// RFC-3339 creation timestamp.
+    pub created_at: String,
+    /// The serving model — captured from the first `system/init` event seen.
+    /// A synchronous `std::sync::Mutex`: the per-turn reader/wait tasks touch
+    /// it only in short non-`await` critical sections (the stdout reader is a
+    /// synchronous `FnMut`), so a tokio mutex would be the wrong tool here.
+    pub model: Arc<StdMutex<Option<String>>>,
+    /// The accumulating transcript buffer. Each reader task appends the
+    /// `PersistedEntry` equivalent of every `session-event` / `session-stderr`
+    /// it emits; the wait task flushes the whole buffer into the record.
+    pub transcript: Arc<StdMutex<Vec<PersistedEntry>>>,
+    /// Per-turn finalisation log — one [`TurnRecord`] appended by the wait
+    /// task per turn, carrying the partial-turn-safety `result_seen` flag.
+    pub per_turn: Arc<StdMutex<Vec<TurnRecord>>>,
+    /// Cumulative token usage summed across every turn's `result` event.
+    pub cumulative_usage: Arc<StdMutex<CumulativeUsage>>,
+    /// Cumulative estimated cost summed across every turn's `total_cost_usd`.
+    pub cumulative_cost_usd: Arc<StdMutex<Option<f64>>>,
+    /// Monotonic turn counter — incremented per turn so each reader/wait task
+    /// stamps its `PersistedEntry`s and `TurnRecord` with the right number.
+    pub turn_counter: Arc<AtomicU32>,
 }
 
 /// Tauri-managed registry of live Eidolon sessions, keyed by UUID.
@@ -166,6 +200,15 @@ pub struct StartSessionParams {
     pub allowed_tools: Vec<String>,
     /// The prompt for turn 1.
     pub first_prompt: String,
+    /// `true` for a cortex-routed default session. Optional — defaults to
+    /// `false`. The cortex launch path is story S4; the field exists now so
+    /// the persisted `SessionRecord` carries it from v0.3.1.
+    #[serde(default)]
+    pub is_cortex: bool,
+    /// Optional explicit session title. When absent, the title is derived
+    /// from `first_prompt` (first ~60 chars).
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// Returned by [`start_session`]: the addressable session descriptor.
@@ -182,6 +225,10 @@ pub struct SessionInfo {
     pub permission_mode: String,
     /// Session status at return time (`"running"` — turn 1 was just spawned).
     pub status: String,
+    /// RFC-3339 creation timestamp — also written into the `SessionRecord`.
+    pub created_at: String,
+    /// `true` for a cortex-routed default session (story S4 launch path).
+    pub is_cortex: bool,
 }
 
 /// Returned by [`claude_auth_status`]: the `claude` CLI login pre-flight.
@@ -233,6 +280,101 @@ struct SessionStderrPayload {
     ts: String,
 }
 
+/// `session-delta` — an EPHEMERAL streaming fragment (story S6/S7).
+///
+/// Carries the cozy deltas pre-extracted from a `stream_event`'s inner event:
+/// an incremental assistant-text fragment (`deltaKind == "text"`) or an
+/// incremental `tool_use` JSON-input fragment (`deltaKind == "toolInput"`).
+///
+/// EPHEMERAL by contract: emitted live from the stdout reader but NEVER
+/// appended to the persisted transcript / `SessionRecord` — the final
+/// `assistant` / `user` `session-event` entries remain the durable source of
+/// truth. `parentToolUseId` is non-null when the fragment came from a
+/// self-routed subagent.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionDeltaPayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this delta belongs to.
+    turn: u32,
+    /// `"text"` for an assistant-text fragment, `"toolInput"` for a `tool_use`
+    /// JSON-input fragment.
+    delta_kind: String,
+    /// The text fragment — set when `deltaKind == "text"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    /// The owning `tool_use` block's index — set when `deltaKind == "toolInput"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_index: Option<u64>,
+    /// The `partial_json` fragment — set when `deltaKind == "toolInput"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    partial_json: Option<String>,
+    /// Non-null when the fragment came from a self-routed subagent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_tool_use_id: Option<String>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
+/// `session-tool-start` — an EPHEMERAL "a tool call is beginning" marker
+/// (story S6).
+///
+/// Fired on a `stream_event` `content_block_start(tool_use)` so the UI can
+/// show a live "running" `ToolUseChip` (spinner + elapsed time) BEFORE the
+/// paired `tool_result` arrives. EPHEMERAL — never persisted; the durable
+/// `assistant`(`tool_use`) / `user`(`tool_result`) `session-event`s are the
+/// source of truth once the turn completes.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionToolStartPayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this tool call belongs to.
+    turn: u32,
+    /// The content-block index — correlates the eventual `toolInput` deltas
+    /// (which carry only the index) back to this tool call.
+    block_index: u64,
+    /// The `tool_use` id — pairs with the eventual `tool_result.toolUseId`.
+    tool_use_id: String,
+    /// The tool name.
+    tool_name: String,
+    /// Non-null when the tool call is self-routed-subagent work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_tool_use_id: Option<String>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
+/// `session-usage` — an EPHEMERAL live mid-turn token-usage update (story S7).
+///
+/// Carries the incremental `usage` extracted from a `stream_event`'s
+/// `message_start` / `message_delta`, feeding the `ContextGauge` so the
+/// temperature bar moves mid-turn instead of only on the terminal `result`.
+/// EPHEMERAL — the authoritative `result` usage supersedes it at turn end.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionUsagePayload {
+    /// The owning session's UUID.
+    session_id: String,
+    /// The 1-based turn this usage belongs to.
+    turn: u32,
+    /// Input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input_tokens: Option<u64>,
+    /// Output tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_tokens: Option<u64>,
+    /// Cache-read input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_read_input_tokens: Option<u64>,
+    /// Cache-creation input tokens reported so far this turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_creation_input_tokens: Option<u64>,
+    /// RFC-3339 emit timestamp.
+    ts: String,
+}
+
 /// `session-turn-complete` — a turn finished (dual-finalize: result OR exit).
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -267,6 +409,97 @@ fn event_kind(event: &ParsedEvent) -> &'static str {
         ParsedEvent::Result { .. } => "result",
         ParsedEvent::Unknown { .. } => "unknown",
         ParsedEvent::Malformed { .. } => "unknown",
+    }
+}
+
+/// Emit the EPHEMERAL streaming events for one extracted [`StreamDelta`]
+/// (story S6/S7).
+///
+/// Called from the stdout reader for every `stream_event` line that carried a
+/// recognised cozy delta. It maps the delta to one of the three new events:
+///   * [`StreamDelta::Text`]      → `session-delta` (`deltaKind: "text"`)
+///   * [`StreamDelta::ToolInput`] → `session-delta` (`deltaKind: "toolInput"`)
+///   * [`StreamDelta::ToolStart`] → `session-tool-start`
+///   * [`StreamDelta::Usage`]     → `session-usage`
+///
+/// EPHEMERAL by contract: this only `emit`s — it touches no persistence
+/// buffer, so the deltas never reach the `SessionRecord`. An `emit` failure
+/// is swallowed (`let _ =`), mirroring the other event emits in this module.
+fn emit_stream_delta(
+    app: &AppHandle,
+    session_id: &str,
+    turn: u32,
+    delta: &StreamDelta,
+    parent_tool_use_id: Option<&str>,
+) {
+    let ts = chrono::Utc::now().to_rfc3339();
+    let parent = parent_tool_use_id.map(str::to_string);
+    match delta {
+        StreamDelta::Text { text } => {
+            let _ = app.emit(
+                "session-delta",
+                SessionDeltaPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    delta_kind: "text".to_string(),
+                    text: Some(text.clone()),
+                    block_index: None,
+                    partial_json: None,
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::ToolInput {
+            index,
+            partial_json,
+        } => {
+            let _ = app.emit(
+                "session-delta",
+                SessionDeltaPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    delta_kind: "toolInput".to_string(),
+                    text: None,
+                    block_index: Some(*index),
+                    partial_json: Some(partial_json.clone()),
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::ToolStart {
+            index,
+            tool_use_id,
+            tool_name,
+        } => {
+            let _ = app.emit(
+                "session-tool-start",
+                SessionToolStartPayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    block_index: *index,
+                    tool_use_id: tool_use_id.clone(),
+                    tool_name: tool_name.clone(),
+                    parent_tool_use_id: parent,
+                    ts,
+                },
+            );
+        }
+        StreamDelta::Usage { usage } => {
+            let _ = app.emit(
+                "session-usage",
+                SessionUsagePayload {
+                    session_id: session_id.to_string(),
+                    turn,
+                    input_tokens: usage.input_tokens,
+                    output_tokens: usage.output_tokens,
+                    cache_read_input_tokens: usage.cache_read_input_tokens,
+                    cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                    ts,
+                },
+            );
+        }
     }
 }
 
@@ -309,6 +542,127 @@ fn auth_status_from_output(exit_code: i32, stdout: &str, stderr: &str) -> AuthSt
 }
 
 // ---------------------------------------------------------------------------
+// Persistence plumbing (story S1)
+// ---------------------------------------------------------------------------
+
+/// Immutable per-session metadata snapshotted into a turn's reader/wait tasks.
+///
+/// `SessionHandle` lives in the registry behind a map mutex; cloning these
+/// owned fields out once (under the map guard, then dropped) lets the spawned
+/// tasks build a [`SessionRecord`] at flush time WITHOUT re-locking the map.
+#[derive(Clone)]
+struct SessionMeta {
+    uuid: String,
+    eidolon_name: String,
+    is_cortex: bool,
+    title: String,
+    project_path: String,
+    permission_mode: String,
+    append_system_prompt: String,
+    allowed_tools: Vec<String>,
+    created_at: String,
+}
+
+/// The shared persistence `Arc`s a turn's reader/wait tasks accumulate into.
+///
+/// Cloned out of the [`SessionHandle`] alongside [`SessionMeta`]; the reader
+/// tasks append to `transcript`, the wait task folds usage/cost and appends
+/// the per-turn [`TurnRecord`], then flushes a full [`SessionRecord`]. All
+/// `std::sync::Mutex` — every critical section is synchronous and short, and
+/// no guard is ever held across an `.await`.
+#[derive(Clone)]
+struct PersistState {
+    model: Arc<StdMutex<Option<String>>>,
+    transcript: Arc<StdMutex<Vec<PersistedEntry>>>,
+    per_turn: Arc<StdMutex<Vec<TurnRecord>>>,
+    cumulative_usage: Arc<StdMutex<CumulativeUsage>>,
+    cumulative_cost_usd: Arc<StdMutex<Option<f64>>>,
+}
+
+/// Build the current [`SessionRecord`] from the session's metadata + the
+/// accumulated persistence state. Called by the wait-task tail per turn.
+///
+/// `status` is the post-turn status string (`idle` / `failed`). Each lock is
+/// taken, read into an owned value, and dropped within its own statement —
+/// no guard is ever held across an `.await`.
+fn build_record(meta: &SessionMeta, persist: &PersistState, status: &str) -> SessionRecord {
+    let model = persist.model.lock().expect("model mutex poisoned").clone();
+    let transcript = persist
+        .transcript
+        .lock()
+        .expect("transcript mutex poisoned")
+        .clone();
+    let per_turn = persist
+        .per_turn
+        .lock()
+        .expect("per_turn mutex poisoned")
+        .clone();
+    let cumulative_usage = persist
+        .cumulative_usage
+        .lock()
+        .expect("cumulative_usage mutex poisoned")
+        .clone();
+    let cumulative_cost_usd = *persist
+        .cumulative_cost_usd
+        .lock()
+        .expect("cumulative_cost mutex poisoned");
+
+    SessionRecord {
+        uuid: meta.uuid.clone(),
+        eidolon_name: meta.eidolon_name.clone(),
+        is_cortex: meta.is_cortex,
+        title: meta.title.clone(),
+        project_path: meta.project_path.clone(),
+        permission_mode: meta.permission_mode.clone(),
+        append_system_prompt: meta.append_system_prompt.clone(),
+        allowed_tools: meta.allowed_tools.clone(),
+        status: status.to_string(),
+        model,
+        created_at: meta.created_at.clone(),
+        last_active_at: chrono::Utc::now().to_rfc3339(),
+        transcript,
+        cumulative_usage,
+        cumulative_cost_usd,
+        per_turn,
+    }
+}
+
+/// Reconstruct a live [`SessionHandle`] from a persisted [`SessionRecord`].
+///
+/// Story S2 — the `reopen_session` reconstruction seam, factored out so the
+/// record→handle mapping is unit-testable without an `AppHandle` or disk I/O.
+///
+/// Metadata is copied verbatim from the record. The persistence buffers
+/// (`transcript` / `per_turn` / `cumulative_usage` / `cumulative_cost_usd` /
+/// `model`) are SEEDED from the record so a later turn's flush rebuilds the
+/// full record from them rather than truncating the rehydrated history. Live
+/// state is fresh: `child = None`, `turn_in_flight = false`, `status = "idle"`
+/// (re-entry is lazy — no turn is spawned). The `turn_counter` is seeded past
+/// the highest recorded turn so the next `send_turn` stamps a fresh number.
+fn handle_from_record(record: &SessionRecord) -> SessionHandle {
+    let turn_counter_start = record.per_turn.iter().map(|t| t.turn).max().unwrap_or(0);
+    SessionHandle {
+        eidolon_name: record.eidolon_name.clone(),
+        project_path: PathBuf::from(&record.project_path),
+        permission_mode: record.permission_mode.clone(),
+        append_system_prompt: record.append_system_prompt.clone(),
+        allowed_tools: record.allowed_tools.clone(),
+        status: "idle".to_string(),
+        child: Arc::new(Mutex::new(None)),
+        turn_in_flight: Arc::new(AtomicBool::new(false)),
+        is_cortex: record.is_cortex,
+        title: record.title.clone(),
+        created_at: record.created_at.clone(),
+        model: Arc::new(StdMutex::new(record.model.clone())),
+        transcript: Arc::new(StdMutex::new(record.transcript.clone())),
+        per_turn: Arc::new(StdMutex::new(record.per_turn.clone())),
+        cumulative_usage: Arc::new(StdMutex::new(record.cumulative_usage.clone())),
+        cumulative_cost_usd: Arc::new(StdMutex::new(record.cumulative_cost_usd)),
+        turn_counter: Arc::new(AtomicU32::new(turn_counter_start)),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-turn machinery
 // ---------------------------------------------------------------------------
 
@@ -324,12 +678,25 @@ fn auth_status_from_output(exit_code: i32, stdout: &str, stderr: &str) -> AuthSt
 ///
 /// R6 dual-finalize: `result_seen` is the shared flag — the stdout reader sets
 /// it on a `ParsedEvent::Result`, the wait task reads it for `hadResult`.
+///
+/// Story S1 — persistence: `turn` is this turn's 1-based number; the reader
+/// tasks append a [`PersistedEntry`] to `persist.transcript` for every
+/// `session-event` / `session-stderr` they emit (Rust is the transcript
+/// owner). The wait-task tail folds the turn's usage/cost, appends a
+/// [`TurnRecord`] (with `result_seen` — `false` when the turn exited WITHOUT
+/// a terminal `result`, the crash/SIGKILL safety case), and flushes the FULL
+/// [`SessionRecord`] + `index.json` entry right before the
+/// `session-turn-complete` emit.
+#[allow(clippy::too_many_arguments)]
 fn run_turn(
     app: AppHandle,
     session_id: Uuid,
     spawned: spawn_core::SpawnedChild,
     child_slot: Arc<Mutex<Option<Child>>>,
     turn_in_flight: Arc<AtomicBool>,
+    meta: SessionMeta,
+    persist: PersistState,
+    turn: u32,
 ) {
     let spawn_core::SpawnedChild {
         child,
@@ -348,29 +715,110 @@ fn run_turn(
 
     // --- stdout reader -----------------------------------------------------
     // Each line → parse_line → `session-event`. On a `Result` event, flip the
-    // shared dual-finalize flags. `read_lines`'s closure is `FnMut + Send`;
-    // it owns its clones, so nothing is borrowed across the task boundary.
+    // shared dual-finalize flags AND fold its usage/cost into the cumulative
+    // totals. On an `Init` event, capture the serving model. Every line is
+    // also appended to the transcript buffer (Rust is the transcript owner).
+    // `read_lines`'s closure is a synchronous `FnMut + Send`; the persistence
+    // mutexes are `std::sync::Mutex` so their short critical sections need no
+    // `.await` — nothing is held across a yield point.
     let app_stdout = app.clone();
     let sid_stdout = session_id_str.clone();
     let result_seen_rd = result_seen.clone();
     let result_error_rd = result_error.clone();
+    let persist_stdout = persist.clone();
     let stdout_task = spawn_core::read_lines(stdout, move |line| {
         let parsed = claude_adapter::parse_line(&line);
-        if let ParsedEvent::Result { is_error, .. } = &parsed {
-            // R6: a terminal `result` was observed — record it for the wait
-            // task. `Ordering::SeqCst` is more than enough here; these flags
-            // are read exactly once, after the reader task has fully joined.
-            if *is_error {
-                result_error_rd.store(true, Ordering::SeqCst);
+        match &parsed {
+            ParsedEvent::Result {
+                is_error,
+                usage,
+                total_cost_usd,
+                ..
+            } => {
+                // R6: a terminal `result` was observed — record it for the
+                // wait task. `Ordering::SeqCst` is more than enough here;
+                // these flags are read once, after the reader fully joins.
+                if *is_error {
+                    result_error_rd.store(true, Ordering::SeqCst);
+                }
+                result_seen_rd.store(true, Ordering::SeqCst);
+
+                // Accumulate cumulative usage + cost across turns.
+                persist_stdout
+                    .cumulative_usage
+                    .lock()
+                    .expect("cumulative_usage mutex poisoned")
+                    .add(usage);
+                if let Some(cost) = total_cost_usd {
+                    let mut acc = persist_stdout
+                        .cumulative_cost_usd
+                        .lock()
+                        .expect("cumulative_cost mutex poisoned");
+                    *acc = Some(acc.unwrap_or(0.0) + cost);
+                }
             }
-            result_seen_rd.store(true, Ordering::SeqCst);
+            ParsedEvent::Init {
+                model: Some(m), ..
+            } => {
+                // Capture the serving model the first time `init` reports one.
+                let mut slot = persist_stdout
+                    .model
+                    .lock()
+                    .expect("model mutex poisoned");
+                if slot.is_none() {
+                    *slot = Some(m.clone());
+                }
+            }
+            ParsedEvent::StreamEvent {
+                delta: Some(delta),
+                parent_tool_use_id,
+                ..
+            } => {
+                // Story S6/S7 — emit the EPHEMERAL streaming events. These are
+                // emitted but DELIBERATELY NOT folded into any persistence
+                // buffer: the `stream_event` line still rides into `transcript`
+                // as a `streamEvent` `session-event` below (story S1), but the
+                // *deltas* never become durable state. The cumulative usage on
+                // the `SessionRecord` is only ever advanced by a terminal
+                // `result` (above) — `session-usage` is a live preview the
+                // `result` supersedes, so there is no double-counting.
+                emit_stream_delta(
+                    &app_stdout,
+                    &sid_stdout,
+                    turn,
+                    delta,
+                    parent_tool_use_id.as_deref(),
+                );
+            }
+            _ => {}
         }
+
+        let ts = chrono::Utc::now().to_rfc3339();
+        let kind = event_kind(&parsed).to_string();
+
+        // Append the durable transcript entry before emitting — the parsed
+        // event is serialised to a `Value` so the store never depends on the
+        // `ParsedEvent` enum shape.
+        let parsed_value = serde_json::to_value(&parsed).ok();
+        persist_stdout
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "event".to_string(),
+                turn,
+                kind: Some(kind.clone()),
+                parsed: parsed_value,
+                line: line.clone(),
+                ts: ts.clone(),
+            });
+
         let payload = SessionEventPayload {
             session_id: sid_stdout.clone(),
-            kind: event_kind(&parsed).to_string(),
+            kind,
             raw: line,
             parsed,
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts,
         };
         let _ = app_stdout.emit("session-event", payload);
     });
@@ -378,11 +826,28 @@ fn run_turn(
     // --- stderr reader -----------------------------------------------------
     let app_stderr = app.clone();
     let sid_stderr = session_id_str.clone();
+    let persist_stderr = persist.clone();
     let stderr_task = spawn_core::read_lines(stderr, move |line| {
+        let ts = chrono::Utc::now().to_rfc3339();
+
+        // A stderr entry carries no `kind` / `parsed` — just the raw line.
+        persist_stderr
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "stderr".to_string(),
+                turn,
+                kind: None,
+                parsed: None,
+                line: line.clone(),
+                ts: ts.clone(),
+            });
+
         let payload = SessionStderrPayload {
             session_id: sid_stderr.clone(),
             line,
-            ts: chrono::Utc::now().to_rfc3339(),
+            ts,
         };
         let _ = app_stderr.emit("session-stderr", payload);
     });
@@ -391,12 +856,8 @@ fn run_turn(
     // Scoped: the guard is dropped before the wait task is spawned, and the
     // wait task re-locks it independently — no guard is ever held across an
     // `.await`.
-    //
-    // We block_on the store inside the wait task's prelude instead of here so
-    // `run_turn` itself stays synchronous (its callers are `async fn`s but the
-    // store is fast and lock-free contention is nil). Simpler: do it in the
-    // wait task before the join.
     let app_complete = app.clone();
+    let app_persist = app.clone();
     let child_slot_wait = child_slot.clone();
     tokio::spawn(async move {
         // Publish the child into the session slot so S5's cancel can reach it.
@@ -435,6 +896,32 @@ fn run_turn(
             *guard = None;
         }
         turn_in_flight.store(false, Ordering::SeqCst);
+
+        // --- Story S1: per-turn durable flush --------------------------------
+        // Append this turn's finalisation record. `result_seen` carries the
+        // partial-turn-safety signal: a turn that exited WITHOUT a terminal
+        // `result` event (crash / SIGKILL / dropped result) flushes here with
+        // `result_seen: false` so re-entry (story S2) offers a fresh
+        // continuation rather than restoring a half-written turn.
+        {
+            let mut log = persist
+                .per_turn
+                .lock()
+                .expect("per_turn mutex poisoned");
+            log.push(TurnRecord {
+                turn,
+                result_seen: had_result,
+            });
+        }
+
+        // Flush the FULL SessionRecord (transcript buffer included) + refresh
+        // the index.json entry. A flush failure is logged, not fatal — the
+        // turn still completes and the UI still receives `session-turn-complete`.
+        let status = if is_error { "failed" } else { "idle" };
+        let record = build_record(&meta, &persist, status);
+        if let Err(e) = session_store::persist_record(&app_persist, &record) {
+            eprintln!("[session-store] warn: per-turn flush failed for {session_id_str}: {e}");
+        }
 
         let payload = TurnCompletePayload {
             session_id: session_id_str,
@@ -499,9 +986,28 @@ pub async fn start_session(
     cmd.args(&args).current_dir(&project_dir);
     let spawned = spawn_core::spawn_piped(cmd, &claude_bin)?;
 
+    // --- Derive the title + creation timestamp (story S1 persistence) ---
+    // The title is the caller-supplied one if present, else derived from the
+    // turn-1 prompt (first ~60 chars). `created_at` is fixed for the session's
+    // life; `last_active_at` is bumped on every per-turn flush.
+    let title = match &params.title {
+        Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => session_store::derive_title(&params.first_prompt),
+    };
+    let created_at = chrono::Utc::now().to_rfc3339();
+
     // --- Register the SessionHandle ---
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let turn_in_flight = Arc::new(AtomicBool::new(true));
+    let turn_counter = Arc::new(AtomicU32::new(0));
+    // Story S1 persistence buffers — Rust owns the durable transcript.
+    let model: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(None));
+    let transcript: Arc<StdMutex<Vec<PersistedEntry>>> = Arc::new(StdMutex::new(Vec::new()));
+    let per_turn: Arc<StdMutex<Vec<TurnRecord>>> = Arc::new(StdMutex::new(Vec::new()));
+    let cumulative_usage: Arc<StdMutex<CumulativeUsage>> =
+        Arc::new(StdMutex::new(CumulativeUsage::default()));
+    let cumulative_cost_usd: Arc<StdMutex<Option<f64>>> = Arc::new(StdMutex::new(None));
+
     let handle = SessionHandle {
         eidolon_name: params.eidolon_name.clone(),
         project_path: project_dir.clone(),
@@ -511,6 +1017,15 @@ pub async fn start_session(
         status: "running".to_string(),
         child: child_slot.clone(),
         turn_in_flight: turn_in_flight.clone(),
+        is_cortex: params.is_cortex,
+        title: title.clone(),
+        created_at: created_at.clone(),
+        model: model.clone(),
+        transcript: transcript.clone(),
+        per_turn: per_turn.clone(),
+        cumulative_usage: cumulative_usage.clone(),
+        cumulative_cost_usd: cumulative_cost_usd.clone(),
+        turn_counter: turn_counter.clone(),
     };
     {
         // Guard scoped to the synchronous insert — dropped before `run_turn`.
@@ -518,13 +1033,48 @@ pub async fn start_session(
         sessions.insert(session_id, handle);
     }
 
-    // --- Start the per-turn reader + wait tasks ---
+    // --- Snapshot the persistence context for turn 1 ---
+    let meta = SessionMeta {
+        uuid: session_id_str.clone(),
+        eidolon_name: params.eidolon_name.clone(),
+        is_cortex: params.is_cortex,
+        title: title.clone(),
+        project_path: params.project_path.clone(),
+        permission_mode: params.permission_mode.clone(),
+        append_system_prompt: params.append_system_prompt.clone(),
+        allowed_tools: params.allowed_tools.clone(),
+        created_at: created_at.clone(),
+    };
+    let persist = PersistState {
+        model,
+        transcript,
+        per_turn,
+        cumulative_usage,
+        cumulative_cost_usd,
+    };
+
+    // --- Write the initial SessionRecord + index.json entry ---
+    // The session is durable from birth — even if turn 1 crashes before its
+    // per-turn flush, `list_sessions` already sees it. A write failure is
+    // logged, not fatal: the in-memory session still runs.
+    {
+        let initial = build_record(&meta, &persist, "running");
+        if let Err(e) = session_store::persist_record(&app, &initial) {
+            eprintln!("[session-store] warn: initial record write failed for {session_id_str}: {e}");
+        }
+    }
+
+    // --- Start the per-turn reader + wait tasks (turn 1) ---
+    let turn = turn_counter.fetch_add(1, Ordering::SeqCst) + 1;
     run_turn(
         app.clone(),
         session_id,
         spawned,
         child_slot,
         turn_in_flight,
+        meta,
+        persist,
+        turn,
     );
 
     Ok(SessionInfo {
@@ -533,6 +1083,8 @@ pub async fn start_session(
         project_path: params.project_path,
         permission_mode: params.permission_mode,
         status: "running".to_string(),
+        created_at,
+        is_cortex: params.is_cortex,
     })
 }
 
@@ -561,8 +1113,10 @@ pub async fn send_turn(
 
     // --- Look the session up, claim the in-flight slot, copy out args ---
     // All of this happens under the map guard; the guard is dropped at the
-    // end of this block, BEFORE any spawn or `.await` on the child.
-    let (claude_args, project_dir, child_slot, turn_in_flight) = {
+    // end of this block, BEFORE any spawn or `.await` on the child. The
+    // persistence context (`meta` + `persist` + the next turn number) is
+    // snapshotted here too — story S1 threads it into `run_turn`'s flush.
+    let (claude_args, project_dir, child_slot, turn_in_flight, meta, persist, turn) = {
         let sessions = state.sessions.lock().await;
         let handle = sessions
             .get(&uuid)
@@ -591,11 +1145,34 @@ pub async fn send_turn(
             session_id: &session_id,
             turn_kind: TurnKind::Resumed,
         };
+        let meta = SessionMeta {
+            uuid: session_id.clone(),
+            eidolon_name: handle.eidolon_name.clone(),
+            is_cortex: handle.is_cortex,
+            title: handle.title.clone(),
+            project_path: handle.project_path.to_string_lossy().to_string(),
+            permission_mode: handle.permission_mode.clone(),
+            append_system_prompt: handle.append_system_prompt.clone(),
+            allowed_tools: handle.allowed_tools.clone(),
+            created_at: handle.created_at.clone(),
+        };
+        let persist = PersistState {
+            model: handle.model.clone(),
+            transcript: handle.transcript.clone(),
+            per_turn: handle.per_turn.clone(),
+            cumulative_usage: handle.cumulative_usage.clone(),
+            cumulative_cost_usd: handle.cumulative_cost_usd.clone(),
+        };
+        // The next 1-based turn number for this session.
+        let turn = handle.turn_counter.fetch_add(1, Ordering::SeqCst) + 1;
         (
             claude_adapter::build_args(&turn_args),
             handle.project_path.clone(),
             handle.child.clone(),
             handle.turn_in_flight.clone(),
+            meta,
+            persist,
+            turn,
         )
         // map guard dropped here
     };
@@ -620,9 +1197,101 @@ pub async fn send_turn(
     };
 
     // --- Start the per-turn reader + wait tasks ---
-    run_turn(app.clone(), uuid, spawned, child_slot, turn_in_flight);
+    run_turn(
+        app.clone(),
+        uuid,
+        spawned,
+        child_slot,
+        turn_in_flight,
+        meta,
+        persist,
+        turn,
+    );
 
     Ok(())
+}
+
+/// Tauri command: re-insert a persisted session into the live registry.
+///
+/// Story S2 — re-entry after a route change or an app restart. The
+/// [`SessionRegistry`] is in-memory, so a session loaded from disk has no
+/// live [`SessionHandle`]: a follow-up `send_turn` would fail with "no session
+/// registered". `reopen_session` closes that gap.
+///
+/// It reads the persisted [`SessionRecord`] (via `session_store`), reconstructs
+/// a `SessionHandle` with the record's metadata AND its accumulated content
+/// rehydrated — the transcript buffer, the per-turn finalisation log, the
+/// cumulative usage/cost, the captured model, and the turn counter set to the
+/// number of turns already recorded. Rehydrating the buffers matters: a later
+/// turn's flush rebuilds the FULL [`SessionRecord`] from `persist.transcript`,
+/// so an empty buffer would silently truncate the session's history on the
+/// next `send_turn`.
+///
+/// The live state is fresh: `child = None`, `turn_in_flight = false`. It does
+/// NOT spawn a turn — re-entry is lazy; the next `send_turn` issues the
+/// `--resume <uuid>` for this session.
+///
+/// Idempotent: if the session is already live in the registry (e.g. reopened
+/// twice, or never unmounted), the existing handle is left untouched and its
+/// current [`SessionInfo`] is returned.
+///
+/// Lock discipline: the registry map guard is taken twice — once for the
+/// idempotency probe, once for the insert — each scoped to a synchronous
+/// block, never held across the `.await` on `session_store` I/O (which itself
+/// is synchronous `std::fs`, run before the second lock).
+#[tauri::command]
+pub async fn reopen_session(
+    state: State<'_, SessionRegistry>,
+    app: AppHandle,
+    session_id: String,
+) -> Result<SessionInfo, String> {
+    // --- Parse the UUID ---
+    let uuid = Uuid::parse_str(&session_id)
+        .map_err(|e| format!("invalid session id '{session_id}': {e}"))?;
+
+    // --- Idempotency probe: already live? Return its current SessionInfo ---
+    // The map guard is scoped to this block and dropped before any I/O.
+    {
+        let sessions = state.sessions.lock().await;
+        if let Some(handle) = sessions.get(&uuid) {
+            return Ok(SessionInfo {
+                session_id: session_id.clone(),
+                eidolon_name: handle.eidolon_name.clone(),
+                project_path: handle.project_path.to_string_lossy().to_string(),
+                permission_mode: handle.permission_mode.clone(),
+                status: handle.status.clone(),
+                created_at: handle.created_at.clone(),
+                is_cortex: handle.is_cortex,
+            });
+        }
+    }
+
+    // --- Load the persisted record from disk ---
+    let record = session_store::read_record(&app, &session_id)?;
+
+    // --- Reconstruct a SessionHandle with the record's content rehydrated ---
+    // Live state is fresh (no child, no turn in flight); the persistence
+    // buffers are seeded from the record so a later turn's flush does not
+    // truncate the rehydrated history. See `handle_from_record`.
+    let handle = handle_from_record(&record);
+
+    // --- Insert into the registry (guard scoped to the synchronous insert) ---
+    // A racing `reopen_session` for the same id may have inserted between the
+    // probe and here — re-check under the guard and prefer the existing handle.
+    {
+        let mut sessions = state.sessions.lock().await;
+        sessions.entry(uuid).or_insert(handle);
+    }
+
+    Ok(SessionInfo {
+        session_id,
+        eidolon_name: record.eidolon_name,
+        project_path: record.project_path,
+        permission_mode: record.permission_mode,
+        status: "idle".to_string(),
+        created_at: record.created_at,
+        is_cortex: record.is_cortex,
+    })
 }
 
 /// Tauri command: report the `claude` CLI login state as a launch pre-flight.
@@ -757,6 +1426,15 @@ mod tests {
             status: "idle".to_string(),
             child: Arc::new(Mutex::new(None)),
             turn_in_flight: Arc::new(AtomicBool::new(false)),
+            is_cortex: false,
+            title: "Test session".to_string(),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            model: Arc::new(StdMutex::new(None)),
+            transcript: Arc::new(StdMutex::new(Vec::new())),
+            per_turn: Arc::new(StdMutex::new(Vec::new())),
+            cumulative_usage: Arc::new(StdMutex::new(CumulativeUsage::default())),
+            cumulative_cost_usd: Arc::new(StdMutex::new(None)),
+            turn_counter: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -816,7 +1494,11 @@ mod tests {
             "user"
         );
         assert_eq!(
-            event_kind(&ParsedEvent::StreamEvent { event: None }),
+            event_kind(&ParsedEvent::StreamEvent {
+                event: None,
+                delta: None,
+                parent_tool_use_id: None,
+            }),
             "streamEvent"
         );
         assert_eq!(
@@ -877,6 +1559,8 @@ mod tests {
             project_path: "/tmp/project".to_string(),
             permission_mode: "acceptEdits".to_string(),
             status: "running".to_string(),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            is_cortex: false,
         };
         assert_eq!(info.session_id, id.to_string());
         assert_eq!(info.eidolon_name, "Sage");
@@ -889,8 +1573,11 @@ mod tests {
         assert!(json.get("projectPath").is_some());
         assert!(json.get("permissionMode").is_some());
         assert!(json.get("status").is_some());
+        assert!(json.get("createdAt").is_some());
+        assert!(json.get("isCortex").is_some());
         // snake_case keys must NOT leak through.
         assert!(json.get("session_id").is_none());
+        assert!(json.get("created_at").is_none());
     }
 
     /// The `turn_in_flight` claim is atomic: the first `compare_exchange`
@@ -1013,6 +1700,138 @@ mod tests {
             *guard = None;
         }
         assert!(child_slot.lock().await.is_none(), "slot stays None");
+    }
+
+    // --- reopen_session reconstruction (story S2) -----------------------------
+
+    fn sample_record() -> SessionRecord {
+        SessionRecord {
+            uuid: "44444444-4444-4444-4444-444444444444".to_string(),
+            eidolon_name: "Sage".to_string(),
+            is_cortex: false,
+            title: "Reopened session".to_string(),
+            project_path: "/tmp/project".to_string(),
+            permission_mode: "acceptEdits".to_string(),
+            append_system_prompt: "You are Sage.".to_string(),
+            allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
+            status: "failed".to_string(),
+            model: Some("claude-opus-4-7".to_string()),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            last_active_at: "2026-05-22T12:30:00+00:00".to_string(),
+            transcript: vec![PersistedEntry {
+                source: "event".to_string(),
+                turn: 1,
+                kind: Some("assistant".to_string()),
+                parsed: None,
+                line: r#"{"type":"assistant"}"#.to_string(),
+                ts: "2026-05-22T12:00:00+00:00".to_string(),
+            }],
+            cumulative_usage: CumulativeUsage {
+                input_tokens: 900,
+                output_tokens: 120,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 50,
+            },
+            cumulative_cost_usd: Some(0.0456),
+            per_turn: vec![
+                TurnRecord {
+                    turn: 1,
+                    result_seen: true,
+                },
+                TurnRecord {
+                    turn: 2,
+                    result_seen: false,
+                },
+            ],
+        }
+    }
+
+    /// `handle_from_record` copies the record's metadata verbatim and seeds the
+    /// live state fresh — `idle`, no child, no turn in flight.
+    #[test]
+    fn handle_from_record_maps_metadata_and_fresh_live_state() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+
+        // Metadata copied verbatim from the record.
+        assert_eq!(handle.eidolon_name, "Sage");
+        assert_eq!(handle.project_path, PathBuf::from("/tmp/project"));
+        assert_eq!(handle.permission_mode, "acceptEdits");
+        assert_eq!(handle.append_system_prompt, "You are Sage.");
+        assert_eq!(handle.allowed_tools, vec!["Read", "Edit"]);
+        assert!(!handle.is_cortex);
+        assert_eq!(handle.title, "Reopened session");
+        assert_eq!(handle.created_at, "2026-05-22T12:00:00+00:00");
+
+        // Live state is FRESH regardless of the record's persisted status —
+        // re-entry is lazy, the session is idle until the next `send_turn`.
+        assert_eq!(handle.status, "idle");
+        assert!(!handle.turn_in_flight.load(Ordering::SeqCst));
+    }
+
+    /// `handle_from_record` rehydrates the content buffers so a later turn's
+    /// flush rebuilds the FULL record rather than truncating prior history.
+    #[test]
+    fn handle_from_record_rehydrates_content_buffers() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+
+        // Transcript buffer carries the persisted entries.
+        assert_eq!(
+            handle.transcript.lock().unwrap().len(),
+            1,
+            "transcript must be rehydrated, not empty"
+        );
+        // Per-turn log carries every recorded turn.
+        assert_eq!(handle.per_turn.lock().unwrap().len(), 2);
+        // Cumulative usage + cost + model are seeded from the record.
+        assert_eq!(handle.cumulative_usage.lock().unwrap().input_tokens, 900);
+        assert_eq!(*handle.cumulative_cost_usd.lock().unwrap(), Some(0.0456));
+        assert_eq!(
+            handle.model.lock().unwrap().as_deref(),
+            Some("claude-opus-4-7")
+        );
+        // The turn counter is seeded past the highest recorded turn — the next
+        // `send_turn` (counter + 1) stamps turn 3.
+        assert_eq!(handle.turn_counter.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            handle.turn_counter.fetch_add(1, Ordering::SeqCst) + 1,
+            3,
+            "next turn after rehydration is turn 3"
+        );
+    }
+
+    /// A record with no per-turn entries (a session that never finished a turn)
+    /// rehydrates with the turn counter at 0 — the next `send_turn` is turn 1.
+    #[test]
+    fn handle_from_record_empty_per_turn_starts_counter_at_zero() {
+        let mut record = sample_record();
+        record.per_turn.clear();
+        record.transcript.clear();
+        let handle = handle_from_record(&record);
+        assert_eq!(handle.turn_counter.load(Ordering::SeqCst), 0);
+        assert!(handle.transcript.lock().unwrap().is_empty());
+    }
+
+    /// `reopen_session` is idempotent: re-inserting an already-live session
+    /// must not clobber it. `HashMap::entry().or_insert()` is the seam — a
+    /// second insert for the same key is a no-op.
+    #[test]
+    fn reopen_is_idempotent_via_entry_or_insert() {
+        let mut map: HashMap<Uuid, SessionHandle> = HashMap::new();
+        let id = Uuid::new_v4();
+
+        // First reopen inserts.
+        map.entry(id).or_insert_with(|| dummy_handle("First"));
+        assert_eq!(map.get(&id).unwrap().eidolon_name, "First");
+
+        // A second reopen for the same id must NOT replace the live handle.
+        map.entry(id).or_insert_with(|| dummy_handle("Second"));
+        assert_eq!(
+            map.get(&id).unwrap().eidolon_name,
+            "First",
+            "an already-live session must not be clobbered by reopen"
+        );
     }
 
     /// The `session-turn-complete` payload serialises to the camelCase IPC

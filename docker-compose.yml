@@ -6,6 +6,10 @@ services:
     volumes:
       # Source tree bind-mount
       - ./:/workspace
+      # node_modules is a container-only named volume — it holds Linux-native
+      # binaries (biome, rollup, esbuild) that a host-side (macOS) pnpm install
+      # would overwrite with the wrong arch. Keeps the host clean, CI stable.
+      - node-modules:/workspace/node_modules
       # Named volumes keep caches across container restarts
       - pnpm-store:/root/.local/share/pnpm/store
       - cargo-registry:/root/.cargo/registry
@@ -18,6 +22,7 @@ services:
     command: bash
 
 volumes:
+  node-modules:
   pnpm-store:
   cargo-registry:
   cargo-git:

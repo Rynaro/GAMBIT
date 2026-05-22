@@ -1,11 +1,77 @@
-/* SessionsRoute.css — the Sessions route shell: pre-launch panel + transcript. */
+/* SessionsRoute.css — the Sessions route list<->detail shell (story S3). */
 
-/* ---- Pre-launch panel ---- */
-.session-prelaunch {
+/* ---- List<->detail shell ---- */
+.session-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.session-shell-body {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+  min-height: 0;
+  flex: 1;
+}
+
+.session-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.session-detail-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Create / empty detail state ---- */
+.session-create {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   max-width: 640px;
+  margin: 0 auto;
+  padding-top: var(--space-6);
+}
+
+.session-create-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+  text-align: center;
+}
+
+.session-create-glyph {
+  font-size: 30px;
+  line-height: 1;
+  color: var(--accent-primary);
+}
+
+.session-create-heading {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.session-create-body {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 440px;
+}
+
+.session-create-body kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
 
 /* ---- Auth banner (R2) ---- */
@@ -154,21 +220,67 @@
   color: var(--status-warn);
 }
 
-/* ---- Pre-launch actions ---- */
-.session-prelaunch-actions {
+/* ---- Composer optional disclosure (story S3) ---- */
+.session-composer-options {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-/* ---- Active session shell ---- */
-.session-active-head {
+.session-composer-disclosure {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-5);
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  padding: var(--space-1) 0;
+  text-align: left;
 }
 
-.session-active-head .route-header {
-  flex: 1;
+.session-composer-disclosure:hover {
+  color: var(--text-secondary);
+}
+
+.session-composer-chevron {
+  font-size: 9px;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.session-composer-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.session-composer-cwd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.session-composer-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+}
+
+.session-composer-blocked {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--status-warn);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--status-warn) 8%, transparent 92%);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 25%, transparent 75%);
 }
 
 .session-transcript {

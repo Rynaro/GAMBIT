@@ -27,4 +27,19 @@ export interface ProjectEidolon {
   handoffs: string[];
   /** Absolute path to the `agent.md` this identity was read from. */
   agentMdPath: string;
+  /**
+   * `true` for the SYNTHETIC "Cortex (default)" roster entry (story S4) — a
+   * named-Eidolon roster member is always `false`/absent. When `true`, the
+   * launcher feeds the cortex routing descriptor (`.eidolons/cortex/
+   * EIDOLONS.md`, the path carried in `agentMdPath`) as `--append-system-prompt`
+   * so `claude` self-routes across the project's Eidolons (TRANCE-lite,
+   * FORGE option (c)). NOT a real Eidolon — never sourced from `eidolons.yaml`.
+   */
+  isCortex?: boolean;
+  /**
+   * `true` when the synthetic Cortex entry's descriptor file is absent in this
+   * project — the picker shows it disabled with a clear note rather than
+   * crashing. Always absent on a real roster member.
+   */
+  unavailable?: boolean;
 }

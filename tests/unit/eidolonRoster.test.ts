@@ -21,7 +21,15 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (path: string) => readTextFileMock(path),
 }));
 
-import { parseAgentMd, parseMemberNames, readProjectEidolons } from "../../src/lib/eidolonRoster";
+import {
+  CORTEX_EIDOLON_NAME,
+  cortexDescriptorPath,
+  parseAgentMd,
+  parseMemberNames,
+  readCortexRosterEntry,
+  readProjectEidolons,
+  readProjectRoster,
+} from "../../src/lib/eidolonRoster";
 
 const FIXTURE_AGENT_MD = readFileSync(join(__dirname, "../parsers/agent-md.fixture.md"), "utf-8");
 
@@ -170,5 +178,78 @@ describe("readProjectEidolons", () => {
       throw new Error("ENOENT");
     });
     expect(await readProjectEidolons("/proj")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cortex (default) — the synthetic TRANCE-lite roster entry (story S4)
+// ---------------------------------------------------------------------------
+
+describe("readCortexRosterEntry", () => {
+  it("builds an available Cortex entry when EIDOLONS.md is present", async () => {
+    readTextFileMock.mockReset();
+    readTextFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith("/.eidolons/cortex/EIDOLONS.md")) return "# routing descriptor";
+      throw new Error("ENOENT");
+    });
+
+    const cortex = await readCortexRosterEntry("/proj");
+    expect(cortex.name).toBe(CORTEX_EIDOLON_NAME);
+    expect(cortex.isCortex).toBe(true);
+    expect(cortex.unavailable).toBe(false);
+    // `agentMdPath` points at the routing descriptor so the launcher's
+    // existing `readTextFile(agentMdPath)` flow needs no extra branch.
+    expect(cortex.agentMdPath).toBe("/proj/.eidolons/cortex/EIDOLONS.md");
+    expect(cortex.agentMdPath).toBe(cortexDescriptorPath("/proj"));
+    // Cortex routing is dynamic — no over-restricted allow-list.
+    expect(cortex.allowedTools).toEqual([]);
+  });
+
+  it("degrades gracefully (unavailable, no throw) when EIDOLONS.md is absent", async () => {
+    readTextFileMock.mockReset();
+    readTextFileMock.mockImplementation(async () => {
+      throw new Error("ENOENT");
+    });
+
+    const cortex = await readCortexRosterEntry("/proj");
+    expect(cortex.name).toBe(CORTEX_EIDOLON_NAME);
+    expect(cortex.isCortex).toBe(true);
+    expect(cortex.unavailable).toBe(true);
+    expect(cortex.description).toContain("not found");
+  });
+});
+
+describe("readProjectRoster", () => {
+  it("prepends the Cortex (default) entry ahead of the project's Eidolons", async () => {
+    readTextFileMock.mockReset();
+    readTextFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith("/.eidolons/cortex/EIDOLONS.md")) return "# routing descriptor";
+      if (path.endsWith("eidolons.yaml")) return "members:\n  - name: atlas\n";
+      if (path.endsWith("/.eidolons/atlas/agent.md")) return FIXTURE_AGENT_MD;
+      throw new Error("ENOENT");
+    });
+
+    const roster = await readProjectRoster("/proj");
+    // Entry 0 is always the synthetic Cortex default.
+    expect(roster[0].name).toBe(CORTEX_EIDOLON_NAME);
+    expect(roster[0].isCortex).toBe(true);
+    // Named project Eidolons follow as explicit opt-in overrides.
+    expect(roster[1].name).toBe("atlas");
+    expect(roster[1].isCortex).toBeUndefined();
+  });
+
+  it("still yields a (disabled) Cortex entry in a project missing the descriptor", async () => {
+    readTextFileMock.mockReset();
+    readTextFileMock.mockImplementation(async (path: string) => {
+      if (path.endsWith("eidolons.yaml")) return "members:\n  - name: atlas\n";
+      if (path.endsWith("/.eidolons/atlas/agent.md")) return FIXTURE_AGENT_MD;
+      // cortex/EIDOLONS.md is absent.
+      throw new Error("ENOENT");
+    });
+
+    const roster = await readProjectRoster("/proj");
+    expect(roster[0].name).toBe(CORTEX_EIDOLON_NAME);
+    expect(roster[0].unavailable).toBe(true);
+    expect(roster[1].name).toBe("atlas");
   });
 });
