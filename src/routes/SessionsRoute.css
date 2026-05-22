@@ -129,6 +129,12 @@
   background: color-mix(in srgb, var(--status-ok) 6%, var(--bg-surface) 94%);
 }
 
+/* P8 — the fork-armed banner: an accent-toned variant of the auth banner. */
+.session-auth-banner[data-tone="info"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-surface) 94%);
+}
+
 .session-auth-glyph {
   font-size: 16px;
   flex-shrink: 0;
@@ -140,6 +146,10 @@
 
 .session-auth-banner[data-tone="ok"] .session-auth-glyph {
   color: var(--status-ok);
+}
+
+.session-auth-banner[data-tone="info"] .session-auth-glyph {
+  color: var(--accent-primary);
 }
 
 .session-auth-text {

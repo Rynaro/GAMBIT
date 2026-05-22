@@ -107,6 +107,12 @@ interface SessionListProps {
   /** Remove a session — deletes its record and drops it from the store. */
   onRemove: (sessionId: string) => void;
   /**
+   * P8 — fork a session: the route opens a NEW session continuing from a copy
+   * of this one's conversation. The fork's first prompt is the next composer
+   * input — `onFork` arms the route's pending-fork state.
+   */
+  onFork: (sessionId: string) => void;
+  /**
    * When `true` the rail is a thin strip — only the (icon-only) "New session"
    * affordance shows; the full session list is hidden (R1). The route owns the
    * collapsed bit and the expand control; this prop just gates the body.
@@ -124,6 +130,7 @@ export function SessionList({
   onSelect,
   onNewSession,
   onRemove,
+  onFork,
   collapsed = false,
 }: SessionListProps) {
   // Most-recently-active first — the rail's natural ordering. The route's
@@ -176,6 +183,17 @@ export function SessionList({
                       </span>
                     </span>
                   </span>
+                </button>
+                {/* P8 — fork: open a new session continuing from a copy of
+                    this conversation. */}
+                <button
+                  type="button"
+                  className="session-rail-fork"
+                  onClick={() => onFork(slice.sessionId)}
+                  aria-label={`Fork session ${rowTitle(slice)}`}
+                  title="Fork session"
+                >
+                  ⑂
                 </button>
                 <button
                   type="button"

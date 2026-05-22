@@ -44,13 +44,18 @@ use serde::{Deserialize, Serialize};
 /// Whether a turn opens a fresh session or resumes an existing one.
 ///
 /// Drives the single mutually-exclusive flag pair in [`build_args`]:
-/// `First` → `--session-id <uuid>`, `Resumed` → `--resume <uuid>`.
+/// `First` → `--session-id <uuid>`, `Resumed` → `--resume <uuid>`,
+/// `Fork` → `--resume <orig> --session-id <new> --fork-session`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnKind {
     /// The first turn of a conversation — opens the session.
     First,
     /// A later turn — resumes the existing session.
     Resumed,
+    /// P8 — the first turn of a FORKED session: resume an existing
+    /// conversation but write to a NEW session id, leaving the original
+    /// untouched. See [`TurnArgs::fork_from`].
+    Fork,
 }
 
 /// All inputs `build_args` needs to assemble a `claude` argument vector.
@@ -74,8 +79,12 @@ pub struct TurnArgs<'a> {
     pub permission_mode: &'a str,
     /// The session UUID — `--session-id` on a first turn, `--resume` on a
     /// resumed turn. A `&str`; the adapter does not depend on `uuid`.
+    ///
+    /// P8: on a [`TurnKind::Fork`] turn this is the NEW (forked) session's id,
+    /// passed to `--session-id` — GAMBIT keeps owning the id. The conversation
+    /// to seed from is given separately in [`TurnArgs::fork_from`].
     pub session_id: &'a str,
-    /// Whether this is the first turn or a resumed turn.
+    /// Whether this is the first turn, a resumed turn, or a fork's first turn.
     pub turn_kind: TurnKind,
     /// R3 — the model serving the session, passed to `--model`. Accepts a
     /// short alias (`opus` / `sonnet` / `haiku` / `opusplan` / `default`, plus
@@ -90,6 +99,16 @@ pub struct TurnArgs<'a> {
     /// auto-downgrades to it when the primary model is overloaded (honored in
     /// `-p` mode). `None` omits the flag.
     pub fallback_model: Option<&'a str>,
+    /// P8 — the ORIGINAL session id to fork from. Set ONLY on a
+    /// [`TurnKind::Fork`] turn (the fork's first turn): it is the id passed to
+    /// `--resume`, while [`TurnArgs::session_id`] is the NEW forked id passed to
+    /// `--session-id`, and `--fork-session` is added so claude-code accepts the
+    /// combination and writes the resumed conversation under the new id.
+    ///
+    /// `None` for every `First` / `Resumed` turn — and for those `turn_kind`s
+    /// it is ignored even if set. After a fork's first turn, follow-up turns on
+    /// the new session are ordinary `Resumed` turns with `fork_from: None`.
+    pub fork_from: Option<&'a str>,
 }
 
 /// The fixed `--settings` JSON payload — R3.
@@ -112,8 +131,19 @@ const SETTINGS_JSON: &str = r#"{"showThinkingSummaries":true}"#;
 ///   `--append-system-prompt <text>`, `--allowedTools <comma-separated>`,
 ///   `--permission-mode <mode>`, optionally `--model <v>` / `--effort <v>` /
 ///   `--fallback-model <v>` (each only when its `TurnArgs` field is `Some`),
-///   exactly one of `--session-id <uuid>` / `--resume <uuid>`,
+///   then the session flags depending on `turn_kind`:
+///     * `First`   → `--session-id <uuid>`
+///     * `Resumed` → `--resume <uuid>`
+///     * `Fork`    → `--resume <fork_from> --session-id <uuid> --fork-session`
 ///   and finally the prompt as the trailing positional argument.
+///
+/// P8: the `Fork` arm uses `--fork-session` so claude-code seeds a NEW session
+/// (`--session-id <uuid>`) from a copy of an existing conversation
+/// (`--resume <fork_from>`), leaving the original untouched. The CLI requires
+/// `--fork-session` for the `--session-id` + `--resume` combination — without
+/// it `claude` rejects the pair (`--session-id can only be used with
+/// --resume ... if --fork-session is also specified`). GAMBIT therefore keeps
+/// owning the id: the new session id is host-generated, never CLI-minted.
 ///
 /// It NEVER contains `--bare` (that flag strips auth + skill discovery).
 pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
@@ -165,7 +195,7 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
         v.push(fallback.to_string());
     }
 
-    // Exactly one of the session flags, depending on the turn kind.
+    // The session flags, depending on the turn kind.
     match args.turn_kind {
         TurnKind::First => {
             v.push("--session-id".to_string());
@@ -174,6 +204,22 @@ pub fn build_args(args: &TurnArgs<'_>) -> Vec<String> {
         TurnKind::Resumed => {
             v.push("--resume".to_string());
             v.push(args.session_id.to_string());
+        }
+        TurnKind::Fork => {
+            // P8 — fork: resume the ORIGINAL conversation (`fork_from`) but
+            // write it under the NEW host-generated id (`session_id`).
+            // `--fork-session` is mandatory for the CLI to accept the
+            // `--resume` + `--session-id` pair. If `fork_from` is somehow
+            // absent (a caller bug — `Fork` always carries it) we fall back to
+            // resuming the new id, which is harmless and keeps `build_args`
+            // total (it never panics on a missing field).
+            if let Some(origin) = args.fork_from {
+                v.push("--resume".to_string());
+                v.push(origin.to_string());
+            }
+            v.push("--session-id".to_string());
+            v.push(args.session_id.to_string());
+            v.push("--fork-session".to_string());
         }
     }
 
@@ -752,6 +798,7 @@ mod tests {
             model: None,
             thinking_effort: None,
             fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
 
@@ -791,6 +838,7 @@ mod tests {
             model: None,
             thinking_effort: None,
             fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
 
@@ -815,6 +863,7 @@ mod tests {
             model: None,
             thinking_effort: None,
             fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
         assert_eq!(v.last().map(String::as_str), Some("the prompt"));
@@ -836,6 +885,7 @@ mod tests {
             model: None,
             thinking_effort: None,
             fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
         assert!(v.contains(&"--settings".to_string()));
@@ -860,6 +910,7 @@ mod tests {
             model: Some("opus[1m]"),
             thinking_effort: Some("high"),
             fallback_model: Some("sonnet"),
+            fork_from: None,
         };
         let v = build_args(&args);
 
@@ -890,6 +941,7 @@ mod tests {
             model: None,
             thinking_effort: None,
             fallback_model: None,
+            fork_from: None,
         };
         let v = build_args(&args);
         assert!(!v.contains(&"--model".to_string()));
@@ -897,6 +949,71 @@ mod tests {
         assert!(!v.contains(&"--fallback-model".to_string()));
         // The empty-string value must never leak in.
         assert!(!v.contains(&String::new()));
+    }
+
+    /// P8 — a `Fork` turn carries `--resume <origin>` AND `--session-id <new>`
+    /// AND `--fork-session`: it resumes the ORIGINAL conversation but writes to
+    /// the NEW host-generated id. This is the fork's FIRST turn only.
+    #[test]
+    fn build_args_fork_turn_resumes_origin_and_writes_new_id() {
+        let tools = sample_tools();
+        let args = TurnArgs {
+            prompt: "explore an alternate path",
+            append_system_prompt: "You are Sage.",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "99999999-9999-9999-9999-999999999999",
+            turn_kind: TurnKind::Fork,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: Some("11111111-1111-1111-1111-111111111111"),
+        };
+        let v = build_args(&args);
+
+        // `--resume` carries the ORIGINAL id; `--session-id` the NEW forked id.
+        let flag_value = |flag: &str| -> Option<&str> {
+            v.iter()
+                .position(|a| a == flag)
+                .and_then(|i| v.get(i + 1))
+                .map(String::as_str)
+        };
+        assert_eq!(
+            flag_value("--resume"),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        assert_eq!(
+            flag_value("--session-id"),
+            Some("99999999-9999-9999-9999-999999999999")
+        );
+        // `--fork-session` is mandatory for the CLI to accept the pair.
+        assert!(v.contains(&"--fork-session".to_string()));
+        // The prompt still rides as the trailing positional.
+        assert_eq!(v.last().map(String::as_str), Some("explore an alternate path"));
+        // `--bare` stays forbidden.
+        assert!(!v.contains(&"--bare".to_string()));
+    }
+
+    /// P8 — `--fork-session` appears ONLY on a `Fork` turn. A `First` turn and
+    /// a `Resumed` turn never carry it (a fork's follow-up turns are ordinary
+    /// `Resumed` turns).
+    #[test]
+    fn build_args_fork_session_only_on_fork_turn() {
+        let tools = sample_tools();
+        let base = |kind: TurnKind| TurnArgs {
+            prompt: "p",
+            append_system_prompt: "persona",
+            allowed_tools: &tools,
+            permission_mode: "default",
+            session_id: "22222222-2222-2222-2222-222222222222",
+            turn_kind: kind,
+            model: None,
+            thinking_effort: None,
+            fallback_model: None,
+            fork_from: None,
+        };
+        assert!(!build_args(&base(TurnKind::First)).contains(&"--fork-session".to_string()));
+        assert!(!build_args(&base(TurnKind::Resumed)).contains(&"--fork-session".to_string()));
     }
 
     /// `system/init` → `ParsedEvent::Init` with session/model/tools populated.

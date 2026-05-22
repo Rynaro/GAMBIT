@@ -711,6 +711,103 @@ describe("useSessions", () => {
     expect(transcript).toHaveLength(2);
   });
 
+  // --- P8: conversation forking ---------------------------------------------
+
+  it("P8: fork() ADDS a new session keyed by the new id, distinct from the origin", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "fork_session") return Promise.resolve(sessionInfo(SESSION_B));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+
+    // The origin A is in the map (summary-level) after rehydration.
+    expect(Object.keys(result.current.sessions)).toEqual([SESSION_A]);
+
+    let forkId: string | null = null;
+    await act(async () => {
+      forkId = await result.current.fork(SESSION_A, "explore an alternate path");
+    });
+
+    // `fork_session` was invoked with the origin id wrapped in params.
+    expect(mockInvoke).toHaveBeenCalledWith("fork_session", {
+      params: { originSessionId: SESSION_A, firstPrompt: "explore an alternate path" },
+    });
+
+    // The fork is ADDED under the NEW id, distinct from the origin — the
+    // origin is NOT wiped.
+    expect(forkId).toBe(SESSION_B);
+    expect(Object.keys(result.current.sessions).sort()).toEqual([SESSION_A, SESSION_B].sort());
+    expect(SESSION_B).not.toBe(SESSION_A);
+    expect(result.current.sessions[SESSION_B].status).toBe("turn-running");
+    expect(result.current.sessions[SESSION_B].sessionId).toBe(SESSION_B);
+  });
+
+  it("P8: fork() seeds the fork's transcript with the origin's history + its turn-1 prompt", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_A));
+      // The origin has a one-entry transcript at turn 1.
+      if (cmd === "load_session") return Promise.resolve(record(SESSION_A, true));
+      if (cmd === "fork_session") return Promise.resolve(sessionInfo(SESSION_B));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    // Hydrate the origin so its slice carries the transcript fork() copies.
+    await act(async () => {
+      await result.current.reopen(SESSION_A);
+    });
+    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.fork(SESSION_A, "the fork's first ask");
+    });
+
+    const forkTranscript = result.current.sessions[SESSION_B].transcript;
+    // Inherited history (1 entry, turn 1) + the fork's own turn-1 prompt.
+    expect(forkTranscript).toHaveLength(2);
+    // The fork's prompt heads a turn PAST the inherited turn (no collision).
+    const prompt = forkTranscript[forkTranscript.length - 1];
+    expect(prompt.source).toBe("prompt");
+    expect(prompt.line).toBe("the fork's first ask");
+    expect(prompt.turn).toBe(2);
+    // The origin's transcript is untouched by the fork.
+    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(1);
+  });
+
+  it("P8: a forkedFrom lineage on a loaded record is carried through reopen", async () => {
+    const forkedRecord: SessionRecord = {
+      ...record(SESSION_B, true),
+      uuid: SESSION_B,
+      forkedFrom: SESSION_A,
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_B)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_B));
+      if (cmd === "load_session") return Promise.resolve(forkedRecord);
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await act(async () => {
+      await result.current.reopen(SESSION_B);
+    });
+
+    // `load_session` returned a record carrying the fork lineage — the wire
+    // shape mirrors Rust's `forkedFrom` field.
+    const loaded = mockInvoke.mock.results.find(
+      (_, i) => mockInvoke.mock.calls[i][0] === "load_session",
+    );
+    expect(loaded).toBeDefined();
+    const rec = (await loaded?.value) as SessionRecord;
+    expect(rec.forkedFrom).toBe(SESSION_A);
+  });
+
   it("a session-delta for session A does NOT touch session B", async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A), summary(SESSION_B)]);

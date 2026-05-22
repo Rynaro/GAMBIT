@@ -178,7 +178,10 @@
 }
 
 /* ---- Per-row delete ---- */
-.session-rail-remove {
+/* P8: the fork affordance shares the per-row action-button shape with the
+   delete button — both hover-revealed at the row's trailing edge. */
+.session-rail-remove,
+.session-rail-fork {
   flex-shrink: 0;
   width: 22px;
   font-size: 14px;
@@ -190,11 +193,17 @@
   transition: opacity var(--duration-micro) var(--motion-entry);
 }
 
-.session-rail-row:hover .session-rail-remove {
+.session-rail-row:hover .session-rail-remove,
+.session-rail-row:hover .session-rail-fork {
   opacity: 1;
 }
 
 .session-rail-remove:hover {
   color: var(--status-error);
   background: color-mix(in srgb, var(--status-error) 10%, transparent 90%);
+}
+
+.session-rail-fork:hover {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent 90%);
 }

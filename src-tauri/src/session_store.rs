@@ -173,6 +173,14 @@ pub struct SessionRecord {
     /// for forward-compat with records written before R3.
     #[serde(default)]
     pub fallback_model: Option<String>,
+    /// P8 — when this session is a FORK, the UUID of the session it was forked
+    /// from (its parent). `None` for an ordinary, non-forked session. The
+    /// fork's metadata (eidolon, project, permission mode, model/effort,
+    /// persona) is copied from the parent's record at fork time; this field
+    /// records the lineage. `#[serde(default)]` for forward-compat with
+    /// records written before P8.
+    #[serde(default)]
+    pub forked_from: Option<String>,
     /// RFC-3339 creation timestamp.
     pub created_at: String,
     /// RFC-3339 timestamp, bumped on every turn flush.
@@ -479,6 +487,7 @@ mod tests {
             chosen_model: Some("opus".to_string()),
             thinking_effort: Some("high".to_string()),
             fallback_model: Some("sonnet".to_string()),
+            forked_from: None,
             created_at: "2026-05-22T12:00:00+00:00".to_string(),
             last_active_at: "2026-05-22T12:05:00+00:00".to_string(),
             transcript: vec![sample_entry(1)],
@@ -525,6 +534,7 @@ mod tests {
             "chosenModel",
             "thinkingEffort",
             "fallbackModel",
+            "forkedFrom",
             "createdAt",
             "lastActiveAt",
             "transcript",
@@ -756,6 +766,33 @@ mod tests {
         assert!(record.chosen_model.is_none());
         assert!(record.thinking_effort.is_none());
         assert!(record.fallback_model.is_none());
+        // P8 — `forked_from` defaults to `None` on a pre-P8 record.
+        assert!(record.forked_from.is_none());
+    }
+
+    /// P8 — a forked session's `forked_from` (its parent's UUID) round-trips
+    /// losslessly through a `SessionRecord`.
+    #[test]
+    fn p8_forked_from_round_trips() {
+        let mut record = sample_record();
+        record.uuid = "99999999-9999-9999-9999-999999999999".to_string();
+        record.forked_from = Some("11111111-1111-1111-1111-111111111111".to_string());
+
+        let json = serde_json::to_value(&record).expect("serialises");
+        // The lineage field crosses the IPC boundary as camelCase.
+        assert_eq!(
+            json.get("forkedFrom").and_then(|v| v.as_str()),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        assert!(json.get("forked_from").is_none(), "snake_case must not leak");
+
+        let back: SessionRecord =
+            serde_json::from_value(json).expect("deserialises");
+        assert_eq!(record, back, "round-trip must be lossless");
+        assert_eq!(
+            back.forked_from.as_deref(),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
     }
 
     /// R3 — the user-chosen `model` / `thinkingEffort` / `fallbackModel`

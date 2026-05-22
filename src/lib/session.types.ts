@@ -243,7 +243,27 @@ export interface StartSessionParams {
   fallbackModel?: string | null;
 }
 
-/** Returned by `start_session` / `reopen_session`: the session descriptor. */
+/**
+ * Parameters for the `fork_session` command (P8).
+ *
+ * A fork continues a COPY of an existing session's conversation under a new
+ * id, leaving the original untouched — for exploring an alternate path.
+ * `originSessionId` must be a persisted (known) session; its on-disk record is
+ * the source of the fork's copied metadata + seeded transcript.
+ */
+export interface ForkSessionParams {
+  /** The UUID of the session to fork from — must be persisted on disk. */
+  originSessionId: string;
+  /** The prompt for the fork's first turn. */
+  firstPrompt: string;
+  /**
+   * Optional explicit title for the fork. When absent Rust derives the title
+   * from `firstPrompt` (first ~60 chars), mirroring `start_session`.
+   */
+  title?: string | null;
+}
+
+/** Returned by `start_session` / `reopen_session` / `fork_session`: the session descriptor. */
 export interface SessionInfo {
   /** The host-generated UUID v4 — the session's stable address. */
   sessionId: string;
@@ -342,6 +362,13 @@ export interface SessionRecord {
   thinkingEffort?: string | null;
   /** R3 — the fallback model alias (`--fallback-model`). Absent pre-R3. */
   fallbackModel?: string | null;
+  /**
+   * P8 — when this session is a FORK, the UUID of the session it was forked
+   * from (its parent). Absent / `null` for an ordinary, non-forked session.
+   * The fork's metadata is copied from the parent at fork time; this records
+   * the lineage. Absent on records written before P8.
+   */
+  forkedFrom?: string | null;
   /** RFC-3339 creation timestamp. */
   createdAt: string;
   /** RFC-3339 timestamp, bumped on every turn flush. */

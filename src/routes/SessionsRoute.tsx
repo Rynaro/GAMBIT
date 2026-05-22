@@ -242,6 +242,12 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
   const [thinkingEffort, setThinkingEffort] = useState<string>(EFFORT_DEFAULT);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  // P8: the session a "Fork" click has armed. When non-null the route is in
+  // create mode (the composer is shown) but the next send forks that session
+  // instead of starting a fresh one — the composer input becomes the fork's
+  // first turn. `null` = ordinary create mode.
+  const [pendingForkOrigin, setPendingForkOrigin] = useState<string | null>(null);
+
   // R1: the left rail can collapse to a thin strip so the chat pane takes the
   // full width. The bit is persisted to `localStorage` (gambit: key prefix) so
   // the choice survives a reload — seeded lazily from the stored value.
@@ -378,9 +384,25 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     prompt: string,
     opts: { eidolonName: string; model: string; thinkingEffort: string },
   ) {
+    setCreateError(null);
+
+    // P8 — a Fork is armed: this composer input is the fork's first turn.
+    // `fork_session` copies the origin's metadata (Eidolon, project,
+    // permission mode, model/effort, persona) Rust-side, so the composer's
+    // Eidolon / model / cwd selections are NOT consulted on a fork.
+    if (pendingForkOrigin !== null) {
+      const origin = pendingForkOrigin;
+      const forkId = await store.fork(origin, prompt);
+      setPendingForkOrigin(null);
+      if (forkId) {
+        setActiveSessionId(forkId);
+        store.setPendingEidolon(null);
+      }
+      return;
+    }
+
     // §5 P0 gate — never create without a resolved absolute project path.
     if (cwd.path === null) return;
-    setCreateError(null);
 
     // The FRONTEND resolves the persona text. For a NAMED Eidolon this is its
     // `agent.md`; for the synthetic "Cortex (default)" entry it is the cortex
@@ -446,8 +468,21 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     }
   }
 
+  /**
+   * P8 — arm a fork: drop the route into create mode with `pendingForkOrigin`
+   * set, so the next composer send forks that session (the input becomes the
+   * fork's first turn) instead of starting a fresh session.
+   */
+  function handleFork(sessionId: string) {
+    setPendingForkOrigin(sessionId);
+    setActiveSessionId(null);
+    setCreateError(null);
+  }
+
   /** Select a session row — open its detail; reopen it if not yet hydrated. */
   function handleSelect(sessionId: string) {
+    // Opening a session exits any armed fork-create mode.
+    setPendingForkOrigin(null);
     setActiveSessionId(sessionId);
     const slice = store.sessions[sessionId];
     if (slice && !slice.hydrated) {
@@ -507,11 +542,17 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
           sessions={store.sessions}
           activeSessionId={activeSessionId}
           onSelect={handleSelect}
-          onNewSession={() => setActiveSessionId(null)}
+          onNewSession={() => {
+            // A plain "New session" cancels any armed fork.
+            setPendingForkOrigin(null);
+            setActiveSessionId(null);
+          }}
           onRemove={(id) => {
             void store.remove(id);
             if (id === activeSessionId) setActiveSessionId(null);
+            if (id === pendingForkOrigin) setPendingForkOrigin(null);
           }}
+          onFork={handleFork}
           collapsed={railCollapsed}
         />
 
@@ -544,6 +585,14 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
               authDetail={store.authStatus?.detail ?? ""}
               onRecheckAuth={() => store.checkAuth()}
               createError={createError}
+              forkOriginTitle={
+                pendingForkOrigin
+                  ? (store.sessions[pendingForkOrigin]?.summary?.title ??
+                    store.sessions[pendingForkOrigin]?.sessionInfo?.eidolonName ??
+                    "session")
+                  : null
+              }
+              onCancelFork={() => setPendingForkOrigin(null)}
               composer={
                 <SessionComposer
                   mode="create"
@@ -585,6 +634,13 @@ interface CreatePaneProps {
   authDetail: string;
   onRecheckAuth: () => void;
   createError: string | null;
+  /**
+   * P8 — when non-null a fork is armed: the title of the session being forked.
+   * The intro + composer-send then describe a fork rather than a fresh start.
+   */
+  forkOriginTitle: string | null;
+  /** P8 — cancel the armed fork and return to ordinary create mode. */
+  onCancelFork: () => void;
   composer: React.ReactNode;
 }
 
@@ -593,20 +649,57 @@ function CreatePane({
   authDetail,
   onRecheckAuth,
   createError,
+  forkOriginTitle,
+  onCancelFork,
   composer,
 }: CreatePaneProps) {
+  const forking = forkOriginTitle !== null;
   return (
     <div className="session-create">
       <div className="session-create-intro">
         <span className="session-create-glyph" aria-hidden="true">
-          ⬡
+          {forking ? "⑂" : "⬡"}
         </span>
-        <p className="session-create-heading">Start a session</p>
+        <p className="session-create-heading">
+          {forking ? "Fork a conversation" : "Start a session"}
+        </p>
         <p className="session-create-body">
-          Type what you want to do and press <kbd>⌘↵</kbd> — the session opens on your first
-          message. Pick a specific Eidolon under Options, or just send.
+          {forking ? (
+            <>
+              Continuing from a copy of <strong>{forkOriginTitle}</strong> — the original is left
+              untouched. Type the first message of the fork and press <kbd>⌘↵</kbd>.
+            </>
+          ) : (
+            <>
+              Type what you want to do and press <kbd>⌘↵</kbd> — the session opens on your first
+              message. Pick a specific Eidolon under Options, or just send.
+            </>
+          )}
         </p>
       </div>
+
+      {forking && (
+        <div className="session-auth-banner" data-tone="info" role="status">
+          <span className="session-auth-glyph" aria-hidden="true">
+            ⑂
+          </span>
+          <div className="session-auth-text">
+            <strong>Forking {forkOriginTitle}.</strong>
+            <span>
+              The fork copies this session's Eidolon, project, and model — the Options below are not
+              used. Your next message starts the fork.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="route-verb-btn"
+            onClick={onCancelFork}
+            aria-label="Cancel forking and start a fresh session instead"
+          >
+            Cancel fork
+          </button>
+        </div>
+      )}
 
       {authBlocked && (
         <div className="session-auth-banner" data-tone="error" role="alert">
