@@ -34,6 +34,7 @@
 
 import { RouteHeader } from "@/components/RouteHeader";
 import { AssistantText } from "@/components/session/AssistantText";
+import { ContextGauge } from "@/components/session/ContextGauge";
 import { RawNdjsonToggle } from "@/components/session/RawNdjsonToggle";
 import { ResultCard } from "@/components/session/ResultCard";
 import { SessionCard } from "@/components/session/SessionCard";
@@ -429,7 +430,7 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
 
         <div className="session-detail">
           {activeSessionId !== null && session.status !== "idle" ? (
-            <DetailPane session={session} />
+            <DetailPane session={session} slice={store.sessions[activeSessionId] ?? null} />
           ) : (
             <CreatePane
               authBlocked={Boolean(store.authStatus) && !loggedIn}
@@ -536,9 +537,15 @@ function CreatePane({
 
 interface DetailPaneProps {
   session: UseSessionResult;
+  /**
+   * The raw store slice for the open session — the `ContextGauge` reads its
+   * cumulative usage / cost off it (story S5). `null` is tolerated and renders
+   * a neutral empty gauge.
+   */
+  slice: SessionSlice | null;
 }
 
-function DetailPane({ session }: DetailPaneProps) {
+function DetailPane({ session, slice }: DetailPaneProps) {
   const { status, transcript, sessionInfo } = session;
 
   // Model + tools come from the `init` event once it lands.
@@ -573,6 +580,10 @@ function DetailPane({ session }: DetailPaneProps) {
         tools={init?.tools ?? []}
         status={status}
       />
+
+      {/* S5: always-visible context-temperature gauge — recomputes on each
+          `result` (the slice's transcript changes); never polls. */}
+      <ContextGauge slice={slice} />
 
       <div className="session-transcript">
         {turns.map((group) => (
