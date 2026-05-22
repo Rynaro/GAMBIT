@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-05-22
+
+The third v0.4.x minor — session interaction.
+
+### Added
+
+- **Stop a running turn** — a prominent Stop control (composer + detail header)
+  interrupts an in-flight turn.
+- **Retry / edit-and-resend** — each user-prompt bubble can resend its prompt or
+  load it back into the composer to amend; a failed turn offers a one-click
+  "retry last turn".
+- **Keyboard navigation** — an Enter-to-send preference (persisted; off by
+  default, ⌘/Ctrl+Enter still works), Esc to cancel a running turn, and
+  ⌘/Ctrl+1–9 to switch between sessions in the rail.
+
 ## [0.4.2] — 2026-05-22
 
 The second v0.4.x minor — session controls.
