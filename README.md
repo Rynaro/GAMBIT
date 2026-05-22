@@ -20,6 +20,8 @@ GAMBIT is a cozy, modern desktop ControlCenter built with Tauri 2 + React 18 + V
 
 Watches `eidolons.lock` and surfaces drift within a second. Streams `eidolons sync` output live with ANSI colour and a cancel hotkey. Reviews and applies Eidolons upgrades from a plan-driven sheet. Installs, upgrades, and uninstalls MCP servers from the project's catalogue. Browses Eidolon methodology docs with full markdown rendering — tables, fenced code, blockquotes — straight from each member's `agent.md`.
 
+Since v0.3, GAMBIT also **runs the Eidolons**: pick a project Eidolon in the Roster, launch it as a headless `claude-code` session, and watch each turn stream back as cozy, Eidolon-centered cards — assistant text, tool-use chips, collapsible thinking, and a cost/turns/duration result card.
+
 The fs capability scope is intentionally limited to `$HOME` subtrees matching Eidolons-shaped paths (`$HOME/.eidolons/**`, `$HOME/**/eidolons.{yaml,lock,mcp.lock}`, `$HOME/**/.eidolons/**`) — arbitrary disk access is not granted.
 
 The primary verb is **equip** — slot Eidolons into your project the way FF7's materia menu is where you slot summon orbs into your party's equipment.
@@ -30,7 +32,7 @@ Press **⌘K** (macOS) or **Ctrl K** (Linux / Windows) anywhere in GAMBIT to ope
 
 | Group | Commands |
 |---|---|
-| **Navigate** | Roster, Project, MCP Store, Harness, Doctor, Methodology, Settings |
+| **Navigate** | Roster, Project, MCP Store, Harness, Doctor, Sessions, Methodology, Settings |
 | **Actions** | Sync project, Doctor, Check upgrades |
 | **About** | About GAMBIT |
 
@@ -40,9 +42,14 @@ Type a 3-letter prefix to fuzzy-filter. ↑/↓ to move, Enter to execute, Esc t
 
 ## Status
 
-### v0.0.1 — scaffold-only
+### v0.3.0 — Eidolon Sessions
 
-This release establishes the project scaffold, brand-identity-as-config infrastructure, and a window that opens with a branded sidebar shell. The full v0.1 MVP (5 smoke-tests, live sync streaming, file-watching, ⌘K palette) is downstream work.
+GAMBIT runs `claude-code` itself: launch a project Eidolon as a headless
+`claude` session and watch its IO stream back as Eidolon-themed cards. This
+builds on the v0.2 daily-driver wave (sync / doctor / upgrade verbs, MCP Store,
+methodology browser). v0.3 was planned and built via a TRANCE chain of Eidolons
+— see [`ROADMAP-v0.3.0.md`](ROADMAP-v0.3.0.md) and
+[`docs/adr/0001-eidolon-session-architecture.md`](docs/adr/0001-eidolon-session-architecture.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history and upcoming milestones.
 

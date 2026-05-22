@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-22
+
+The "Eidolon Sessions" release. GAMBIT can now run `claude-code` itself — pick a
+project Eidolon, launch it as a headless `claude` session, and watch the IO
+stream back as Eidolon-themed cards. Planned and built via a TRANCE chain
+(ATLAS → FORGE → SPECTRA → roadmap) across eight APIVR-Δ stories; see
+`ROADMAP-v0.3.0.md` and `docs/adr/0001-eidolon-session-architecture.md`.
+
+### Added
+
+- **Eidolon Sessions** — a new **Sessions** route that launches a project
+  Eidolon as an interactive `claude-code` session. Each turn spawns a fresh
+  `claude -p --output-format stream-json` process; the NDJSON event stream is
+  parsed and rendered as cozy, Eidolon-centered cards — assistant text,
+  tool-use chips, collapsible thinking blocks, and a terminal result card with
+  cost / turns / duration — plus a raw-NDJSON debug toggle. Multi-turn
+  conversation via claude-code's `--resume`.
+- Rust session backend — `session.rs` (`SessionRegistry`, `start_session`,
+  `send_turn`, `cancel_session`, `claude_auth_status`), `claude_adapter.rs`
+  (`claude` flag construction + NDJSON parsing), and `spawn_core.rs` (a shared
+  subprocess-spawn helper). The Eidolon persona is injected via
+  `--append-system-prompt` from `.eidolons/<name>/agent.md` — never `--bare`.
+- Pre-flight `claude auth status` gating plus a per-session permission-mode
+  picker; the UI warns that a headless tool call outside the allow-list aborts
+  the run (no interactive approval in v0.3 — deferred to v0.4).
+- The Roster route is now the launch point — it lists the project's installed
+  Eidolons (from `eidolons.yaml` + `.eidolons/<name>/agent.md`) with a per-row
+  Launch action; ⌘K gains a Sessions entry.
+
+### Fixed
+
+- **Repaired a broken `main`.** The v0.2.0 merge (`e110543`) left the tree
+  unable to pass `make ci`: `biome.json` had a miscategorised rule key that
+  aborted `biome check` (masking 145 latent lint findings), `CHANGELOG.md`
+  carried unresolved merge-conflict markers, and `tsc` reported 8 errors.
+  All repaired — biome's safe fixes applied, and the rules the existing v0.2
+  code violates demoted to `warn` (standard linter-adoption posture).
+- **Repaired the Vitest suite** — 22 of 121 tests failed on a clean tree: an
+  `afterEach` `restoreAllMocks()` wiped a module-level listener mock, and a
+  test helper still emitted the pre-rename snake_case `exit_code` payload.
+- `parseAnsi` read a nonexistent `span.classes` from `anser` — ANSI colour was
+  silently broken in the live log panes. Rebuilt from `anser`'s `fg` / `bg` /
+  `decorations` the way its own `ansiToHtml` does.
+
+### Changed
+
+- `make ci` and the GitHub CI workflow now run the Vitest suite (`pnpm test`)
+  as a gate — previously only lint + typecheck + cargo-check ran, so the
+  frontend test suite rotted unnoticed.
+
 ## [0.2.0] — 2026-05-21
 
 The "daily-driver" release. GAMBIT goes from scaffold to a real ControlCenter — three core verbs (sync / doctor / upgrade), an actionable MCP Store, a markdown methodology browser with syntax highlighting, soft toasts, and the bundled-CLI extraction skeleton. Built across nine APIVR-Δ delegations routed through TRANCE (VIGIL was called twice to root-cause user-visible regressions; every emitted ECL envelope `harness_verify` ok).
