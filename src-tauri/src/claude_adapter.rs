@@ -400,7 +400,16 @@ pub struct StreamDeltaExtraction {
 /// Covers what a cozy session UI needs; anything unrecognised falls through
 /// to [`ParsedEvent::Unknown`] (unknown `type`) or [`ParsedEvent::Malformed`]
 /// (not valid JSON). `parse_line` is total — it always returns one of these.
+// `rename_all_fields` camelCases every struct-variant field on serialise
+// (`session_id` -> `sessionId`, `total_cost_usd` -> `totalCostUsd`,
+// `permission_denials` -> `permissionDenials`, `parent_tool_use_id` -> …) so
+// the `session-event` payload's `parsed` object matches the camelCase TS
+// mirrors. The variant names (`Init`/`Result`/…) are deliberately NOT renamed —
+// they are the externally-tagged keys the frontend switches on (`parsed.Result`).
+// Without this, the multi-word fields shipped snake_case and the UI read
+// `undefined` (ResultCard cost/turns/duration, the S0 denial notice).
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all_fields = "camelCase")]
 pub enum ParsedEvent {
     /// `type: "system", subtype: "init"` — the session handshake.
     Init {
@@ -1370,31 +1379,39 @@ mod tests {
         }
     }
 
-    /// S0 REGRESSION (mirrors the v0.3.6 camelCase regression test): each
-    /// denial's INNER fields must serialise as `toolName` / `toolUseId` /
-    /// `toolInput` — the `PermissionDenial` split `rename_all` — so the
-    /// frontend's `PermissionDenial` mirror reads them. The array itself rides
-    /// under `ParsedEvent::Result`'s field name, exactly like `total_cost_usd`.
+    /// REGRESSION (mirrors the v0.3.6 camelCase regression test, extended for
+    /// the `ParsedEvent` enum-level `rename_all_fields`): `ParsedEvent::Result`
+    /// must serialise EVERY multi-word field as camelCase — `totalCostUsd` /
+    /// `numTurns` / `durationMs` / `isError` / `sessionId` / `permissionDenials`
+    /// — so the frontend's `ParsedResult` mirror reads them. Without the
+    /// enum-level `rename_all_fields`, these shipped snake_case and the UI
+    /// (ResultCard cost/turns/duration, the S0 denial notice) read `undefined`.
+    /// Each denial's INNER fields are camelCased by `PermissionDenial`'s own
+    /// split `rename_all`.
     #[test]
-    fn permission_denials_serialise_camelcase_for_the_frontend() {
-        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}}]}"#;
+    fn parsed_result_serialises_camelcase_for_the_frontend() {
+        let line = r#"{"type":"result","subtype":"success","session_id":"s1","is_error":false,"num_turns":3,"duration_ms":4200,"total_cost_usd":0.0123,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}}]}"#;
         let value = serde_json::to_value(parse_line(line)).expect("serialise");
-        let denials = value
-            .get("Result")
-            .and_then(|r| r.get("permission_denials"))
+        let r = value.get("Result").expect("Result variant");
+        // The variant-level multi-word fields are camelCase.
+        assert_eq!(r.get("totalCostUsd").and_then(|v| v.as_f64()), Some(0.0123));
+        assert_eq!(r.get("numTurns").and_then(|v| v.as_u64()), Some(3));
+        assert_eq!(r.get("durationMs").and_then(|v| v.as_u64()), Some(4200));
+        assert_eq!(r.get("isError").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(r.get("sessionId").and_then(|v| v.as_str()), Some("s1"));
+        assert!(r.get("permissionDenials").is_some(), "permissionDenials present");
+        // The snake_case names must NOT appear.
+        for snake in ["total_cost_usd", "num_turns", "duration_ms", "is_error", "permission_denials"] {
+            assert!(r.get(snake).is_none(), "must not serialise as `{snake}`");
+        }
+        // Each denial's inner fields are camelCased by PermissionDenial.
+        let d0 = &r
+            .get("permissionDenials")
             .and_then(|d| d.as_array())
-            .expect("Result.permission_denials array");
-        let d0 = &denials[0];
+            .expect("permissionDenials array")[0];
         assert_eq!(d0.get("toolName").and_then(|v| v.as_str()), Some("Write"));
-        assert_eq!(
-            d0.get("toolUseId").and_then(|v| v.as_str()),
-            Some("toolu_1")
-        );
+        assert_eq!(d0.get("toolUseId").and_then(|v| v.as_str()), Some("toolu_1"));
         assert!(d0.get("toolInput").is_some(), "toolInput present");
-        assert!(
-            d0.get("tool_name").is_none(),
-            "must not serialise as `tool_name`"
-        );
     }
 
     /// A JSON line with an unrecognised `type` → `Unknown`, raw preserved.
