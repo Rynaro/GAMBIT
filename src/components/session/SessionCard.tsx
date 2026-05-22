@@ -19,6 +19,12 @@ interface SessionCardProps {
   tools: string[];
   /** Current session-machine state. */
   status: SessionState;
+  /**
+   * P1 — interrupt the in-flight turn. When provided AND a turn is running
+   * (`turn-running` / `launching`) a prominent Stop control is surfaced in the
+   * header beside the status pill. Omitted in create mode (no live turn).
+   */
+  onStop?: () => void;
 }
 
 /** Map a SessionState to a short human label + status-pill data attr. */
@@ -46,8 +52,12 @@ export function SessionCard({
   model,
   tools,
   status,
+  onStop,
 }: SessionCardProps) {
   const { label, tone } = statusLabel(status);
+  // P1 — a turn is interruptible while it streams; the header Stop control is
+  // shown only then, so it is obvious exactly when it is useful.
+  const turnRunning = status === "turn-running" || status === "launching";
 
   return (
     <div className="session-card" role="region" aria-label={`Session with ${eidolonName}`}>
@@ -59,6 +69,20 @@ export function SessionCard({
           <span className="session-card-name">{eidolonName}</span>
           {role && <span className="session-card-role">{role}</span>}
         </div>
+        {/* P1 — interrupt the running turn from the header. */}
+        {onStop && turnRunning && (
+          <button
+            type="button"
+            className="session-stop-btn session-card-stop"
+            onClick={onStop}
+            aria-label="Stop the running turn"
+          >
+            <span className="session-stop-glyph" aria-hidden="true">
+              ■
+            </span>
+            Stop
+          </button>
+        )}
         <span className="session-status-pill" data-tone={tone}>
           {label}
         </span>

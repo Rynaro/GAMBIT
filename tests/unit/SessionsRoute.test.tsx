@@ -609,6 +609,251 @@ describe("SessionsRoute", () => {
     expect(screen.getByLabelText("Collapse all tool calls and reasoning")).toBeDefined();
   });
 
+  // -------------------------------------------------------------------------
+  // P1 — Stop / interrupt a running turn
+  // -------------------------------------------------------------------------
+
+  it("P1: a Stop control shows while a turn is running and calls cancel", async () => {
+    // A session with a turn IN FLIGHT — status `turn-running`.
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "turn-running";
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "do the thing", ts: "2026-05-22T10:00:00+00:00" },
+    ];
+    const cancelMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      cancel: cancelMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+
+    // The Stop control is surfaced prominently (composer row + header).
+    const stops = screen.getAllByLabelText("Stop the running turn");
+    expect(stops.length).toBeGreaterThan(0);
+
+    // Clicking it interrupts the turn via store.cancel(sessionId).
+    fireEvent.click(stops[0]);
+    expect(cancelMock).toHaveBeenCalledWith("s1");
+  });
+
+  it("P1: no Stop control is shown when the session is idle / awaiting-input", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "awaiting-input";
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "do the thing", ts: "2026-05-22T10:00:00+00:00" },
+    ];
+    const store = makeStore({ authStatus: LOGGED_IN, sessions: { s1: slice } });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    expect(screen.queryByLabelText("Stop the running turn")).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // P4 — Retry / edit-and-resend
+  // -------------------------------------------------------------------------
+
+  it("P4: a UserPrompt resend action calls sendTurn with the original text", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "awaiting-input";
+    slice.transcript = [
+      {
+        source: "prompt",
+        turn: 1,
+        line: "please refactor the auth module",
+        ts: "2026-05-22T10:00:00+00:00",
+      },
+    ];
+    const sendTurnMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      sendTurn: sendTurnMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    fireEvent.click(screen.getByLabelText("Resend this prompt"));
+
+    // Resend re-dispatches the EXACT prompt text as a fresh turn.
+    expect(sendTurnMock).toHaveBeenCalledWith("s1", "please refactor the auth module");
+  });
+
+  it("P4: resend is disabled while a turn is in flight", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "turn-running";
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "the ask", ts: "2026-05-22T10:00:00+00:00" },
+    ];
+    const sendTurnMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      sendTurn: sendTurnMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    const resend = screen.getByLabelText("Resend this prompt") as HTMLButtonElement;
+    expect(resend.disabled).toBe(true);
+    fireEvent.click(resend);
+    expect(sendTurnMock).not.toHaveBeenCalled();
+  });
+
+  it("P4: a failed-turn retry resends the last prompt via sendTurn", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "failed";
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "the failed ask", ts: "2026-05-22T10:00:00+00:00" },
+      { source: "stderr", turn: 1, line: "[gambit] error", ts: "2026-05-22T10:00:01+00:00" },
+    ];
+    const sendTurnMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      sendTurn: sendTurnMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    fireEvent.click(screen.getByLabelText("Retry the last turn"));
+
+    expect(sendTurnMock).toHaveBeenCalledWith("s1", "the failed ask");
+  });
+
+  it("P4: edit loads the prompt text into the composer draft", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "awaiting-input";
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "amend me please", ts: "2026-05-22T10:00:00+00:00" },
+    ];
+    const store = makeStore({ authStatus: LOGGED_IN, sessions: { s1: slice } });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    fireEvent.click(screen.getByLabelText("Edit and resend this prompt"));
+
+    // The text is routed into the existing composer textarea.
+    const textarea = screen.getByLabelText("Follow-up turn prompt") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("amend me please");
+  });
+
+  // -------------------------------------------------------------------------
+  // P7 — Keyboard navigation
+  // -------------------------------------------------------------------------
+
+  it("P7: the Enter-to-send toggle persists to localStorage", async () => {
+    localStorage.clear();
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+
+    const toggle = screen.getByLabelText("Enter sends the message") as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(toggle);
+    // The bit is written under the gambit: key-prefix convention.
+    expect(localStorage.getItem("gambit:enterToSend")).toBe("true");
+    localStorage.clear();
+  });
+
+  it("P7: with Enter-to-send ON a plain Enter sends the turn", async () => {
+    localStorage.setItem("gambit:enterToSend", "true");
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "awaiting-input";
+    const sendTurnMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      sendTurn: sendTurnMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    const textarea = screen.getByLabelText("Follow-up turn prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "send me on enter" } });
+
+    // Plain Enter (no modifier) sends when the preference is ON.
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(sendTurnMock).toHaveBeenCalledWith("s1", "send me on enter");
+    localStorage.clear();
+  });
+
+  it("P7: with Enter-to-send OFF a plain Enter does NOT send", async () => {
+    localStorage.clear();
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "awaiting-input";
+    const sendTurnMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      sendTurn: sendTurnMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    const textarea = screen.getByLabelText("Follow-up turn prompt") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "stay a newline" } });
+
+    // Plain Enter is a newline by default — only ⌘/Ctrl+Enter sends.
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(sendTurnMock).not.toHaveBeenCalled();
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    expect(sendTurnMock).toHaveBeenCalledWith("s1", "stay a newline");
+  });
+
+  it("P7: Esc in the composer cancels an in-flight turn", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.status = "turn-running";
+    const cancelMock = vi.fn();
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: { s1: slice },
+      cancel: cancelMock,
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    const textarea = screen.getByLabelText("Follow-up turn prompt") as HTMLTextAreaElement;
+
+    // Esc while a turn streams cancels it.
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(cancelMock).toHaveBeenCalledWith("s1");
+  });
+
+  it("P7: ⌘/Ctrl+1 selects the first session in the rail order", async () => {
+    const store = makeStore({
+      authStatus: LOGGED_IN,
+      sessions: {
+        s1: makeSlice("s1", { title: "Older", lastActiveAt: "2026-05-19T10:00:00+00:00" }),
+        s2: makeSlice("s2", { title: "Newer", lastActiveAt: "2026-05-21T10:00:00+00:00" }),
+      },
+    });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // No session selected — the composer is in create mode.
+    expect(screen.getByLabelText("New session prompt")).toBeDefined();
+
+    // ⌘1 selects the FIRST rail row (most-recently-active = "Newer" / s2).
+    fireEvent.keyDown(window, { key: "1", code: "Digit1", metaKey: true });
+
+    // The detail view opens — the create-mode composer is gone.
+    expect(screen.queryByLabelText("New session prompt")).toBeNull();
+    expect(screen.getByLabelText("Follow-up turn prompt")).toBeDefined();
+  });
+
   it("R1: the collapsed bit is persisted to localStorage and survives a remount", async () => {
     localStorage.clear();
     const { unmount } = render(

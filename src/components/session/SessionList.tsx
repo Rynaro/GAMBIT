@@ -80,6 +80,17 @@ function sortStamp(slice: SessionSlice): number {
   return Number.isNaN(ms) ? 0 : ms;
 }
 
+/**
+ * The rail's display order — sessions sorted most-recently-active first.
+ *
+ * Exported so the route's ⌘/Ctrl+1..9 session-switch shortcut (P7) selects the
+ * Nth session by the SAME order the rail renders, with no drift between the
+ * keyboard index and the visible row.
+ */
+export function railOrder(sessions: Record<string, SessionSlice>): SessionSlice[] {
+  return Object.values(sessions).sort((a, b) => sortStamp(b) - sortStamp(a));
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -115,8 +126,9 @@ export function SessionList({
   onRemove,
   collapsed = false,
 }: SessionListProps) {
-  // Most-recently-active first — the rail's natural ordering.
-  const rows = Object.values(sessions).sort((a, b) => sortStamp(b) - sortStamp(a));
+  // Most-recently-active first — the rail's natural ordering. The route's
+  // ⌘1..9 shortcut reads the SAME `railOrder` so the index never drifts.
+  const rows = railOrder(sessions);
 
   return (
     <aside className="session-rail" aria-label="Sessions" data-collapsed={String(collapsed)}>

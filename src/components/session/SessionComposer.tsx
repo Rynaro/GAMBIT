@@ -28,10 +28,11 @@
 // shown. A session is NEVER created without a resolved absolute project_path.
 
 import { EFFORT_OPTIONS, MODEL_OPTIONS } from "@/lib/claudeModels";
+import { getEnterToSend, setEnterToSend } from "@/lib/composerPrefs";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_DISPLAY_NAME } from "@/lib/eidolonRoster";
 import { estimateTokens } from "@/lib/estimateTokens";
-import { type KeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -107,6 +108,16 @@ interface SessionComposerProps {
   thinkingEffort: string;
   /** R3 — change the selected thinking-effort level. */
   onSelectThinkingEffort: (effort: string) => void;
+
+  // -- P4 edit-and-resend -------------------------------------------------
+  /**
+   * P4 — a draft injection pulse. When `editDraft.nonce` advances, the
+   * composer loads `editDraft.text` into the textarea and focuses it so the
+   * user can amend a prior prompt before sending. A fresh `nonce` (not the
+   * text alone) drives the load so re-injecting the SAME text still works.
+   * `nonce` starts at `0` — that initial value never injects.
+   */
+  editDraft?: { text: string; nonce: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -134,11 +145,27 @@ export function SessionComposer({
   onSelectModel,
   thinkingEffort,
   onSelectThinkingEffort,
+  editDraft,
 }: SessionComposerProps) {
   const [draft, setDraft] = useState("");
   // The optional FORM disclosure — collapsed by default so the zero-effort
   // path is pure type-and-send.
   const [showOptions, setShowOptions] = useState(false);
+
+  // P7 — the Enter-to-send preference, seeded lazily from `localStorage` and
+  // persisted on every flip (gambit: key prefix, mirroring `railStore.ts`).
+  // OFF (default): ⌘/Ctrl+Enter sends, plain Enter is a newline.
+  // ON: plain Enter sends, Shift+Enter inserts a newline.
+  const [enterToSend, setEnterToSendState] = useState<boolean>(getEnterToSend);
+
+  // P4 — load an edited prompt into the draft when the route pulses a fresh
+  // `editDraft.nonce`. The `nonce` (not the text) is the dependency so
+  // re-injecting the same text still loads. The `0` initial nonce never fires.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the nonce pulse is the trigger; text is read but must not re-fire on its own
+  useEffect(() => {
+    if (!editDraft || editDraft.nonce === 0) return;
+    setDraft(editDraft.text);
+  }, [editDraft?.nonce]);
 
   const isCreate = mode === "create";
   // Whether the compose action can fire at all (independent of draft text).
@@ -165,9 +192,42 @@ export function SessionComposer({
     setDraft("");
   }
 
+  /** Flip the Enter-to-send preference and persist it (P7). */
+  function toggleEnterToSend() {
+    setEnterToSendState((prev) => {
+      const next = !prev;
+      setEnterToSend(next);
+      return next;
+    });
+  }
+
+  /**
+   * P7 — composer-scoped Esc → cancel the in-flight turn. Bound on the
+   * composer WRAPPER (not the textarea) so it still fires while the textarea
+   * is disabled mid-turn, yet stays scoped to the composer so it never
+   * surprises the user from an unrelated input.
+   */
+  function handleComposerKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape" && turnRunning) {
+      e.preventDefault();
+      onCancel();
+    }
+  }
+
+  /** P7 — textarea key handling: ⌘/Ctrl+Enter, and plain Enter when opted in. */
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    // Cmd/Ctrl+Enter composes — newline stays the default Enter behaviour.
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if (e.key !== "Enter") return;
+
+    // P7 — Enter-to-send ON: plain Enter sends, Shift+Enter is a newline.
+    if (enterToSend && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      handleCompose();
+      return;
+    }
+
+    // Cmd/Ctrl+Enter always composes — newline stays the default Enter
+    // behaviour when the Enter-to-send preference is OFF.
+    if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
       handleCompose();
     }
@@ -178,16 +238,18 @@ export function SessionComposer({
   // pick a project — so the blocked reason is shown, not a dead textarea.
   const inputDisabled = !isCreate && !canSend;
 
+  // P7 — the send hint mirrors the active Enter-to-send preference.
+  const sendHint = enterToSend ? "↵ to send" : "⌘↵ to send";
   const placeholder = isCreate
-    ? "Describe what you want to do… (⌘↵ to start a session)"
+    ? `Describe what you want to do… (${enterToSend ? "↵" : "⌘↵"} to start a session)`
     : canSend
-      ? "Reply to the Eidolon… (⌘↵ to send)"
+      ? `Reply to the Eidolon… (${sendHint})`
       : "Waiting for the current turn…";
 
   const actionLabel = isCreate ? "Start session" : "Send";
 
   return (
-    <div className="session-composer">
+    <div className="session-composer" onKeyDown={handleComposerKeyDown}>
       {/* create-mode blocked affordance (spec §5 step 3) */}
       {isCreate && !createReady && cwdBlockedReason && (
         <p className="session-composer-blocked" role="alert">
@@ -345,25 +407,49 @@ export function SessionComposer({
         >
           ~{tokenEstimate.toLocaleString("en-US")} tokens
         </span>
-        {turnRunning && (
+
+        {/* P7 — the Enter-to-send preference toggle. Persisted to localStorage;
+            flips plain-Enter between "send" and "newline". */}
+        <label
+          className="session-enter-pref"
+          title="When on, Enter sends and Shift+Enter is a newline"
+        >
+          <input
+            type="checkbox"
+            className="session-enter-pref-box"
+            checked={enterToSend}
+            onChange={toggleEnterToSend}
+            aria-label="Enter sends the message"
+          />
+          <span className="session-enter-pref-label">Enter to send</span>
+        </label>
+
+        {/* P1 — a prominent Stop control while a turn streams. It REPLACES
+            Send mid-turn (the only useful action then) and calls
+            `store.cancel(sessionId)` via `onCancel`. */}
+        {turnRunning ? (
           <button
             type="button"
-            className="session-cancel-btn"
+            className="session-stop-btn"
             onClick={onCancel}
-            aria-label="Cancel the running turn"
+            aria-label="Stop the running turn"
           >
-            Cancel turn
+            <span className="session-stop-glyph" aria-hidden="true">
+              ■
+            </span>
+            Stop
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="session-send-btn"
+            onClick={handleCompose}
+            disabled={!actionEnabled || draft.trim().length === 0}
+            aria-label={isCreate ? "Start the session" : "Send follow-up turn"}
+          >
+            {actionLabel}
           </button>
         )}
-        <button
-          type="button"
-          className="session-send-btn"
-          onClick={handleCompose}
-          disabled={!actionEnabled || draft.trim().length === 0}
-          aria-label={isCreate ? "Start the session" : "Send follow-up turn"}
-        >
-          {actionLabel}
-        </button>
       </div>
     </div>
   );

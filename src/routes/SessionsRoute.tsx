@@ -39,7 +39,7 @@ import { RawNdjsonToggle } from "@/components/session/RawNdjsonToggle";
 import { ResultCard } from "@/components/session/ResultCard";
 import { SessionCard } from "@/components/session/SessionCard";
 import { SessionComposer } from "@/components/session/SessionComposer";
-import { SessionList } from "@/components/session/SessionList";
+import { SessionList, railOrder } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import type { ExpandSignal } from "@/components/session/ToolUseChip";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
@@ -256,6 +256,38 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     });
   }
 
+  // P4 — an edit-and-resend draft pulse. When the user clicks "edit" on a
+  // UserPrompt bubble the route advances this `nonce`; the composer loads the
+  // text into its textarea. The `nonce` (not the text) drives the load so
+  // editing the SAME prompt twice still re-injects it.
+  const [editDraft, setEditDraft] = useState<{ text: string; nonce: number }>({
+    text: "",
+    nonce: 0,
+  });
+
+  // P7 — a route-level ⌘/Ctrl+1..9 session-switch shortcut. It selects the
+  // Nth session in the rail's display order (`railOrder` — the SAME sort the
+  // rail renders). Wired here, at the route, because the route owns
+  // `activeSessionId`. The listener is attached on mount and DETACHED on
+  // unmount (the cleanup return) so it never leaks or fires after navigation.
+  // `handleSelect` is a hoisted declaration read live inside the handler.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      // Digits 1..9 only — `e.code` is layout-stable ("Digit3"), `e.key` is
+      // the fallback for keyboards that report the digit directly.
+      const digit = e.code.startsWith("Digit") ? Number(e.code.slice(5)) : Number(e.key);
+      if (!Number.isInteger(digit) || digit < 1 || digit > 9) return;
+      const rows = railOrder(store.sessions);
+      const target = rows[digit - 1];
+      if (!target) return;
+      e.preventDefault();
+      handleSelect(target.sessionId);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store.sessions]);
+
   // -------------------------------------------------------------------------
   // cwd resolution (spec §5) — the path a composer-created session pins.
   // -------------------------------------------------------------------------
@@ -423,6 +455,27 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     }
   }
 
+  /**
+   * P4 — resend a prompt verbatim as a FRESH turn on the open session.
+   *
+   * Used by the UserPrompt bubble's "resend" action and the failed-turn
+   * "retry" affordance. It is a thin pass-through to `store.sendTurn` with the
+   * original text — no inline-edit. Only fires for the currently-open session.
+   */
+  function handleResend(prompt: string) {
+    if (!activeSessionId) return;
+    store.sendTurn(activeSessionId, prompt);
+  }
+
+  /**
+   * P4 — load a prior prompt into the composer for the user to amend before
+   * sending ("edit & resend"). Routes the text into the EXISTING composer via
+   * an `editDraft` nonce pulse — no inline-edit widget.
+   */
+  function handleEditPrompt(prompt: string) {
+    setEditDraft((prev) => ({ text: prompt, nonce: prev.nonce + 1 }));
+  }
+
   // ------------------------------------------------------------------
   // State 1 — no project AND no prior session: the no-project empty state
   // ------------------------------------------------------------------
@@ -481,6 +534,9 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
               session={session}
               slice={store.sessions[activeSessionId] ?? null}
               scrollRef={detailScrollRef}
+              editDraft={editDraft}
+              onResend={handleResend}
+              onEditPrompt={handleEditPrompt}
             />
           ) : (
             <CreatePane
@@ -603,12 +659,25 @@ interface DetailPaneProps {
    * bottom autoscroll observes its scroll position and re-pins it.
    */
   scrollRef: React.RefObject<HTMLDivElement>;
+  /** P4 — the edit-and-resend draft pulse forwarded to the composer. */
+  editDraft: { text: string; nonce: number };
+  /** P4 — resend a prompt verbatim as a fresh turn. */
+  onResend: (prompt: string) => void;
+  /** P4 — load a prompt into the composer to amend before sending. */
+  onEditPrompt: (prompt: string) => void;
 }
 
 /** Px from the bottom within which the transcript counts as "stuck to bottom". */
 const STICK_THRESHOLD_PX = 80;
 
-function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
+function DetailPane({
+  session,
+  slice,
+  scrollRef,
+  editDraft,
+  onResend,
+  onEditPrompt,
+}: DetailPaneProps) {
   const { status, transcript, sessionInfo, live } = session;
 
   // P2: stick-to-bottom autoscroll. `atBottom` tracks whether the user is at
@@ -675,6 +744,17 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
   const eidolonName = isCortex ? "Cortex" : sessionInfo?.eidolonName || "Eidolon";
   const turnRunning = status === "turn-running" || status === "launching";
   const canSend = status === "awaiting-input";
+  // P4 — resend / retry are enabled only when the session is NOT mid-turn:
+  // idle / awaiting-input / failed. A resend is a fresh turn, so it must not
+  // race an in-flight one.
+  const canResend = !turnRunning;
+  // P4 — the most-recent typed prompt drives the failed-turn "retry" button.
+  const lastPrompt = useMemo(() => {
+    for (let i = transcript.length - 1; i >= 0; i--) {
+      if (transcript[i].source === "prompt") return transcript[i].line;
+    }
+    return "";
+  }, [transcript]);
   // The Eidolon role line is not carried on `SessionInfo` — left blank for a
   // named Eidolon (the v0.3.0 pre-launch panel sourced it from the picked
   // `ProjectEidolon`, which the list<->detail shell no longer threads in). A
@@ -690,6 +770,7 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
         model={init?.model ?? null}
         tools={init?.tools ?? []}
         status={status}
+        onStop={() => session.cancel()}
       />
 
       {/* S5: always-visible context-temperature gauge — recomputes on each
@@ -729,6 +810,9 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
                 eidolonName={eidolonName}
                 toolResults={toolResults}
                 expandSignal={expandSignal}
+                canResend={canResend}
+                onResend={onResend}
+                onEditPrompt={onEditPrompt}
               />
             ))}
           </div>
@@ -754,6 +838,27 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
         </button>
       )}
 
+      {/* P4 — a failed turn can be retried with one click: resend the last
+          typed prompt as a fresh turn. Shown only when the session failed and
+          a prior prompt exists, and gated on `canResend` (never mid-turn). */}
+      {status === "failed" && lastPrompt && (
+        <div className="session-retry" role="alert">
+          <span className="session-retry-text">The last turn failed.</span>
+          <button
+            type="button"
+            className="session-retry-btn"
+            onClick={() => onResend(lastPrompt)}
+            disabled={!canResend}
+            aria-label="Retry the last turn"
+          >
+            <span className="session-retry-glyph" aria-hidden="true">
+              ↻
+            </span>
+            Retry last turn
+          </button>
+        </div>
+      )}
+
       <RawNdjsonToggle transcript={transcript} />
 
       <SessionComposer
@@ -762,6 +867,7 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
         turnRunning={turnRunning}
         onSend={(prompt) => session.sendTurn(prompt)}
         onCancel={() => session.cancel()}
+        editDraft={editDraft}
         // create-mode props are unused in detail mode — supplied inert.
         onCreate={() => {}}
         createReady={false}
@@ -880,6 +986,12 @@ interface TranscriptRowProps {
   toolResults: Map<string, { text: string; isError: boolean }>;
   /** P3 bulk expand/collapse pulse — threaded into tool chips + thinking. */
   expandSignal: ExpandSignal;
+  /** P4 — whether resend / edit are enabled (false while a turn is running). */
+  canResend: boolean;
+  /** P4 — resend a prompt verbatim as a fresh turn. */
+  onResend: (prompt: string) => void;
+  /** P4 — load a prompt into the composer to amend before sending. */
+  onEditPrompt: (prompt: string) => void;
 }
 
 /**
@@ -890,25 +1002,80 @@ interface TranscriptRowProps {
  * track of what they asked. The bubble heads its turn group (`groupByTurn`
  * already buckets by `turn`); it is visually distinct from the assistant
  * cards — accent-tinted and aligned to the trailing edge.
+ *
+ * P4 — the bubble carries two hover actions: `resend` re-dispatches the exact
+ * prompt text as a fresh turn (`onResend`), and `edit` loads the text into the
+ * composer to amend before sending (`onEditPrompt`). Both are disabled while a
+ * turn is in flight (`canResend` false) — a resend must not race a live turn.
  */
-function UserPrompt({ prompt }: { prompt: string }) {
+function UserPrompt({
+  prompt,
+  canResend,
+  onResend,
+  onEditPrompt,
+}: {
+  prompt: string;
+  canResend: boolean;
+  onResend: (prompt: string) => void;
+  onEditPrompt: (prompt: string) => void;
+}) {
   return (
-    <div className="session-user" aria-label="Your prompt">
-      {prompt}
+    <div className="session-user-wrap">
+      <div className="session-user" aria-label="Your prompt">
+        {prompt}
+      </div>
+      <div className="session-user-actions">
+        <button
+          type="button"
+          className="session-prompt-action"
+          onClick={() => onResend(prompt)}
+          disabled={!canResend}
+          aria-label="Resend this prompt"
+          title="Resend this prompt as a fresh turn"
+        >
+          <span aria-hidden="true">↻ </span>Resend
+        </button>
+        <button
+          type="button"
+          className="session-prompt-action"
+          onClick={() => onEditPrompt(prompt)}
+          disabled={!canResend}
+          aria-label="Edit and resend this prompt"
+          title="Load this prompt into the composer to amend"
+        >
+          <span aria-hidden="true">✎ </span>Edit
+        </button>
+      </div>
     </div>
   );
 }
 
-function TranscriptRow({ entry, eidolonName, toolResults, expandSignal }: TranscriptRowProps) {
+function TranscriptRow({
+  entry,
+  eidolonName,
+  toolResults,
+  expandSignal,
+  canResend,
+  onResend,
+  onEditPrompt,
+}: TranscriptRowProps) {
   // stderr — a diagnostics line.
   if (entry.source === "stderr") {
     return <pre className="session-stderr-line">{entry.line}</pre>;
   }
 
   // R4 — the human's own typed prompt for the turn: a right-aligned bubble
-  // heading its turn group. `line` carries the raw prompt text.
+  // heading its turn group. `line` carries the raw prompt text. P4 — the
+  // bubble also carries resend / edit actions.
   if (entry.source === "prompt") {
-    return <UserPrompt prompt={entry.line} />;
+    return (
+      <UserPrompt
+        prompt={entry.line}
+        canResend={canResend}
+        onResend={onResend}
+        onEditPrompt={onEditPrompt}
+      />
+    );
   }
 
   // Switch on the stable lowercase `kind` discriminator (NOT the enum tag).
