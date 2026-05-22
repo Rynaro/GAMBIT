@@ -18,12 +18,13 @@
 //   * `resolveCwd` §5 rule ordering (pure helper)
 //   * a component-level smoke test of ResultCard
 
+import { CopyButton } from "@/components/session/CopyButton";
 import { ResultCard } from "@/components/session/ResultCard";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import type { AuthStatus, SessionInfo } from "@/lib/session.types";
 import type { SessionSlice, UseSessionsResult } from "@/lib/useSessions";
 import { SessionsRoute, resolveCwd } from "@/routes/SessionsRoute";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -443,6 +444,49 @@ describe("SessionsRoute", () => {
     expect(params.isCortex).toBe(false);
     expect(params.eidolonName).toBe("atlas");
   });
+
+  // -------------------------------------------------------------------------
+  // R1 — collapsible Sessions rail
+  // -------------------------------------------------------------------------
+
+  it("R1: the collapse toggle flips data-collapsed on the shell body", async () => {
+    localStorage.clear();
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+
+    // The rail starts expanded — the Collapse affordance is shown.
+    const toggle = screen.getByLabelText("Collapse the sessions rail");
+    const shellBody = toggle.parentElement as HTMLElement;
+    expect(shellBody.getAttribute("data-collapsed")).toBe("false");
+
+    // Collapse → the attribute flips and the control re-labels to Expand.
+    fireEvent.click(toggle);
+    expect(shellBody.getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByLabelText("Expand the sessions rail")).toBeDefined();
+
+    // Expand again → back to false.
+    fireEvent.click(screen.getByLabelText("Expand the sessions rail"));
+    expect(shellBody.getAttribute("data-collapsed")).toBe("false");
+  });
+
+  it("R1: the collapsed bit is persisted to localStorage and survives a remount", async () => {
+    localStorage.clear();
+    const { unmount } = render(
+      <SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />,
+    );
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Collapse the sessions rail"));
+    // The bit is written under the gambit: key-prefix convention.
+    expect(localStorage.getItem("gambit:sessionsRailCollapsed")).toBe("true");
+
+    // A fresh mount reads the persisted bit — the rail comes up collapsed.
+    unmount();
+    render(<SessionsRoute projectPath="/proj" store={makeStore({ authStatus: LOGGED_IN })} />);
+    await flush();
+    expect(screen.getByLabelText("Expand the sessions rail")).toBeDefined();
+    localStorage.clear();
+  });
 });
 
 describe("ResultCard", () => {
@@ -474,5 +518,31 @@ describe("ResultCard", () => {
     );
     expect(screen.getByText("Turn ended with an error")).toBeDefined();
     expect(screen.getByText("error_max_turns")).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CopyButton (P5) — the hover copy-to-clipboard affordance
+// ---------------------------------------------------------------------------
+
+describe("CopyButton", () => {
+  afterEach(() => {
+    // clearAllMocks, NOT restoreAllMocks (per the project test convention).
+    vi.clearAllMocks();
+  });
+
+  it("P5: clicking copy calls navigator.clipboard.writeText with the value", async () => {
+    // jsdom has no clipboard — stub `writeText` and assert the call.
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<CopyButton value="the answer text" label="Copy answer" />);
+    fireEvent.click(screen.getByLabelText("Copy answer"));
+
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith("the answer text");
+
+    // After a successful copy the button shows the "Copied" affirmation.
+    await waitFor(() => expect(screen.getByText("Copied")).toBeDefined());
   });
 });

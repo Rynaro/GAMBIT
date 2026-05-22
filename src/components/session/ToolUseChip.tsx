@@ -13,6 +13,7 @@
 // renders it nested/indented (see SessionsRoute), and the chip itself flags it
 // with a subagent tag.
 
+import { CopyButton } from "@/components/session/CopyButton";
 import { useEffect, useState } from "react";
 
 interface ToolUseChipProps {
@@ -144,9 +145,17 @@ export function ToolUseChip({
       </button>
 
       {expanded && result && (
-        <pre className="session-tool-result" data-error={String(result.isError)}>
-          {result.text}
-        </pre>
+        <div className="session-tool-result-wrap">
+          {/* P5: hover copy affordance on the tool-result body. */}
+          <CopyButton
+            value={result.text}
+            label={`Copy ${name} result`}
+            className="session-copy-btn--overlay"
+          />
+          <pre className="session-tool-result" data-error={String(result.isError)}>
+            {result.text}
+          </pre>
+        </div>
       )}
     </div>
   );

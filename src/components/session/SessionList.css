@@ -43,6 +43,23 @@
   line-height: 1;
 }
 
+/* ---- Collapsed rail (R1) — a thin strip with just the New-session glyph ---- */
+.session-rail[data-collapsed="true"] {
+  width: 44px;
+  padding-right: 0;
+  align-items: center;
+}
+
+.session-rail[data-collapsed="true"] .session-rail-new {
+  justify-content: center;
+  padding: var(--space-3);
+  width: 32px;
+}
+
+.session-rail[data-collapsed="true"] .session-rail-new-label {
+  display: none;
+}
+
 /* ---- Empty state ---- */
 .session-rail-empty {
   font-size: 11px;

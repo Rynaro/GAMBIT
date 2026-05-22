@@ -177,6 +177,16 @@
   gap: var(--space-3);
 }
 
+/* The copy button trails the attribution row, pushed to the right edge. */
+.session-assistant-attr .session-copy-btn {
+  margin-left: auto;
+}
+
+/* ---- Tool-result body wrapper (P5 copy overlay anchor) ---- */
+.session-tool-result-wrap {
+  position: relative;
+}
+
 .session-assistant-glyph {
   font-size: 13px;
   line-height: 1;

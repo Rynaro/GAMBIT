@@ -1,12 +1,29 @@
 // MarkdownView.tsx — Renders a markdown string using react-markdown + remark-gfm.
 // Applies GAMBIT design-token CSS classes. Strips YAML front-matter by default.
 
+import { CopyButton } from "@/components/session/CopyButton";
 import { stripFrontMatter } from "@/lib/stripFrontMatter";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import "./MarkdownView.css";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively gather the raw text of a hast node tree — used to recover the
+ * literal source of a fenced code block so it can be copied verbatim (P5).
+ */
+function nodeText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const n = node as { type?: string; value?: string; children?: unknown[] };
+  if (n.type === "text" && typeof n.value === "string") return n.value;
+  if (Array.isArray(n.children)) return n.children.map(nodeText).join("");
+  return "";
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,8 +88,23 @@ const components: Components = {
     return <code className="md-code-inline">{children}</code>;
   },
 
-  // Pre (fenced code block wrapper)
-  pre: ({ children }) => <pre className="md-code-block">{children}</pre>,
+  // Pre (fenced code block wrapper) — P5: a hover copy button copies the
+  // fence's literal source, recovered from the hast `node`.
+  pre: ({ children, node }) => {
+    const source = nodeText(node);
+    return (
+      <div className="md-code-block-wrap">
+        {source && (
+          <CopyButton
+            value={source}
+            label="Copy code block"
+            className="session-copy-btn--overlay"
+          />
+        )}
+        <pre className="md-code-block">{children}</pre>
+      </div>
+    );
+  },
 
   // Blockquote
   blockquote: ({ children }) => <blockquote className="md-blockquote">{children}</blockquote>,

@@ -44,6 +44,7 @@ import { ThinkingBlock } from "@/components/session/ThinkingBlock";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_EIDOLON_NAME, readProjectRoster } from "@/lib/eidolonRoster";
+import { getRailCollapsed, setRailCollapsed } from "@/lib/railStore";
 import type {
   ContentBlock,
   ParsedAssistant,
@@ -56,7 +57,7 @@ import { useSession } from "@/lib/useSession";
 import type { SessionLiveState, SessionSlice, UseSessionsResult } from "@/lib/useSessions";
 import { getRoute } from "@/routes/index";
 import { readTextFile } from "@tauri-apps/plugin-fs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "@/components/session/session.css";
 import "./SessionsRoute.css";
 
@@ -214,6 +215,10 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const session = useSession(store, activeSessionId);
 
+  // P2: the `.session-detail` div is the `overflow-y:auto` scroll container —
+  // `DetailPane` reads this ref for stick-to-bottom transcript autoscroll.
+  const detailScrollRef = useRef<HTMLDivElement>(null);
+
   // The Roster "Launch" handoff name comes from the store (S2).
   const initialEidolonName = store.pendingEidolon;
 
@@ -230,6 +235,20 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
   );
   const [permissionMode, setPermissionMode] = useState<string>("default");
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // R1: the left rail can collapse to a thin strip so the chat pane takes the
+  // full width. The bit is persisted to `localStorage` (gambit: key prefix) so
+  // the choice survives a reload — seeded lazily from the stored value.
+  const [railCollapsed, setRailCollapsedState] = useState<boolean>(getRailCollapsed);
+
+  /** Flip the rail collapsed bit and persist it. */
+  function toggleRail() {
+    setRailCollapsedState((prev) => {
+      const next = !prev;
+      setRailCollapsed(next);
+      return next;
+    });
+  }
 
   // -------------------------------------------------------------------------
   // cwd resolution (spec §5) — the path a composer-created session pins.
@@ -416,7 +435,7 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
     <div className="route-pane session-shell">
       <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
 
-      <div className="session-shell-body">
+      <div className="session-shell-body" data-collapsed={String(railCollapsed)}>
         <SessionList
           sessions={store.sessions}
           activeSessionId={activeSessionId}
@@ -426,11 +445,29 @@ export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
             void store.remove(id);
             if (id === activeSessionId) setActiveSessionId(null);
           }}
+          collapsed={railCollapsed}
         />
 
-        <div className="session-detail">
+        <button
+          type="button"
+          className="session-rail-toggle"
+          onClick={toggleRail}
+          aria-label={railCollapsed ? "Expand the sessions rail" : "Collapse the sessions rail"}
+          aria-expanded={!railCollapsed}
+          title={railCollapsed ? "Expand sessions" : "Collapse sessions"}
+        >
+          <span className="session-rail-toggle-chevron" data-collapsed={String(railCollapsed)}>
+            ‹
+          </span>
+        </button>
+
+        <div className="session-detail" ref={detailScrollRef}>
           {activeSessionId !== null && session.status !== "idle" ? (
-            <DetailPane session={session} slice={store.sessions[activeSessionId] ?? null} />
+            <DetailPane
+              session={session}
+              slice={store.sessions[activeSessionId] ?? null}
+              scrollRef={detailScrollRef}
+            />
           ) : (
             <CreatePane
               authBlocked={Boolean(store.authStatus) && !loggedIn}
@@ -543,10 +580,53 @@ interface DetailPaneProps {
    * a neutral empty gauge.
    */
   slice: SessionSlice | null;
+  /**
+   * The `.session-detail` `overflow-y:auto` scroll container — P2 stick-to-
+   * bottom autoscroll observes its scroll position and re-pins it.
+   */
+  scrollRef: React.RefObject<HTMLDivElement>;
 }
 
-function DetailPane({ session, slice }: DetailPaneProps) {
+/** Px from the bottom within which the transcript counts as "stuck to bottom". */
+const STICK_THRESHOLD_PX = 80;
+
+function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
   const { status, transcript, sessionInfo, live } = session;
+
+  // P2: stick-to-bottom autoscroll. `atBottom` tracks whether the user is at
+  // (or near) the bottom; while true the transcript follows new content, while
+  // false a "jump to latest" pill re-engages it. Mirrors `LogPane.tsx`'s
+  // auto-scroll-with-pause-on-scroll-up pattern (a scroll handler flips a
+  // bit; an effect re-pins on content change).
+  const [atBottom, setAtBottom] = useState(true);
+
+  // Re-pin to the bottom whenever the transcript grows or the live buffer
+  // streams — but only while the user has not scrolled up.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: live.streamingText / toolCalls drive the streaming re-pin
+  useEffect(() => {
+    if (!atBottom) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [transcript.length, live.streamingText, live.toolCalls, atBottom, scrollRef]);
+
+  // Pause / resume autoscroll from the user's scroll position.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+      setAtBottom(near);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [scrollRef]);
+
+  /** Re-engage autoscroll — jump to the newest content. */
+  function jumpToLatest() {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setAtBottom(true);
+  }
 
   // Model + tools come from the `init` event once it lands.
   const init = useMemo(() => {
@@ -603,6 +683,22 @@ function DetailPane({ session, slice }: DetailPaneProps) {
           <LiveTurn live={live} eidolonName={eidolonName} toolResults={toolResults} />
         )}
       </div>
+
+      {/* P2: jump-to-latest pill — shown only while autoscroll is paused
+          (the user has scrolled up). Re-engages stick-to-bottom on click. */}
+      {!atBottom && (
+        <button
+          type="button"
+          className="session-jump-latest"
+          onClick={jumpToLatest}
+          aria-label="Jump to latest"
+        >
+          <span className="session-jump-latest-glyph" aria-hidden="true">
+            ↓
+          </span>
+          Jump to latest
+        </button>
+      )}
 
       <RawNdjsonToggle transcript={transcript} />
 

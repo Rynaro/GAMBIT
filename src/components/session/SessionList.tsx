@@ -95,6 +95,12 @@ interface SessionListProps {
   onNewSession: () => void;
   /** Remove a session — deletes its record and drops it from the store. */
   onRemove: (sessionId: string) => void;
+  /**
+   * When `true` the rail is a thin strip — only the (icon-only) "New session"
+   * affordance shows; the full session list is hidden (R1). The route owns the
+   * collapsed bit and the expand control; this prop just gates the body.
+   */
+  collapsed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,26 +113,29 @@ export function SessionList({
   onSelect,
   onNewSession,
   onRemove,
+  collapsed = false,
 }: SessionListProps) {
   // Most-recently-active first — the rail's natural ordering.
   const rows = Object.values(sessions).sort((a, b) => sortStamp(b) - sortStamp(a));
 
   return (
-    <aside className="session-rail" aria-label="Sessions">
+    <aside className="session-rail" aria-label="Sessions" data-collapsed={String(collapsed)}>
       <button
         type="button"
         className="session-rail-new"
         onClick={onNewSession}
         aria-label="Start a new session"
+        title={collapsed ? "Start a new session" : undefined}
         data-active={activeSessionId === null}
       >
         <span className="session-rail-new-glyph" aria-hidden="true">
           +
         </span>
-        New session
+        <span className="session-rail-new-label">New session</span>
       </button>
 
-      {rows.length === 0 ? (
+      {/* Collapsed = a thin strip: keep only the "New session" affordance. */}
+      {collapsed ? null : rows.length === 0 ? (
         <p className="session-rail-empty">No sessions yet. Type into the composer to start one.</p>
       ) : (
         <ul className="session-rail-list">

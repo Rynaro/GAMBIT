@@ -20,6 +20,40 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  position: relative;
+}
+
+/* ---- Rail collapse toggle (R1) — sits at the rail/detail boundary ---- */
+.session-rail-toggle {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  transition: color var(--duration-micro) var(--motion-entry), border-color var(--duration-micro)
+    var(--motion-entry);
+}
+
+.session-rail-toggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.session-rail-toggle-chevron {
+  font-size: 13px;
+  line-height: 1;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.session-rail-toggle-chevron[data-collapsed="true"] {
+  transform: rotate(180deg);
 }
 
 .session-detail-inner {
@@ -288,6 +322,34 @@
   flex-direction: column;
   gap: var(--space-7);
   margin: var(--space-6) 0;
+}
+
+/* ---- Jump-to-latest pill (P2) — re-engages stick-to-bottom autoscroll ---- */
+.session-jump-latest {
+  position: sticky;
+  bottom: var(--space-5);
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-primary);
+  background: var(--bg-surface-raised);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--bg-canvas) 70%, transparent 30%);
+  transition: opacity var(--duration-micro) var(--motion-entry);
+}
+
+.session-jump-latest:hover {
+  opacity: 0.85;
+}
+
+.session-jump-latest-glyph {
+  font-size: 12px;
+  line-height: 1;
 }
 
 /* ---- stderr line ---- */

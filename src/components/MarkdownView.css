@@ -86,6 +86,11 @@
 }
 
 /* ---- Code blocks ---- */
+/* P5: positioned wrapper so the hover copy button can overlay the fence. */
+.markdown-view .md-code-block-wrap {
+  position: relative;
+}
+
 .markdown-view .md-code-block {
   font-family: var(--font-mono);
   font-size: 12px;

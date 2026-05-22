@@ -11,6 +11,7 @@
 // double-renders.
 
 import { MarkdownView } from "@/components/MarkdownView";
+import { CopyButton } from "@/components/session/CopyButton";
 
 interface AssistantTextProps {
   /** The Eidolon identity, used as the speaker attribution. */
@@ -38,6 +39,9 @@ export function AssistantText({ eidolonName, text, streaming = false }: Assistan
           ⬡
         </span>
         <span className="session-assistant-name">{eidolonName}</span>
+        {/* P5: hover copy affordance — copies the raw assistant text. Hidden
+            while the buffer is still streaming (the text is not yet final). */}
+        {!streaming && <CopyButton value={text} label={`Copy ${eidolonName}'s message`} />}
       </div>
       <div className="session-assistant-body">
         <MarkdownView source={text} stripFrontMatter={false} />
