@@ -15,6 +15,7 @@ import { useCommandPalette } from "./lib/useCommandPalette";
 import { useDoctor } from "./lib/useDoctor";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
 import { useMcpStore } from "./lib/useMcpStore";
+import { useSessions } from "./lib/useSessions";
 import { useSync } from "./lib/useSync";
 import { useUpgrade } from "./lib/useUpgrade";
 
@@ -27,10 +28,6 @@ function AppShell() {
   const { setActiveRoute } = useRouteContext();
 
   const [projectPath, setProjectPathState] = useState<string | null>(() => getProjectPath());
-
-  // S8 — Roster→Sessions handoff: the Eidolon name a "Launch" click pre-selects
-  // in the Sessions route's pre-launch picker. Consumed once by SessionsRoute.
-  const [pendingSessionEidolon, setPendingSessionEidolon] = useState<string | null>(null);
 
   const { state: driftState, projectBasename, clearDrift } = useDriftWatcher(projectPath);
 
@@ -45,6 +42,11 @@ function AppShell() {
 
   // MCP Store hook — lifted to App shell so the palette can trigger refresh.
   const mcpStore = useMcpStore(projectPath);
+
+  // Sessions store — lifted to the App shell (mirrors useDoctor / useMcpStore).
+  // Living above the router is WHAT keeps a session's transcript alive across
+  // a route change — the S2 fix for the route-change transcript-loss bug.
+  const sessions = useSessions();
 
   // Inject the command handlers into commands.ts once on mount.
   // Re-inject when projectPath, sync.start, upgrade.check, doctor.start,
@@ -102,10 +104,12 @@ function AppShell() {
     setProjectPathState(null);
   };
 
-  // S8 — the Roster's "Launch" action: stash the chosen Eidolon and switch to
-  // the Sessions route, which seeds its picker from `pendingSessionEidolon`.
+  // S8 — the Roster's "Launch" action: stash the chosen Eidolon in the store
+  // and switch to the Sessions route, which seeds its picker from
+  // `sessions.pendingEidolon`. The single-shot `pendingSessionEidolon` App
+  // state is gone — the store now owns this handoff (story S2).
   const handleLaunchSession = (eidolonName: string) => {
-    setPendingSessionEidolon(eidolonName);
+    sessions.setPendingEidolon(eidolonName);
     setActiveRoute("sessions");
   };
 
@@ -122,7 +126,6 @@ function AppShell() {
           onPickProject={handlePickProject}
           onClearProject={handleClearProject}
           onLaunchSession={handleLaunchSession}
-          pendingSessionEidolon={pendingSessionEidolon}
           onCheckUpgrades={
             projectPath
               ? () => {
@@ -132,6 +135,7 @@ function AppShell() {
           }
           doctor={doctor}
           mcpStore={mcpStore}
+          sessions={sessions}
         />
       </div>
       <CommandPalette open={palette.open} setOpen={palette.setOpen} />

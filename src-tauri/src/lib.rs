@@ -80,6 +80,7 @@ pub fn run() {
             binary::binary_status,
             session::start_session,
             session::send_turn,
+            session::reopen_session,
             session::claude_auth_status,
             session::cancel_session,
             session_store::list_sessions,

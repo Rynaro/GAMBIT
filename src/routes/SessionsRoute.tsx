@@ -1,7 +1,12 @@
 // SessionsRoute.tsx — the user-facing "Sessions" surface.
 //
-// Drives a live Eidolon session through `useSession` (S6) and renders three
-// states:
+// Story S2: the route no longer OWNS session state. It consumes the
+// `useSessions` store (lifted to the App shell, prop-drilled in) and selects a
+// single session via `useSession(store, activeSessionId)`. Because the store
+// lives ABOVE the router, navigating away and back no longer destroys the
+// transcript — the route-change transcript-loss bug is structurally fixed.
+//
+// The route still renders three states (the list<->detail restructure is S3):
 //
 //   1. No project       — empty state, mirrors sibling routes.
 //   2. No active session — a PRE-LAUNCH panel: an Eidolon picker populated via
@@ -34,8 +39,9 @@ import type {
   ParsedResult,
   ParsedUser,
 } from "@/lib/session.types";
-import type { TranscriptEntry } from "@/lib/useSession";
+import type { TranscriptEntry, UseSessionResult } from "@/lib/useSession";
 import { useSession } from "@/lib/useSession";
+import type { UseSessionsResult } from "@/lib/useSessions";
 import { getRoute } from "@/routes/index";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useEffect, useMemo, useState } from "react";
@@ -127,24 +133,30 @@ function indexToolResults(
 interface SessionsRouteProps {
   projectPath: string | null;
   /**
-   * S8 — optional Eidolon name to pre-select in the pre-launch picker, set by
-   * the Roster's "Launch" handoff. When absent, the picker behaves exactly as
-   * S7 shipped it (auto-selects the first project Eidolon).
+   * The multi-session store, lifted to the App shell and prop-drilled in.
+   * Living above the router is WHAT keeps a session's transcript alive across
+   * a route change (story S2 — the transcript-loss bug fix).
    */
-  initialEidolonName?: string | null;
+  store: UseSessionsResult;
 }
 
 // ---------------------------------------------------------------------------
 // Route
 // ---------------------------------------------------------------------------
 
-export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRouteProps) {
-  const session = useSession();
+export function SessionsRoute({ projectPath, store }: SessionsRouteProps) {
+  // S2: the route still shows ONE session (the list<->detail shell is S3), but
+  // the session state lives in the store. `activeSessionId` selects which.
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const session = useSession(store, activeSessionId);
   const { status, authStatus } = session;
 
-  // Pre-launch panel form state. `selectedName` seeds from the S8 Roster
-  // handoff (`initialEidolonName`) when present, else stays empty for the
-  // roster-load to auto-select the first Eidolon (S7 behaviour).
+  // The Roster "Launch" handoff name now comes from the store, not a prop.
+  const initialEidolonName = store.pendingEidolon;
+
+  // Pre-launch panel form state. `selectedName` seeds from the Roster handoff
+  // (`store.pendingEidolon`) when present, else stays empty for the roster
+  // load to auto-select the first Eidolon.
   const [eidolons, setEidolons] = useState<ProjectEidolon[]>([]);
   const [eidolonsLoaded, setEidolonsLoaded] = useState(false);
   const [selectedName, setSelectedName] = useState<string>(initialEidolonName ?? "");
@@ -219,7 +231,10 @@ export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRoute
       );
     }
 
-    session.start({
+    // S2: `start` ADDS a session to the store and returns its id — select it
+    // so the route switches to the active-session view. The Roster handoff is
+    // consumed once the session opens.
+    const newId = await store.start({
       projectPath,
       eidolonName: selectedEidolon.name,
       permissionMode,
@@ -227,6 +242,10 @@ export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRoute
       allowedTools: selectedEidolon.allowedTools,
       firstPrompt: firstPrompt.trim(),
     });
+    if (newId) {
+      setActiveSessionId(newId);
+      store.setPendingEidolon(null);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -249,10 +268,18 @@ export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRoute
   // ------------------------------------------------------------------
   // State 3 — an active (or just-failed) session: transcript + composer
   // ------------------------------------------------------------------
-  const hasSession = status !== "idle";
+  // A session is active iff one is selected AND still present in the store
+  // (it could have been removed elsewhere). Deselecting returns to the
+  // pre-launch panel WITHOUT destroying the session — it stays in the store.
+  const hasSession = activeSessionId !== null && status !== "idle";
   if (hasSession) {
     return (
-      <ActiveSession session={session} eidolon={selectedEidolon} permissionMode={permissionMode} />
+      <ActiveSession
+        session={session}
+        eidolon={selectedEidolon}
+        permissionMode={permissionMode}
+        onEnd={() => setActiveSessionId(null)}
+      />
     );
   }
 
@@ -425,12 +452,18 @@ export function SessionsRoute({ projectPath, initialEidolonName }: SessionsRoute
 // ---------------------------------------------------------------------------
 
 interface ActiveSessionProps {
-  session: ReturnType<typeof useSession>;
+  session: UseSessionResult;
   eidolon: ProjectEidolon | null;
   permissionMode: string;
+  /**
+   * Deselect the session and return to the pre-launch panel. S2: this does
+   * NOT destroy the session — it stays live in the store, so re-selecting it
+   * (or a route change) keeps its transcript.
+   */
+  onEnd: () => void;
 }
 
-function ActiveSession({ session, eidolon, permissionMode }: ActiveSessionProps) {
+function ActiveSession({ session, eidolon, permissionMode, onEnd }: ActiveSessionProps) {
   const { status, transcript, sessionInfo } = session;
 
   // Model + tools come from the `init` event once it lands.
@@ -454,10 +487,10 @@ function ActiveSession({ session, eidolon, permissionMode }: ActiveSessionProps)
         <button
           type="button"
           className="route-verb-btn"
-          onClick={() => session.clear()}
-          aria-label="End the session and return to the launcher"
+          onClick={onEnd}
+          aria-label="Return to the launcher (the session stays open)"
         >
-          End session
+          Back to launcher
         </button>
       </div>
 

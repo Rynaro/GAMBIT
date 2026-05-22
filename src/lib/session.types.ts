@@ -3,6 +3,8 @@
 // These types mirror the Rust wire shapes — they MUST stay in sync with:
 //   src-tauri/src/session.rs        — commands, params, SessionInfo, AuthStatus,
 //                                     and the three event payloads.
+//   src-tauri/src/session_store.rs  — SessionRecord, SessionSummary,
+//                                     PersistedEntry, CumulativeUsage, TurnRecord.
 //   src-tauri/src/claude_adapter.rs — the ParsedEvent enum + ContentBlock/Usage.
 //
 // All Rust structs derive `#[serde(rename_all = "camelCase")]`, so the wire
@@ -188,9 +190,19 @@ export interface StartSessionParams {
   allowedTools: string[];
   /** The prompt for turn 1. */
   firstPrompt: string;
+  /**
+   * `true` for a cortex-routed default session (story S4 launch path).
+   * Optional — defaults to `false` on the Rust side via `#[serde(default)]`.
+   */
+  isCortex?: boolean;
+  /**
+   * Optional explicit session title. When absent, Rust derives the title
+   * from `firstPrompt` (first ~60 chars).
+   */
+  title?: string | null;
 }
 
-/** Returned by `start_session`: the addressable session descriptor. */
+/** Returned by `start_session` / `reopen_session`: the session descriptor. */
 export interface SessionInfo {
   /** The host-generated UUID v4 — the session's stable address. */
   sessionId: string;
@@ -200,8 +212,126 @@ export interface SessionInfo {
   projectPath: string;
   /** Active `--permission-mode`. */
   permissionMode: string;
-  /** Session status at return time (`"running"` — turn 1 was just spawned). */
+  /** Session status at return time. */
   status: string;
+  /** RFC-3339 creation timestamp (story S1). */
+  createdAt: string;
+  /** `true` for a cortex-routed default session (story S4). */
+  isCortex: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// session_store.rs — persisted record shapes (story S1; mirrored for S2)
+// ---------------------------------------------------------------------------
+
+/**
+ * One transcript entry as Rust observed it on the `claude` NDJSON stream.
+ *
+ * The persisted counterpart of `TranscriptEntry` (see `useSessions.ts`) — a
+ * rehydrating session rebuilds its in-memory `TranscriptEntry[]` directly from
+ * a `SessionRecord`'s `PersistedEntry[]`.
+ */
+export interface PersistedEntry {
+  /** `"event"` for a parsed stdout line, `"stderr"` for a stderr line. */
+  source: string;
+  /** The 1-based turn this entry belongs to. */
+  turn: number;
+  /** Short `kind` discriminator — set for `event` entries, absent for stderr. */
+  kind?: string | null;
+  /** The typed `ParsedEvent` as JSON — set for `event` entries. */
+  parsed?: ParsedEvent | null;
+  /** The raw line, verbatim. */
+  line: string;
+  /** RFC-3339 timestamp the entry was observed at. */
+  ts: string;
+}
+
+/** Cumulative token usage summed across every turn of a session. */
+export interface CumulativeUsage {
+  /** Sum of per-turn input tokens. */
+  inputTokens: number;
+  /** Sum of per-turn output tokens. */
+  outputTokens: number;
+  /** Sum of per-turn cache-creation input tokens. */
+  cacheCreationInputTokens: number;
+  /** Sum of per-turn cache-read input tokens. */
+  cacheReadInputTokens: number;
+}
+
+/** One per-turn finalisation record — drives partial-turn-safe re-entry. */
+export interface TurnRecord {
+  /** The 1-based turn number. */
+  turn: number;
+  /** `true` iff a terminal `result` event was seen for this turn. */
+  resultSeen: boolean;
+}
+
+/**
+ * The full, durable record of one Eidolon session — returned by
+ * `load_session`. The serializable counterpart of the live session.
+ */
+export interface SessionRecord {
+  /** Host-generated UUID v4 — the session address. */
+  uuid: string;
+  /** The Eidolon identity, or empty when `isCortex`. */
+  eidolonName: string;
+  /** `true` for a cortex-routed default session. */
+  isCortex: boolean;
+  /** Title — derived from the turn-1 prompt or user-set. */
+  title: string;
+  /** The pinned absolute working directory `claude` is spawned in. */
+  projectPath: string;
+  /** Value passed verbatim to `--permission-mode`. */
+  permissionMode: string;
+  /** Resolved persona text — the Eidolon `agent.md`, or the cortex descriptor. */
+  appendSystemPrompt: string;
+  /** Tool names joined into `--allowedTools`. */
+  allowedTools: string[];
+  /** Coarse status: `idle` / `running` / `ended` / `failed`. */
+  status: string;
+  /** The serving model, captured from the `system/init` event. */
+  model?: string | null;
+  /** RFC-3339 creation timestamp. */
+  createdAt: string;
+  /** RFC-3339 timestamp, bumped on every turn flush. */
+  lastActiveAt: string;
+  /** The full rendered transcript, append-only across turns. */
+  transcript: PersistedEntry[];
+  /** Token usage summed across every turn. */
+  cumulativeUsage: CumulativeUsage;
+  /** Estimated cost in USD summed across every turn. */
+  cumulativeCostUsd?: number | null;
+  /** Per-turn finalisation log — drives partial-turn-safe re-entry. */
+  perTurn: TurnRecord[];
+}
+
+/**
+ * The lightweight list-view shape — one entry per session in `index.json`,
+ * returned by `list_sessions`.
+ */
+export interface SessionSummary {
+  /** Host-generated UUID v4 — the session address. */
+  uuid: string;
+  /** The Eidolon identity, or empty when `isCortex`. */
+  eidolonName: string;
+  /** `true` for a cortex-routed default session. */
+  isCortex: boolean;
+  /** Title — derived from the turn-1 prompt or user-set. */
+  title: string;
+  /** Coarse status: `idle` / `running` / `ended` / `failed`. */
+  status: string;
+  /** The serving model, or null if not yet captured. */
+  model?: string | null;
+  /** RFC-3339 creation timestamp. */
+  createdAt: string;
+  /** RFC-3339 timestamp, bumped on every turn flush. */
+  lastActiveAt: string;
+  /** Cumulative input tokens across all turns. */
+  cumulativeInputTokens: number;
+  /** Cumulative output tokens across all turns. */
+  cumulativeOutputTokens: number;
+  /** Cumulative estimated cost in USD across all turns. */
+  cumulativeCostUsd: number;
 }
 
 /** Returned by `claude_auth_status`: the `claude` CLI login pre-flight. */

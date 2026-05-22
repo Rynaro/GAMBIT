@@ -7,6 +7,7 @@ import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { useRouteContext } from "@/lib/RouteContext";
 import type { DoctorResult } from "@/lib/useDoctor";
 import type { UseMcpStoreResult } from "@/lib/useMcpStore";
+import type { UseSessionsResult } from "@/lib/useSessions";
 import { DoctorRoute } from "@/routes/DoctorRoute";
 import { HarnessRoute } from "@/routes/HarnessRoute";
 import { McpStoreRoute } from "@/routes/McpStoreRoute";
@@ -27,10 +28,10 @@ interface RouteRendererProps {
   onCheckUpgrades?: () => void;
   /** S8 — Roster "Launch" action: pre-select an Eidolon and open Sessions. */
   onLaunchSession: (eidolonName: string) => void;
-  /** S8 — Eidolon name to seed the Sessions pre-launch picker with, if any. */
-  pendingSessionEidolon: string | null;
   doctor: DoctorResult;
   mcpStore: UseMcpStoreResult;
+  /** S2 — multi-session store, lifted to the App shell. */
+  sessions: UseSessionsResult;
 }
 
 function RouteRenderer({
@@ -39,9 +40,9 @@ function RouteRenderer({
   onClearProject,
   onCheckUpgrades,
   onLaunchSession,
-  pendingSessionEidolon,
   doctor,
   mcpStore,
+  sessions,
 }: RouteRendererProps) {
   const { activeRoute } = useRouteContext();
 
@@ -65,7 +66,7 @@ function RouteRenderer({
     case "methodology":
       return <MethodologyRoute projectPath={projectPath} />;
     case "sessions":
-      return <SessionsRoute projectPath={projectPath} initialEidolonName={pendingSessionEidolon} />;
+      return <SessionsRoute projectPath={projectPath} store={sessions} />;
     case "settings":
       return (
         <SettingsRoute
@@ -97,10 +98,10 @@ interface MainPaneProps {
   onCheckUpgrades?: () => void;
   /** S8 — Roster "Launch" action: pre-select an Eidolon and open Sessions. */
   onLaunchSession: (eidolonName: string) => void;
-  /** S8 — Eidolon name to seed the Sessions pre-launch picker with, if any. */
-  pendingSessionEidolon: string | null;
   doctor: DoctorResult;
   mcpStore: UseMcpStoreResult;
+  /** S2 — multi-session store, lifted to the App shell. */
+  sessions: UseSessionsResult;
 }
 
 export function MainPane({
@@ -109,9 +110,9 @@ export function MainPane({
   onClearProject,
   onCheckUpgrades,
   onLaunchSession,
-  pendingSessionEidolon,
   doctor,
   mcpStore,
+  sessions,
 }: MainPaneProps) {
   const { activeRoute } = useRouteContext();
 
@@ -124,9 +125,9 @@ export function MainPane({
           onClearProject={onClearProject}
           onCheckUpgrades={onCheckUpgrades}
           onLaunchSession={onLaunchSession}
-          pendingSessionEidolon={pendingSessionEidolon}
           doctor={doctor}
           mcpStore={mcpStore}
+          sessions={sessions}
         />
       </RouteErrorBoundary>
     </main>

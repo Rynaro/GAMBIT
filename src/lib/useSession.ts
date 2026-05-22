@@ -1,52 +1,37 @@
-// useSession.ts — React hook that drives a live, multi-turn Eidolon session.
+// useSession.ts — per-session SELECTOR over the multi-session `useSessions`
+// store (story S2).
 //
-// Unlike `useSync` (a one-shot process whose completion is terminal), an
-// Eidolon session is ALIVE across many turns: a turn completing does NOT end
-// the session — it returns to `awaiting-input`, ready for the next `sendTurn`.
+// v0.3.0's `useSession` was a SINGLE-session hook: it owned all session state
+// and `start()` wiped any prior session. Worse, it was mounted INSIDE
+// `SessionsRoute`, so a route change unmounted it and destroyed the transcript
+// (the route-change transcript-loss TODAY-bug, FINDING-016).
 //
-// State machine (non-terminal "alive" design):
-//   idle           — no session
-//   launching      — start_session invoked, turn 1 spawning
-//   turn-running   — a turn is in flight, session-events arriving
-//   awaiting-input — turn finished, session still alive, ready for next turn
-//   ended          — session closed cleanly (reserved; clear() returns to idle)
-//   failed         — a turn finished in error (terminal)
+// Story S2 moves the actual state into `useSessions` — a store lifted to the
+// App shell. `useSession` is now a thin SELECTOR: given the store and a
+// session id, it projects that session's slice + bound actions into the
+// stable `UseSessionResult` shape the v0.3.0 component code already consumes,
+// so `SessionsRoute` migrates with minimal churn.
 //
-//   launching ─┐
-//   awaiting-input ─┴─ sendTurn ─▶ turn-running ─▶ awaiting-input (success)
-//                                              └─▶ failed         (isError)
-//
-// IPC contract (4 commands, 3 events) — see session.rs / session.types.ts:
-//   Events  : session-event         SessionEventPayload
-//             session-stderr        SessionStderrPayload
-//             session-turn-complete SessionTurnCompletePayload
-//   Commands: start_session   (params: StartSessionParams) → SessionInfo
-//             send_turn       (sessionId, prompt)          → void
-//             cancel_session  (sessionId)                  → void
-//             claude_auth_status ()                        → AuthStatus
-//
-// Mirrors `useSync`'s structure: append-only accumulation, `unlistenRefs` +
-// `detachListeners`, listeners attached BEFORE `invoke` (the event-race fix),
-// cleanup on unmount, `sonner` toasts.
+// `SessionState` and `TranscriptEntry` are still defined here — they are the
+// shared session vocabulary imported across the route + the store + the
+// session components.
 
-import type {
-  AuthStatus,
-  ParsedEvent,
-  SessionEventPayload,
-  SessionInfo,
-  SessionStderrPayload,
-  SessionTurnCompletePayload,
-  StartSessionParams,
-} from "@/lib/session.types";
-import { invoke } from "@tauri-apps/api/core";
-import { type UnlistenFn, listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import type { AuthStatus, ParsedEvent, SessionInfo, StartSessionParams } from "@/lib/session.types";
+import type { UseSessionsResult } from "@/lib/useSessions";
 
 // ---------------------------------------------------------------------------
-// Types
+// Shared session vocabulary
 // ---------------------------------------------------------------------------
 
+/**
+ * The per-session state machine (non-terminal "alive" design):
+ *   idle           — no session
+ *   launching      — start_session invoked, turn 1 spawning
+ *   turn-running   — a turn is in flight, session-events arriving
+ *   awaiting-input — turn finished, session still alive, ready for next turn
+ *   ended          — session closed cleanly (reserved)
+ *   failed         — a turn finished in error
+ */
 export type SessionState =
   | "idle"
   | "launching"
@@ -64,9 +49,8 @@ export type SessionState =
  *   - `stderr` — a `session-stderr` diagnostics line; `line` is the text,
  *                `parsed` / `kind` are absent.
  *
- * `turn` is a per-turn grouping marker (1-based): every entry produced while a
- * given turn is in flight carries that turn's number, so S7 can render the
- * conversation grouped by turn.
+ * `turn` is a per-turn grouping marker (1-based) so the conversation can be
+ * rendered grouped by turn.
  */
 export interface TranscriptEntry {
   /** Source channel of this entry. */
@@ -83,247 +67,72 @@ export interface TranscriptEntry {
   ts: string;
 }
 
+// ---------------------------------------------------------------------------
+// Selector result — the stable single-session view
+// ---------------------------------------------------------------------------
+
+/**
+ * The per-session view `SessionsRoute` consumes — the v0.3.0 `useSession`
+ * surface, now projected out of the `useSessions` store slice.
+ */
 export interface UseSessionResult {
-  /** Current session state-machine state. */
+  /** Current session state-machine state (`idle` when no session selected). */
   status: SessionState;
   /** Append-only transcript of every event + stderr line seen. */
   transcript: TranscriptEntry[];
-  /** Descriptor returned by `start_session`; null until a session opens. */
+  /** Descriptor for the selected session; null when none is selected. */
   sessionInfo: SessionInfo | null;
   /** Result of the last `checkAuth()`; null until first checked. */
   authStatus: AuthStatus | null;
-  /** Open a new session and spawn turn 1. */
+  /** Open a new session and spawn turn 1 (adds to the store). */
   start: (params: StartSessionParams) => void;
-  /** Send a follow-up turn (only meaningful from `awaiting-input`). */
+  /** Send a follow-up turn on the selected session. */
   sendTurn: (prompt: string) => void;
-  /** Cancel the in-flight turn (SIGKILL). */
+  /** Cancel the in-flight turn of the selected session (SIGKILL). */
   cancel: () => void;
   /** Run the `claude` login pre-flight; updates `authStatus`. */
   checkAuth: () => void;
-  /** Tear everything down and reset to `idle`. */
-  clear: () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Hook
+// Selector
 // ---------------------------------------------------------------------------
 
-export function useSession(): UseSessionResult {
-  const [status, setStatus] = useState<SessionState>("idle");
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
-
-  // The session id currently being driven — used to filter incoming events so
-  // a stale session's events cannot leak into a freshly-started one.
-  const sessionIdRef = useRef<string | null>(null);
-  // 1-based turn counter — the per-turn grouping marker on each TranscriptEntry.
-  const turnRef = useRef<number>(0);
-
-  // Unlisten refs — cleaned up when a new session starts, on clear, on unmount.
-  const unlistenRefs = useRef<UnlistenFn[]>([]);
-
-  /** Remove all active Tauri event listeners. */
-  function detachListeners() {
-    for (const fn of unlistenRefs.current) {
-      fn();
-    }
-    unlistenRefs.current = [];
-  }
-
-  // Cleanup on unmount.
-  useEffect(() => {
-    return () => {
-      detachListeners();
-    };
-  }, []);
-
-  /**
-   * Attach the three session-event listeners. Called BEFORE `start_session` is
-   * invoked so events emitted before the listener registers are not dropped
-   * (the `useSync` race fix). Events are filtered by `sessionId` against
-   * `sessionIdRef` so a stale session's stream cannot leak in.
-   */
-  async function attachListeners() {
-    const unlistenEvent = await listen<SessionEventPayload>("session-event", (ev) => {
-      if (ev.payload.sessionId !== sessionIdRef.current) return;
-      setTranscript((prev) => [
-        ...prev,
-        {
-          source: "event",
-          turn: turnRef.current,
-          kind: ev.payload.kind,
-          parsed: ev.payload.parsed,
-          line: ev.payload.raw,
-          ts: ev.payload.ts,
-        },
-      ]);
-    });
-
-    const unlistenStderr = await listen<SessionStderrPayload>("session-stderr", (ev) => {
-      if (ev.payload.sessionId !== sessionIdRef.current) return;
-      setTranscript((prev) => [
-        ...prev,
-        {
-          source: "stderr",
-          turn: turnRef.current,
-          line: ev.payload.line,
-          ts: ev.payload.ts,
-        },
-      ]);
-    });
-
-    const unlistenComplete = await listen<SessionTurnCompletePayload>(
-      "session-turn-complete",
-      (ev) => {
-        if (ev.payload.sessionId !== sessionIdRef.current) return;
-
-        // R6 dual-finalize: a turn finalises on EITHER a terminal `result`
-        // event OR a clean process exit. `isError` already folds both signals
-        // (non-zero exit OR a `result` with isError) on the Rust side — we
-        // trust it for the success/failure split. `hadResult` is surfaced for
-        // diagnostics: a clean turn that exited WITHOUT a `result` event
-        // (hadResult === false — the known claude-code dropped-result bug)
-        // still transitions to `awaiting-input` exactly like one that did.
-        const { exitCode, hadResult, isError } = ev.payload;
-
-        if (isError) {
-          setStatus("failed");
-          toast.error("Turn failed", {
-            description: `exit ${exitCode}`,
-            duration: Number.POSITIVE_INFINITY,
-          });
-          return;
-        }
-
-        // Success — the session stays alive, ready for the next turn.
-        setStatus("awaiting-input");
-        toast.success("Turn complete", {
-          description: hadResult ? "result received" : "process exited cleanly",
-        });
-      },
-    );
-
-    unlistenRefs.current = [unlistenEvent, unlistenStderr, unlistenComplete];
-  }
-
-  const start = useCallback((params: StartSessionParams) => {
-    // Tear down any previous session's listeners before attaching new ones.
-    detachListeners();
-
-    sessionIdRef.current = null;
-    turnRef.current = 1;
-    setStatus("launching");
-    setTranscript([]);
-    setSessionInfo(null);
-
-    async function run() {
-      // Attach listeners BEFORE invoking start_session to avoid the race where
-      // session-events arrive before we register (the useSync fix).
-      await attachListeners();
-
-      try {
-        const info = await invoke<SessionInfo>("start_session", { params });
-        // Now that we have the host-generated id, events for this session can
-        // be matched; earlier events (if any) were emitted with this same id.
-        sessionIdRef.current = info.sessionId;
-        setSessionInfo(info);
-        setStatus("turn-running");
-      } catch (err) {
-        const msg = typeof err === "string" ? err : JSON.stringify(err);
-        setTranscript((prev) => [
-          ...prev,
-          {
-            source: "stderr",
-            turn: turnRef.current,
-            line: `[gambit] error: ${msg}`,
-            ts: new Date().toISOString(),
-          },
-        ]);
-        setStatus("failed");
-        detachListeners();
-        toast.error("Session failed to start", {
-          description: msg,
-          duration: Number.POSITIVE_INFINITY,
-        });
-      }
-    }
-
-    void run();
-  }, []);
-
-  const sendTurn = useCallback((prompt: string) => {
-    const sessionId = sessionIdRef.current;
-    if (!sessionId) {
-      console.warn("[useSession] sendTurn called with no active session");
-      return;
-    }
-
-    // A new turn — bump the grouping marker and re-enter turn-running.
-    turnRef.current += 1;
-    setStatus("turn-running");
-
-    invoke("send_turn", { sessionId, prompt }).catch((err) => {
-      const msg = typeof err === "string" ? err : JSON.stringify(err);
-      setTranscript((prev) => [
-        ...prev,
-        {
-          source: "stderr",
-          turn: turnRef.current,
-          line: `[gambit] error: ${msg}`,
-          ts: new Date().toISOString(),
-        },
-      ]);
-      setStatus("failed");
-      toast.error("Turn failed to start", {
-        description: msg,
-        duration: Number.POSITIVE_INFINITY,
-      });
-    });
-  }, []);
-
-  const cancel = useCallback(() => {
-    const sessionId = sessionIdRef.current;
-    if (!sessionId) return;
-
-    invoke("cancel_session", { sessionId }).catch((err) => {
-      console.warn("[useSession] cancel_session failed:", err);
-    });
-    // The kill makes the in-flight turn finalise with the cancel sentinel
-    // (exit -2 → isError), so session-turn-complete will move us to `failed`.
-    toast.info("Turn cancelled");
-  }, []);
-
-  const checkAuth = useCallback(() => {
-    invoke<AuthStatus>("claude_auth_status")
-      .then((result) => {
-        setAuthStatus(result);
-      })
-      .catch((err) => {
-        const msg = typeof err === "string" ? err : JSON.stringify(err);
-        console.warn("[useSession] claude_auth_status failed:", err);
-        setAuthStatus({ loggedIn: false, detail: msg });
-      });
-  }, []);
-
-  const clear = useCallback(() => {
-    detachListeners();
-    sessionIdRef.current = null;
-    turnRef.current = 0;
-    setStatus("idle");
-    setTranscript([]);
-    setSessionInfo(null);
-  }, []);
+/**
+ * Project the `useSessions` store down to a single session's `UseSessionResult`
+ * view.
+ *
+ * `sessionId` is the session to select; pass `null` for the "no session yet"
+ * case (the route's pre-launch panel) — `status` is then `idle`, `transcript`
+ * empty, `sessionInfo` null, but the actions are still bound (`start` opens a
+ * fresh session, `checkAuth` runs the pre-flight).
+ *
+ * This is a pure projection — it holds no state of its own. The store lives in
+ * the App shell, so the transcript survives a route change (the structural fix
+ * for the v0.3.0 transcript-loss bug).
+ */
+export function useSession(store: UseSessionsResult, sessionId: string | null): UseSessionResult {
+  const slice = sessionId ? store.sessions[sessionId] : undefined;
 
   return {
-    status,
-    transcript,
-    sessionInfo,
-    authStatus,
-    start,
-    sendTurn,
-    cancel,
-    checkAuth,
-    clear,
+    status: slice?.status ?? "idle",
+    transcript: slice?.transcript ?? [],
+    sessionInfo: slice?.sessionInfo ?? null,
+    authStatus: store.authStatus,
+    start: (params: StartSessionParams) => {
+      void store.start(params);
+    },
+    sendTurn: (prompt: string) => {
+      if (!sessionId) {
+        console.warn("[useSession] sendTurn with no selected session");
+        return;
+      }
+      store.sendTurn(sessionId, prompt);
+    },
+    cancel: () => {
+      if (!sessionId) return;
+      store.cancel(sessionId);
+    },
+    checkAuth: store.checkAuth,
   };
 }

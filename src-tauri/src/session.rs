@@ -441,6 +441,41 @@ fn build_record(meta: &SessionMeta, persist: &PersistState, status: &str) -> Ses
     }
 }
 
+/// Reconstruct a live [`SessionHandle`] from a persisted [`SessionRecord`].
+///
+/// Story S2 — the `reopen_session` reconstruction seam, factored out so the
+/// record→handle mapping is unit-testable without an `AppHandle` or disk I/O.
+///
+/// Metadata is copied verbatim from the record. The persistence buffers
+/// (`transcript` / `per_turn` / `cumulative_usage` / `cumulative_cost_usd` /
+/// `model`) are SEEDED from the record so a later turn's flush rebuilds the
+/// full record from them rather than truncating the rehydrated history. Live
+/// state is fresh: `child = None`, `turn_in_flight = false`, `status = "idle"`
+/// (re-entry is lazy — no turn is spawned). The `turn_counter` is seeded past
+/// the highest recorded turn so the next `send_turn` stamps a fresh number.
+fn handle_from_record(record: &SessionRecord) -> SessionHandle {
+    let turn_counter_start = record.per_turn.iter().map(|t| t.turn).max().unwrap_or(0);
+    SessionHandle {
+        eidolon_name: record.eidolon_name.clone(),
+        project_path: PathBuf::from(&record.project_path),
+        permission_mode: record.permission_mode.clone(),
+        append_system_prompt: record.append_system_prompt.clone(),
+        allowed_tools: record.allowed_tools.clone(),
+        status: "idle".to_string(),
+        child: Arc::new(Mutex::new(None)),
+        turn_in_flight: Arc::new(AtomicBool::new(false)),
+        is_cortex: record.is_cortex,
+        title: record.title.clone(),
+        created_at: record.created_at.clone(),
+        model: Arc::new(StdMutex::new(record.model.clone())),
+        transcript: Arc::new(StdMutex::new(record.transcript.clone())),
+        per_turn: Arc::new(StdMutex::new(record.per_turn.clone())),
+        cumulative_usage: Arc::new(StdMutex::new(record.cumulative_usage.clone())),
+        cumulative_cost_usd: Arc::new(StdMutex::new(record.cumulative_cost_usd)),
+        turn_counter: Arc::new(AtomicU32::new(turn_counter_start)),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Per-turn machinery
 // ---------------------------------------------------------------------------
@@ -969,6 +1004,89 @@ pub async fn send_turn(
     Ok(())
 }
 
+/// Tauri command: re-insert a persisted session into the live registry.
+///
+/// Story S2 — re-entry after a route change or an app restart. The
+/// [`SessionRegistry`] is in-memory, so a session loaded from disk has no
+/// live [`SessionHandle`]: a follow-up `send_turn` would fail with "no session
+/// registered". `reopen_session` closes that gap.
+///
+/// It reads the persisted [`SessionRecord`] (via `session_store`), reconstructs
+/// a `SessionHandle` with the record's metadata AND its accumulated content
+/// rehydrated — the transcript buffer, the per-turn finalisation log, the
+/// cumulative usage/cost, the captured model, and the turn counter set to the
+/// number of turns already recorded. Rehydrating the buffers matters: a later
+/// turn's flush rebuilds the FULL [`SessionRecord`] from `persist.transcript`,
+/// so an empty buffer would silently truncate the session's history on the
+/// next `send_turn`.
+///
+/// The live state is fresh: `child = None`, `turn_in_flight = false`. It does
+/// NOT spawn a turn — re-entry is lazy; the next `send_turn` issues the
+/// `--resume <uuid>` for this session.
+///
+/// Idempotent: if the session is already live in the registry (e.g. reopened
+/// twice, or never unmounted), the existing handle is left untouched and its
+/// current [`SessionInfo`] is returned.
+///
+/// Lock discipline: the registry map guard is taken twice — once for the
+/// idempotency probe, once for the insert — each scoped to a synchronous
+/// block, never held across the `.await` on `session_store` I/O (which itself
+/// is synchronous `std::fs`, run before the second lock).
+#[tauri::command]
+pub async fn reopen_session(
+    state: State<'_, SessionRegistry>,
+    app: AppHandle,
+    session_id: String,
+) -> Result<SessionInfo, String> {
+    // --- Parse the UUID ---
+    let uuid = Uuid::parse_str(&session_id)
+        .map_err(|e| format!("invalid session id '{session_id}': {e}"))?;
+
+    // --- Idempotency probe: already live? Return its current SessionInfo ---
+    // The map guard is scoped to this block and dropped before any I/O.
+    {
+        let sessions = state.sessions.lock().await;
+        if let Some(handle) = sessions.get(&uuid) {
+            return Ok(SessionInfo {
+                session_id: session_id.clone(),
+                eidolon_name: handle.eidolon_name.clone(),
+                project_path: handle.project_path.to_string_lossy().to_string(),
+                permission_mode: handle.permission_mode.clone(),
+                status: handle.status.clone(),
+                created_at: handle.created_at.clone(),
+                is_cortex: handle.is_cortex,
+            });
+        }
+    }
+
+    // --- Load the persisted record from disk ---
+    let record = session_store::read_record(&app, &session_id)?;
+
+    // --- Reconstruct a SessionHandle with the record's content rehydrated ---
+    // Live state is fresh (no child, no turn in flight); the persistence
+    // buffers are seeded from the record so a later turn's flush does not
+    // truncate the rehydrated history. See `handle_from_record`.
+    let handle = handle_from_record(&record);
+
+    // --- Insert into the registry (guard scoped to the synchronous insert) ---
+    // A racing `reopen_session` for the same id may have inserted between the
+    // probe and here — re-check under the guard and prefer the existing handle.
+    {
+        let mut sessions = state.sessions.lock().await;
+        sessions.entry(uuid).or_insert(handle);
+    }
+
+    Ok(SessionInfo {
+        session_id,
+        eidolon_name: record.eidolon_name,
+        project_path: record.project_path,
+        permission_mode: record.permission_mode,
+        status: "idle".to_string(),
+        created_at: record.created_at,
+        is_cortex: record.is_cortex,
+    })
+}
+
 /// Tauri command: report the `claude` CLI login state as a launch pre-flight.
 ///
 /// A one-shot (no events), mirroring the `mcp_list` / `check_upgrades` shape:
@@ -1371,6 +1489,138 @@ mod tests {
             *guard = None;
         }
         assert!(child_slot.lock().await.is_none(), "slot stays None");
+    }
+
+    // --- reopen_session reconstruction (story S2) -----------------------------
+
+    fn sample_record() -> SessionRecord {
+        SessionRecord {
+            uuid: "44444444-4444-4444-4444-444444444444".to_string(),
+            eidolon_name: "Sage".to_string(),
+            is_cortex: false,
+            title: "Reopened session".to_string(),
+            project_path: "/tmp/project".to_string(),
+            permission_mode: "acceptEdits".to_string(),
+            append_system_prompt: "You are Sage.".to_string(),
+            allowed_tools: vec!["Read".to_string(), "Edit".to_string()],
+            status: "failed".to_string(),
+            model: Some("claude-opus-4-7".to_string()),
+            created_at: "2026-05-22T12:00:00+00:00".to_string(),
+            last_active_at: "2026-05-22T12:30:00+00:00".to_string(),
+            transcript: vec![PersistedEntry {
+                source: "event".to_string(),
+                turn: 1,
+                kind: Some("assistant".to_string()),
+                parsed: None,
+                line: r#"{"type":"assistant"}"#.to_string(),
+                ts: "2026-05-22T12:00:00+00:00".to_string(),
+            }],
+            cumulative_usage: CumulativeUsage {
+                input_tokens: 900,
+                output_tokens: 120,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 50,
+            },
+            cumulative_cost_usd: Some(0.0456),
+            per_turn: vec![
+                TurnRecord {
+                    turn: 1,
+                    result_seen: true,
+                },
+                TurnRecord {
+                    turn: 2,
+                    result_seen: false,
+                },
+            ],
+        }
+    }
+
+    /// `handle_from_record` copies the record's metadata verbatim and seeds the
+    /// live state fresh — `idle`, no child, no turn in flight.
+    #[test]
+    fn handle_from_record_maps_metadata_and_fresh_live_state() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+
+        // Metadata copied verbatim from the record.
+        assert_eq!(handle.eidolon_name, "Sage");
+        assert_eq!(handle.project_path, PathBuf::from("/tmp/project"));
+        assert_eq!(handle.permission_mode, "acceptEdits");
+        assert_eq!(handle.append_system_prompt, "You are Sage.");
+        assert_eq!(handle.allowed_tools, vec!["Read", "Edit"]);
+        assert!(!handle.is_cortex);
+        assert_eq!(handle.title, "Reopened session");
+        assert_eq!(handle.created_at, "2026-05-22T12:00:00+00:00");
+
+        // Live state is FRESH regardless of the record's persisted status —
+        // re-entry is lazy, the session is idle until the next `send_turn`.
+        assert_eq!(handle.status, "idle");
+        assert!(!handle.turn_in_flight.load(Ordering::SeqCst));
+    }
+
+    /// `handle_from_record` rehydrates the content buffers so a later turn's
+    /// flush rebuilds the FULL record rather than truncating prior history.
+    #[test]
+    fn handle_from_record_rehydrates_content_buffers() {
+        let record = sample_record();
+        let handle = handle_from_record(&record);
+
+        // Transcript buffer carries the persisted entries.
+        assert_eq!(
+            handle.transcript.lock().unwrap().len(),
+            1,
+            "transcript must be rehydrated, not empty"
+        );
+        // Per-turn log carries every recorded turn.
+        assert_eq!(handle.per_turn.lock().unwrap().len(), 2);
+        // Cumulative usage + cost + model are seeded from the record.
+        assert_eq!(handle.cumulative_usage.lock().unwrap().input_tokens, 900);
+        assert_eq!(*handle.cumulative_cost_usd.lock().unwrap(), Some(0.0456));
+        assert_eq!(
+            handle.model.lock().unwrap().as_deref(),
+            Some("claude-opus-4-7")
+        );
+        // The turn counter is seeded past the highest recorded turn — the next
+        // `send_turn` (counter + 1) stamps turn 3.
+        assert_eq!(handle.turn_counter.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            handle.turn_counter.fetch_add(1, Ordering::SeqCst) + 1,
+            3,
+            "next turn after rehydration is turn 3"
+        );
+    }
+
+    /// A record with no per-turn entries (a session that never finished a turn)
+    /// rehydrates with the turn counter at 0 — the next `send_turn` is turn 1.
+    #[test]
+    fn handle_from_record_empty_per_turn_starts_counter_at_zero() {
+        let mut record = sample_record();
+        record.per_turn.clear();
+        record.transcript.clear();
+        let handle = handle_from_record(&record);
+        assert_eq!(handle.turn_counter.load(Ordering::SeqCst), 0);
+        assert!(handle.transcript.lock().unwrap().is_empty());
+    }
+
+    /// `reopen_session` is idempotent: re-inserting an already-live session
+    /// must not clobber it. `HashMap::entry().or_insert()` is the seam — a
+    /// second insert for the same key is a no-op.
+    #[test]
+    fn reopen_is_idempotent_via_entry_or_insert() {
+        let mut map: HashMap<Uuid, SessionHandle> = HashMap::new();
+        let id = Uuid::new_v4();
+
+        // First reopen inserts.
+        map.entry(id).or_insert_with(|| dummy_handle("First"));
+        assert_eq!(map.get(&id).unwrap().eidolon_name, "First");
+
+        // A second reopen for the same id must NOT replace the live handle.
+        map.entry(id).or_insert_with(|| dummy_handle("Second"));
+        assert_eq!(
+            map.get(&id).unwrap().eidolon_name,
+            "First",
+            "an already-live session must not be clobbered by reopen"
+        );
     }
 
     /// The `session-turn-complete` payload serialises to the camelCase IPC
