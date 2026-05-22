@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-05-22
+
+The second v0.3.x minor — the Sessions surface becomes a chat.
+
+### Added
+
+- The Sessions route is now a list↔detail shell — a persistent left rail lists
+  every session (title, Eidolon/cortex badge, status dot, last-active time)
+  with a "New session" button and a per-row delete.
+- One unified composer. The separate pre-launch form is gone: with no session
+  selected, typing and pressing ⌘↵ creates a session and sends that text as
+  turn 1; the Eidolon picker and permission-mode controls collapse into an
+  optional disclosure. The working directory is resolved and pinned *before*
+  turn 1 (selected project → most-recently-active session's project → blocked
+  if neither), so `--resume` can never silently fork a fresh empty session.
+
+### Changed
+
+- `SessionSummary` now carries `projectPath`, so the session list resolves a
+  working directory without an extra `load_session` round-trip.
+
 ## [0.3.1] — 2026-05-22
 
 The first v0.3.x minor — session persistence. Sessions now survive app restarts
