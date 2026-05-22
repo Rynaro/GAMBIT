@@ -25,11 +25,26 @@ export interface AnsiToken {
 export function parseAnsi(line: string): AnsiToken[] {
   if (!line) return [{ text: "", class: "" }];
 
-  // anser returns an array of objects with .content and .classes
+  // anser's ansiToJson yields per-span style components — `fg`/`bg` carry
+  // class-name values (e.g. "ansi-red") under `use_classes`, and `decorations`
+  // lists style flags ("bold", …). It does NOT emit an aggregated class
+  // string, so build one here the same way anser's own ansiToHtml does:
+  // `<fg>-fg`, `<bg>-bg`, and `ansi-<decoration>`.
   const spans = Anser.ansiToJson(line, { use_classes: true, remove_empty: false });
 
-  return spans.map((span) => ({
-    text: span.content,
-    class: span.classes ?? "",
-  }));
+  return spans.map((span) => {
+    const styled = span as {
+      content: string;
+      fg: string | null;
+      bg: string | null;
+      decorations?: string[];
+    };
+    const classes: string[] = [];
+    if (styled.fg) classes.push(`${styled.fg}-fg`);
+    if (styled.bg) classes.push(`${styled.bg}-bg`);
+    for (const decoration of styled.decorations ?? []) {
+      classes.push(`ansi-${decoration}`);
+    }
+    return { text: styled.content, class: classes.join(" ") };
+  });
 }

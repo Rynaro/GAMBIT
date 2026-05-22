@@ -6,9 +6,9 @@
 // The first failed check auto-expands when state transitions to "done".
 // A "View raw" affordance surfaces the raw stderr for escape-hatch debugging.
 
-import { useEffect, useRef, useState } from "react";
 import type { DoctorCheck } from "@/lib/parseDoctorStderr";
 import type { DoctorRunState } from "@/lib/useDoctor";
+import { useEffect, useRef, useState } from "react";
 import "./DoctorDashboard.css";
 
 // ---------------------------------------------------------------------------
@@ -65,15 +65,10 @@ function CheckRow({ check, forceExpanded = false }: CheckRowProps) {
     setExpanded((prev) => !prev);
   }
 
-  const pillLabel =
-    check.status === "pass" ? "pass" : check.status === "fail" ? "fail" : "warn";
+  const pillLabel = check.status === "pass" ? "pass" : check.status === "fail" ? "fail" : "warn";
 
   return (
-    <div
-      className="doctor-check"
-      data-status={check.status}
-      role="listitem"
-    >
+    <div className="doctor-check" data-status={check.status} role="listitem">
       {/* Header row */}
       <div
         className="doctor-check-header"
@@ -103,10 +98,7 @@ function CheckRow({ check, forceExpanded = false }: CheckRowProps) {
       {/* Detail body — only rendered when expanded and there is content */}
       {expanded && hasDetails && (
         <div className="doctor-check-details">
-          <pre
-            className="doctor-check-message"
-            data-status={check.status}
-          >
+          <pre className="doctor-check-message" data-status={check.status}>
             {check.message}
           </pre>
         </div>
@@ -119,12 +111,7 @@ function CheckRow({ check, forceExpanded = false }: CheckRowProps) {
 // DoctorDashboard
 // ---------------------------------------------------------------------------
 
-export function DoctorDashboard({
-  state,
-  checks,
-  rawStderr,
-  exitCode,
-}: DoctorDashboardProps) {
+export function DoctorDashboard({ state, checks, rawStderr, exitCode }: DoctorDashboardProps) {
   const [showRaw, setShowRaw] = useState(false);
 
   // Index of the first failed check — auto-expand when run completes.
@@ -161,18 +148,12 @@ export function DoctorDashboard({
           {(state === "done" || state === "running") && outcome && (
             <div className="doctor-rollup" data-outcome={outcome} aria-live="polite">
               <span className="doctor-rollup-label">Results:</span>
-              <span className="doctor-rollup-count doctor-rollup-count--pass">
-                {pass} pass
-              </span>
+              <span className="doctor-rollup-count doctor-rollup-count--pass">{pass} pass</span>
               {warn > 0 && (
-                <span className="doctor-rollup-count doctor-rollup-count--warn">
-                  {warn} warn
-                </span>
+                <span className="doctor-rollup-count doctor-rollup-count--warn">{warn} warn</span>
               )}
               {fail > 0 && (
-                <span className="doctor-rollup-count doctor-rollup-count--fail">
-                  {fail} fail
-                </span>
+                <span className="doctor-rollup-count doctor-rollup-count--fail">{fail} fail</span>
               )}
               {exitCode !== null && (
                 <span
@@ -180,10 +161,7 @@ export function DoctorDashboard({
                     marginLeft: "auto",
                     fontFamily: "var(--font-mono)",
                     fontSize: "10px",
-                    color:
-                      exitCode === 0
-                        ? "var(--status-ok)"
-                        : "var(--status-error)",
+                    color: exitCode === 0 ? "var(--status-ok)" : "var(--status-error)",
                   }}
                 >
                   exit {exitCode}
@@ -227,11 +205,11 @@ export function DoctorDashboard({
       {/* Running with no checks yet — show spinner placeholder rows */}
       {isRunningNoChecks && (
         <div className="doctor-empty-state" aria-live="polite" aria-busy="true">
-          <span className="doctor-empty-icon" aria-hidden="true">⬡</span>
-          <span className="doctor-empty-heading">Running checks…</span>
-          <span className="doctor-empty-body">
-            Analysing your project's Eidolon installation.
+          <span className="doctor-empty-icon" aria-hidden="true">
+            ⬡
           </span>
+          <span className="doctor-empty-heading">Running checks…</span>
+          <span className="doctor-empty-body">Analysing your project's Eidolon installation.</span>
         </div>
       )}
     </div>

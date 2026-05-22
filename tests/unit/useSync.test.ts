@@ -5,9 +5,9 @@
 //   @tauri-apps/api/event → vi.fn() for listen; exposes test helpers to
 //                           simulate emitting sync events.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
 import { useSync } from "@/lib/useSync";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks
@@ -19,12 +19,12 @@ const mockUnlisten = vi.fn();
 // Captures registered event handlers so tests can simulate emissions.
 const eventHandlers: Record<string, (event: { payload: unknown }) => void> = {};
 
-const mockListen = vi.fn().mockImplementation(
-  (eventName: string, handler: (event: { payload: unknown }) => void) => {
+const mockListen = vi
+  .fn()
+  .mockImplementation((eventName: string, handler: (event: { payload: unknown }) => void) => {
     eventHandlers[eventName] = handler;
     return Promise.resolve(mockUnlisten);
-  }
-);
+  });
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
@@ -50,9 +50,10 @@ function emitStderr(line: string, ts = "2026-05-21T00:00:00Z") {
   });
 }
 
-function emitComplete(exit_code: number) {
+function emitComplete(exitCode: number) {
   act(() => {
-    eventHandlers["sync-complete"]?.({ payload: { exit_code } });
+    // Wire field is camelCase `exitCode` (serde rename_all on CompletePayload).
+    eventHandlers["sync-complete"]?.({ payload: { exitCode } });
   });
 }
 
@@ -70,7 +71,10 @@ describe("useSync", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    // clearAllMocks, NOT restoreAllMocks: restore wipes the module-level
+    // mockListen implementation, so subsequent tests' listen() returns
+    // undefined and detachListeners crashes on a non-function unlisten.
+    vi.clearAllMocks();
   });
 
   it("starts in idle state", () => {
@@ -203,9 +207,7 @@ describe("useSync", () => {
     });
 
     expect(result.current.state).toBe("failed");
-    const errorLine = result.current.lines.find((l) =>
-      l.text.includes("eidolons CLI not on PATH")
-    );
+    const errorLine = result.current.lines.find((l) => l.text.includes("eidolons CLI not on PATH"));
     expect(errorLine).toBeDefined();
     expect(errorLine?.stream).toBe("stderr");
   });

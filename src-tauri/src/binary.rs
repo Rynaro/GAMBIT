@@ -72,6 +72,62 @@ pub fn find_eidolons(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     )
 }
 
+/// Resolve an arbitrary host tool (e.g. `"claude"`, `"sh"`) to a runnable path.
+///
+/// Unlike `find_eidolons`, this is host-agnostic — it makes no assumption
+/// about a bundled-extracted copy or a nexus fallback location. Discovery
+/// order:
+///   1. Caller-supplied `override_path`, if `Some` and it exists on disk.
+///   2. PATH lookup via `which::which(name)`.
+///
+/// Returns an error string if neither level resolves. Used by S4
+/// (`session.rs`) to launch a host tool with piped stdio.
+///
+/// `_app` is accepted for signature parity with `find_eidolons` and to
+/// leave room for an app-data-dir discovery level later; it is currently
+/// unused.
+#[allow(dead_code)] // wired up by S4 (session.rs)
+pub fn find_host_tool(
+    _app: &tauri::AppHandle,
+    name: &str,
+    override_path: Option<&std::path::Path>,
+) -> Result<PathBuf, String> {
+    resolve_host_tool(name, override_path)
+}
+
+/// `AppHandle`-free core of `find_host_tool`.
+///
+/// Split out so it can be unit-tested without constructing a Tauri app.
+/// Discovery order matches `find_host_tool`'s doc-comment:
+///   1. Caller-supplied `override_path`, if `Some` and it exists on disk.
+///   2. PATH lookup via `which::which(name)`.
+#[allow(dead_code)] // wired up by S4 (session.rs)
+fn resolve_host_tool(
+    name: &str,
+    override_path: Option<&std::path::Path>,
+) -> Result<PathBuf, String> {
+    // --- Level 1: caller-supplied override ---
+    if let Some(p) = override_path {
+        if p.exists() {
+            return Ok(p.to_path_buf());
+        }
+        return Err(format!(
+            "host tool override path does not exist: {}",
+            p.display()
+        ));
+    }
+
+    // --- Level 2: PATH lookup ---
+    if let Ok(path) = which::which(name) {
+        return Ok(path);
+    }
+
+    Err(format!(
+        "host tool '{name}' not found on PATH; \
+         supply an explicit override path or install it"
+    ))
+}
+
 /// Probe all three discovery levels and return a status snapshot.
 ///
 /// Used by the `binary_status` IPC command so the Settings panel can
@@ -160,5 +216,71 @@ pub fn binary_status(app: tauri::AppHandle) -> BinaryStatus {
         path_lookup: probe.path_lookup.map(|p| p.to_string_lossy().into_owned()),
         nexus_fallback_exists: probe.nexus_fallback_exists,
         nexus_fallback_path: probe.nexus_fallback_path.map(|p| p.to_string_lossy().into_owned()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+//
+// `find_host_tool` takes an `AppHandle` purely for signature parity; its
+// real logic lives in the `AppHandle`-free `resolve_host_tool` core, which
+// is what these tests exercise. Kept hermetic: PATH-only, no network, no
+// fixtures. (First Rust tests in the repo — establishes the pattern.)
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_host_tool;
+    use std::path::Path;
+
+    /// A binary guaranteed to be on PATH on Unix resolves to an existing path.
+    #[test]
+    #[cfg(unix)]
+    fn resolves_known_path_binary() {
+        let resolved = resolve_host_tool("sh", None)
+            .expect("`sh` should resolve on any unix PATH");
+        assert!(
+            resolved.exists(),
+            "resolved path should exist on disk: {}",
+            resolved.display()
+        );
+    }
+
+    /// A guaranteed-absent tool name returns an Err mentioning the name.
+    #[test]
+    fn absent_tool_returns_err() {
+        let name = "gambit-definitely-not-a-real-tool-zzz";
+        let err = resolve_host_tool(name, None)
+            .expect_err("a nonexistent tool must not resolve");
+        assert!(
+            err.contains(name),
+            "error should name the missing tool, got: {err}"
+        );
+    }
+
+    /// An explicit override path that exists is returned verbatim, bypassing PATH.
+    #[test]
+    fn override_path_that_exists_is_returned() {
+        // The test source file itself is a guaranteed-present path.
+        let here = Path::new(file!());
+        if !here.exists() {
+            // `file!()` is workspace-relative; skip if cwd makes it unresolvable.
+            return;
+        }
+        let resolved = resolve_host_tool("irrelevant-name", Some(here))
+            .expect("an existing override path should resolve");
+        assert_eq!(resolved, here);
+    }
+
+    /// An override path that does not exist is an Err, even for a real tool name.
+    #[test]
+    fn override_path_that_is_missing_returns_err() {
+        let missing = Path::new("/nonexistent/gambit/host/tool/zzz");
+        let err = resolve_host_tool("sh", Some(missing))
+            .expect_err("a missing override path must not resolve");
+        assert!(
+            err.contains("override path does not exist"),
+            "error should explain the missing override, got: {err}"
+        );
     }
 }

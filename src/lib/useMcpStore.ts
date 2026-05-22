@@ -19,11 +19,11 @@
 //             mcp-stderr  { line: string; ts: string }
 //             mcp-complete { exitCode: number; action: string; name: string }
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { McpListEntry, McpAction, McpCompletePayload } from "./mcp.types";
+import type { McpAction, McpCompletePayload, McpListEntry } from "./mcp.types";
 import type { SyncLine } from "./useSync";
 
 // ---------------------------------------------------------------------------
@@ -159,38 +159,35 @@ export function useMcpStore(projectPath: string | null): UseMcpStoreResult {
         ]);
       });
 
-      const unlistenComplete = await listen<McpCompletePayload>(
-        "mcp-complete",
-        (ev) => {
-          const code = ev.payload.exitCode;
-          const evAction = ev.payload.action;
-          const evName = ev.payload.name;
-          setExitCode(code);
-          if (code === -2) {
-            setState("cancelled");
-            const opVerb = evAction === "install" ? "Install" : "Uninstall";
-            toast.info(`${opVerb} cancelled`);
-          } else if (code === 0) {
-            setState("done");
-            const doneVerb = evAction === "install" ? "Installed" : "Uninstalled";
-            toast.success(`${doneVerb} ${evName}`);
-          } else {
-            setState("failed");
-            const failVerb = evAction === "install" ? "Install" : "Uninstall";
-            toast.error(`${failVerb} failed: ${evName}`, {
-              description: `exit ${code}`,
-              duration: Infinity,
-            });
-          }
-          detachListeners();
-          // Auto-refresh the list so row states update after completion.
-          if (code === 0 || code === -2) {
-            setTimeout(() => {
-              void refresh();
-            }, 300);
-          }
+      const unlistenComplete = await listen<McpCompletePayload>("mcp-complete", (ev) => {
+        const code = ev.payload.exitCode;
+        const evAction = ev.payload.action;
+        const evName = ev.payload.name;
+        setExitCode(code);
+        if (code === -2) {
+          setState("cancelled");
+          const opVerb = evAction === "install" ? "Install" : "Uninstall";
+          toast.info(`${opVerb} cancelled`);
+        } else if (code === 0) {
+          setState("done");
+          const doneVerb = evAction === "install" ? "Installed" : "Uninstalled";
+          toast.success(`${doneVerb} ${evName}`);
+        } else {
+          setState("failed");
+          const failVerb = evAction === "install" ? "Install" : "Uninstall";
+          toast.error(`${failVerb} failed: ${evName}`, {
+            description: `exit ${code}`,
+            duration: Number.POSITIVE_INFINITY,
+          });
         }
-      );
+        detachListeners();
+        // Auto-refresh the list so row states update after completion.
+        if (code === 0 || code === -2) {
+          setTimeout(() => {
+            void refresh();
+          }, 300);
+        }
+      });
 
       unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
 
@@ -214,7 +211,7 @@ export function useMcpStore(projectPath: string | null): UseMcpStoreResult {
         detachListeners();
       }
     },
-    [projectPath, refresh]
+    [projectPath, refresh],
   );
 
   /** install — stream `eidolons mcp install <name>`. */
@@ -222,7 +219,7 @@ export function useMcpStore(projectPath: string | null): UseMcpStoreResult {
     async (name: string) => {
       await startStreamingOp(name, "install");
     },
-    [startStreamingOp]
+    [startStreamingOp],
   );
 
   /** uninstall — stream `eidolons mcp uninstall <name>`. */
@@ -230,7 +227,7 @@ export function useMcpStore(projectPath: string | null): UseMcpStoreResult {
     async (name: string) => {
       await startStreamingOp(name, "uninstall");
     },
-    [startStreamingOp]
+    [startStreamingOp],
   );
 
   /** cancel — kill the active mcp child process. */

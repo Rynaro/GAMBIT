@@ -3,11 +3,11 @@
 // Right pane: full markdown render of the active Eidolon's agent.md
 //             (react-markdown + remark-gfm; YAML front-matter stripped).
 
-import { useState, useEffect } from "react";
-import { readTextFile, readDir } from "@tauri-apps/plugin-fs";
-import { RouteHeader } from "@/components/RouteHeader";
 import { MarkdownView } from "@/components/MarkdownView";
+import { RouteHeader } from "@/components/RouteHeader";
 import { getRoute } from "@/routes/index";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,9 +54,7 @@ export function MethodologyRoute({ projectPath }: MethodologyRouteProps) {
           if (!entry.isDirectory) continue;
           // Check if agent.md exists
           try {
-            await readTextFile(
-              `${projectPath}/.eidolons/${entry.name}/agent.md`
-            );
+            await readTextFile(`${projectPath}/.eidolons/${entry.name}/agent.md`);
             names.push(entry.name ?? "");
           } catch {
             // no agent.md — skip this dir
@@ -80,7 +78,9 @@ export function MethodologyRoute({ projectPath }: MethodologyRouteProps) {
         if (!cancelled) setLoadingList(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath]);
 
@@ -109,7 +109,9 @@ export function MethodologyRoute({ projectPath }: MethodologyRouteProps) {
         if (!cancelled) setLoadingContent(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectPath, selected]);
 
   if (!projectPath) {
@@ -143,9 +145,7 @@ export function MethodologyRoute({ projectPath }: MethodologyRouteProps) {
           <p className="route-empty-heading">Nothing installed in this project yet.</p>
           <p className="route-empty-body">
             Sync first to see methodology. Run{" "}
-            <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
-              eidolons sync
-            </code>{" "}
+            <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>eidolons sync</code>{" "}
             to install the declared members.
           </p>
           {listError && (

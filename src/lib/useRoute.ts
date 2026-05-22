@@ -1,7 +1,7 @@
 // useRoute.ts — Active route hook with localStorage persistence.
 // Pure TS; no Tauri imports. Vitest-safe.
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Route IDs — single source of truth; must match sidebar DESTINATIONS and
@@ -15,6 +15,7 @@ export type RouteId =
   | "harness"
   | "doctor"
   | "methodology"
+  | "sessions"
   | "settings";
 
 const STORAGE_KEY = "gambit:activeRoute";
@@ -46,6 +47,7 @@ function isRouteId(value: string): boolean {
     "harness",
     "doctor",
     "methodology",
+    "sessions",
     "settings",
   ].includes(value);
 }

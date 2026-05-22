@@ -1,6 +1,6 @@
 [package]
 name = "gambit"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "GAMBIT — The ControlCenter where you compose the Eidolons."
 license = "MIT"
@@ -25,6 +25,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["process", "io-util", "rt", "macros"] }
 which = "6"
+uuid = { version = "1", features = ["v4"] }
 flate2 = "1"
 tar = "0.4"
 sha2 = "0.10"

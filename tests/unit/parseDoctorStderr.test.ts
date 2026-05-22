@@ -14,8 +14,8 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { describe, it, expect } from "vitest";
-import { parseDoctorStderr, type DoctorCheck } from "../../src/lib/parseDoctorStderr";
+import { describe, expect, it } from "vitest";
+import { type DoctorCheck, parseDoctorStderr } from "../../src/lib/parseDoctorStderr";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -164,12 +164,7 @@ describe("parseDoctorStderr", () => {
   });
 
   it("handles all three statuses in one input", () => {
-    const input = [
-      "=== Checks ===",
-      "  ✓ check A",
-      "  · check B",
-      "  ✗ check C",
-    ].join("\n");
+    const input = ["=== Checks ===", "  ✓ check A", "  · check B", "  ✗ check C"].join("\n");
     const result = parseDoctorStderr(input);
     expect(result).toHaveLength(3);
     expect(result[0].status).toBe("pass");

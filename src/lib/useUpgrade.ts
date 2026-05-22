@@ -18,9 +18,9 @@
 //             upgrade-stderr  { line: string; ts: string }
 //             upgrade-complete { exitCode: number }
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { UpgradePlan } from "./upgrade.types";
 import type { SyncLine } from "./useSync";
@@ -136,41 +136,32 @@ export function useUpgrade(): UseUpgradeResult {
     // Attach event listeners before invoking start_upgrade_apply to avoid a
     // race where events arrive before we register.
     const unlistenStdout = await listen<LinePayload>("upgrade-stdout", (ev) => {
-      setLines((prev) => [
-        ...prev,
-        { text: ev.payload.line, stream: "stdout", ts: ev.payload.ts },
-      ]);
+      setLines((prev) => [...prev, { text: ev.payload.line, stream: "stdout", ts: ev.payload.ts }]);
     });
 
     const unlistenStderr = await listen<LinePayload>("upgrade-stderr", (ev) => {
-      setLines((prev) => [
-        ...prev,
-        { text: ev.payload.line, stream: "stderr", ts: ev.payload.ts },
-      ]);
+      setLines((prev) => [...prev, { text: ev.payload.line, stream: "stderr", ts: ev.payload.ts }]);
     });
 
-    const unlistenComplete = await listen<CompletePayload>(
-      "upgrade-complete",
-      (ev) => {
-        const code = ev.payload.exitCode;
-        setExitCode(code);
-        const verb = "Member upgrade";
-        if (code === -2) {
-          setState("cancelled");
-          toast.info(`${verb} cancelled`);
-        } else if (code === 0) {
-          setState("done");
-          toast.success(`${verb} complete`);
-        } else {
-          setState("failed");
-          toast.error(`${verb} failed`, {
-            description: `exit ${code}`,
-            duration: Infinity,
-          });
-        }
-        detachListeners();
+    const unlistenComplete = await listen<CompletePayload>("upgrade-complete", (ev) => {
+      const code = ev.payload.exitCode;
+      setExitCode(code);
+      const verb = "Member upgrade";
+      if (code === -2) {
+        setState("cancelled");
+        toast.info(`${verb} cancelled`);
+      } else if (code === 0) {
+        setState("done");
+        toast.success(`${verb} complete`);
+      } else {
+        setState("failed");
+        toast.error(`${verb} failed`, {
+          description: `exit ${code}`,
+          duration: Number.POSITIVE_INFINITY,
+        });
       }
-    );
+      detachListeners();
+    });
 
     unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
 
@@ -214,41 +205,32 @@ export function useUpgrade(): UseUpgradeResult {
     // Attach event listeners before invoking start_nexus_upgrade to avoid a
     // race where events arrive before we register.
     const unlistenStdout = await listen<LinePayload>("upgrade-stdout", (ev) => {
-      setLines((prev) => [
-        ...prev,
-        { text: ev.payload.line, stream: "stdout", ts: ev.payload.ts },
-      ]);
+      setLines((prev) => [...prev, { text: ev.payload.line, stream: "stdout", ts: ev.payload.ts }]);
     });
 
     const unlistenStderr = await listen<LinePayload>("upgrade-stderr", (ev) => {
-      setLines((prev) => [
-        ...prev,
-        { text: ev.payload.line, stream: "stderr", ts: ev.payload.ts },
-      ]);
+      setLines((prev) => [...prev, { text: ev.payload.line, stream: "stderr", ts: ev.payload.ts }]);
     });
 
-    const unlistenComplete = await listen<CompletePayload>(
-      "upgrade-complete",
-      (ev) => {
-        const code = ev.payload.exitCode;
-        setExitCode(code);
-        const verb = "Nexus upgrade";
-        if (code === -2) {
-          setState("cancelled");
-          toast.info(`${verb} cancelled`);
-        } else if (code === 0) {
-          setState("done");
-          toast.success(`${verb} complete`);
-        } else {
-          setState("failed");
-          toast.error(`${verb} failed`, {
-            description: `exit ${code}`,
-            duration: Infinity,
-          });
-        }
-        detachListeners();
+    const unlistenComplete = await listen<CompletePayload>("upgrade-complete", (ev) => {
+      const code = ev.payload.exitCode;
+      setExitCode(code);
+      const verb = "Nexus upgrade";
+      if (code === -2) {
+        setState("cancelled");
+        toast.info(`${verb} cancelled`);
+      } else if (code === 0) {
+        setState("done");
+        toast.success(`${verb} complete`);
+      } else {
+        setState("failed");
+        toast.error(`${verb} failed`, {
+          description: `exit ${code}`,
+          duration: Number.POSITIVE_INFINITY,
+        });
       }
-    );
+      detachListeners();
+    });
 
     unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
 
@@ -294,5 +276,17 @@ export function useUpgrade(): UseUpgradeResult {
     setLastAction(null);
   }, []);
 
-  return { state, plan, lines, exitCode, error, lastAction, check, apply, nexusUpgrade, cancel, dismiss };
+  return {
+    state,
+    plan,
+    lines,
+    exitCode,
+    error,
+    lastAction,
+    check,
+    apply,
+    nexusUpgrade,
+    cancel,
+    dismiss,
+  };
 }

@@ -227,9 +227,8 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry);
 }
 
 .sidebar-destination:hover {
@@ -263,20 +262,14 @@ body {
   font-size: 12px;
   font-weight: 500;
   text-align: center;
-  transition:
-    border-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry),
-    background-color var(--duration-micro) var(--motion-entry);
+  transition: border-color var(--duration-micro) var(--motion-entry), color var(--duration-micro)
+    var(--motion-entry), background-color var(--duration-micro) var(--motion-entry);
 }
 
 .sidebar-pick-project:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
-  background-color: color-mix(
-    in srgb,
-    var(--accent-primary) 6%,
-    transparent 94%
-  );
+  background-color: color-mix(in srgb, var(--accent-primary) 6%, transparent 94%);
 }
 
 .sidebar-project-row {
@@ -302,18 +295,13 @@ body {
   flex-shrink: 0;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-control);
-  transition:
-    color var(--duration-micro) var(--motion-entry),
-    background-color var(--duration-micro) var(--motion-entry);
+  transition: color var(--duration-micro) var(--motion-entry), background-color
+    var(--duration-micro) var(--motion-entry);
 }
 
 .sidebar-project-switch:hover {
   color: var(--accent-primary);
-  background-color: color-mix(
-    in srgb,
-    var(--accent-primary) 8%,
-    transparent 92%
-  );
+  background-color: color-mix(in srgb, var(--accent-primary) 8%, transparent 92%);
 }
 
 .sidebar-palette-pill {
@@ -439,9 +427,8 @@ body {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   background-color: var(--bg-surface);
@@ -596,9 +583,8 @@ body {
   font-weight: 500;
   color: var(--text-secondary);
   text-align: left;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry);
 }
 
 .methodology-nav-item:hover {

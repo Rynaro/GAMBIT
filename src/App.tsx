@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import "./styles/global.css";
-import { Sidebar } from "./components/Sidebar";
-import { MainPane } from "./components/MainPane";
 import { CommandPalette } from "./components/CommandPalette";
 import { DriftPill } from "./components/DriftPill";
 import { LogPane } from "./components/LogPane";
+import { MainPane } from "./components/MainPane";
+import { Sidebar } from "./components/Sidebar";
 import { UpgradePane } from "./components/UpgradePane";
+import { RouteProvider, useRouteContext } from "./lib/RouteContext";
+import { setCommandHandlers } from "./lib/commands";
+import { clearProjectPath, getProjectPath, setProjectPath } from "./lib/projectStore";
 import { useCommandPalette } from "./lib/useCommandPalette";
+import { useDoctor } from "./lib/useDoctor";
 import { useDriftWatcher } from "./lib/useDriftWatcher";
+import { useMcpStore } from "./lib/useMcpStore";
 import { useSync } from "./lib/useSync";
 import { useUpgrade } from "./lib/useUpgrade";
-import { useDoctor } from "./lib/useDoctor";
-import { useMcpStore } from "./lib/useMcpStore";
-import { setCommandHandlers } from "./lib/commands";
-import { getProjectPath, setProjectPath, clearProjectPath } from "./lib/projectStore";
-import { RouteProvider, useRouteContext } from "./lib/RouteContext";
 
 // ---------------------------------------------------------------------------
 // AppShell — inner shell, can call useRouteContext (inside <RouteProvider>)
@@ -26,9 +26,11 @@ function AppShell() {
   const palette = useCommandPalette();
   const { setActiveRoute } = useRouteContext();
 
-  const [projectPath, setProjectPathState] = useState<string | null>(
-    () => getProjectPath()
-  );
+  const [projectPath, setProjectPathState] = useState<string | null>(() => getProjectPath());
+
+  // S8 — Roster→Sessions handoff: the Eidolon name a "Launch" click pre-selects
+  // in the Sessions route's pre-launch picker. Consumed once by SessionsRoute.
+  const [pendingSessionEidolon, setPendingSessionEidolon] = useState<string | null>(null);
 
   const { state: driftState, projectBasename, clearDrift } = useDriftWatcher(projectPath);
 
@@ -100,34 +102,37 @@ function AppShell() {
     setProjectPathState(null);
   };
 
+  // S8 — the Roster's "Launch" action: stash the chosen Eidolon and switch to
+  // the Sessions route, which seeds its picker from `pendingSessionEidolon`.
+  const handleLaunchSession = (eidolonName: string) => {
+    setPendingSessionEidolon(eidolonName);
+    setActiveRoute("sessions");
+  };
+
   const showLogPane = sync.state !== "idle";
   const showUpgradePane = upgrade.state !== "idle";
 
   return (
     <div className="app-shell">
-      <Sidebar
-        palette={palette}
-        projectPath={projectPath}
-        onPickProject={handlePickProject}
-      />
+      <Sidebar palette={palette} projectPath={projectPath} onPickProject={handlePickProject} />
       <div className="main-content-area">
-        <DriftPill
-          state={driftState}
-          projectBasename={projectBasename}
-          clearDrift={clearDrift}
-        />
+        <DriftPill state={driftState} projectBasename={projectBasename} clearDrift={clearDrift} />
         <MainPane
-            projectPath={projectPath}
-            onPickProject={handlePickProject}
-            onClearProject={handleClearProject}
-            onCheckUpgrades={
-              projectPath
-                ? () => { void upgrade.check(projectPath); }
-                : undefined
-            }
-            doctor={doctor}
-            mcpStore={mcpStore}
-          />
+          projectPath={projectPath}
+          onPickProject={handlePickProject}
+          onClearProject={handleClearProject}
+          onLaunchSession={handleLaunchSession}
+          pendingSessionEidolon={pendingSessionEidolon}
+          onCheckUpgrades={
+            projectPath
+              ? () => {
+                  void upgrade.check(projectPath);
+                }
+              : undefined
+          }
+          doctor={doctor}
+          mcpStore={mcpStore}
+        />
       </div>
       <CommandPalette open={palette.open} setOpen={palette.setOpen} />
 
@@ -146,12 +151,7 @@ function AppShell() {
 
       {/* Upgrade pane mounts as a fixed bottom panel whenever an upgrade check
           or apply is in flight. Dismissed via the Dismiss/Close button. */}
-      {showUpgradePane && (
-        <UpgradePane
-          projectPath={projectPath}
-          upgrade={upgrade}
-        />
-      )}
+      {showUpgradePane && <UpgradePane projectPath={projectPath} upgrade={upgrade} />}
 
       {/* Sonner toast stack — system theme, bottom-right, richColors. */}
       <Toaster

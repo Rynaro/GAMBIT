@@ -1,11 +1,11 @@
 // SettingsRoute.tsx — Project picker, appearance info, About, and CLI Binary status.
 // Four sections: Project, Appearance, CLI Binary, About.
 
+import { RouteHeader } from "@/components/RouteHeader";
+import { BRAND } from "@/lib/brand";
+import { getRoute } from "@/routes/index";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import { BRAND } from "@/lib/brand";
-import { RouteHeader } from "@/components/RouteHeader";
-import { getRoute } from "@/routes/index";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,11 +32,7 @@ interface BinaryStatus {
 
 const ROUTE = getRoute("settings");
 
-export function SettingsRoute({
-  projectPath,
-  onPickProject,
-  onClearProject,
-}: SettingsRouteProps) {
+export function SettingsRoute({ projectPath, onPickProject, onClearProject }: SettingsRouteProps) {
   const [binaryStatus, setBinaryStatus] = useState<BinaryStatus | null>(null);
 
   useEffect(() => {
@@ -67,11 +63,7 @@ export function SettingsRoute({
 
           <div className="settings-row">
             <span className="settings-row-label">Switch project</span>
-            <button
-              type="button"
-              className="route-verb-btn"
-              onClick={onPickProject}
-            >
+            <button type="button" className="route-verb-btn" onClick={onPickProject}>
               Pick folder…
             </button>
           </div>
@@ -99,9 +91,7 @@ export function SettingsRoute({
         <div className="settings-section">
           <div className="settings-row">
             <span className="settings-row-label">Theme</span>
-            <span className="settings-row-muted">
-              Follows system (auto dark / light)
-            </span>
+            <span className="settings-row-muted">Follows system (auto dark / light)</span>
           </div>
           <div className="settings-row">
             <span className="settings-row-label">Sidebar</span>
@@ -150,16 +140,14 @@ export function SettingsRoute({
             <span
               className="settings-row-muted"
               style={{
-                color: binaryStatus?.bundledExtracted
-                  ? "var(--status-ok)"
-                  : "var(--text-muted)",
+                color: binaryStatus?.bundledExtracted ? "var(--status-ok)" : "var(--text-muted)",
               }}
             >
               {binaryStatus === null
                 ? "Checking…"
                 : binaryStatus.bundledExtracted
-                ? binaryStatus.bundledPath ?? "present"
-                : "Not extracted"}
+                  ? (binaryStatus.bundledPath ?? "present")
+                  : "Not extracted"}
             </span>
           </div>
 
@@ -168,14 +156,10 @@ export function SettingsRoute({
             <span
               className="settings-row-muted"
               style={{
-                color: binaryStatus?.pathLookup
-                  ? "var(--status-ok)"
-                  : "var(--text-muted)",
+                color: binaryStatus?.pathLookup ? "var(--status-ok)" : "var(--text-muted)",
               }}
             >
-              {binaryStatus === null
-                ? "Checking…"
-                : binaryStatus.pathLookup ?? "Not found"}
+              {binaryStatus === null ? "Checking…" : (binaryStatus.pathLookup ?? "Not found")}
             </span>
           </div>
 
@@ -184,16 +168,14 @@ export function SettingsRoute({
             <span
               className="settings-row-muted"
               style={{
-                color: binaryStatus?.nexusFallbackExists
-                  ? "var(--status-ok)"
-                  : "var(--text-muted)",
+                color: binaryStatus?.nexusFallbackExists ? "var(--status-ok)" : "var(--text-muted)",
               }}
             >
               {binaryStatus === null
                 ? "Checking…"
                 : binaryStatus.nexusFallbackExists
-                ? binaryStatus.nexusFallbackPath ?? "present"
-                : "Not installed"}
+                  ? (binaryStatus.nexusFallbackPath ?? "present")
+                  : "Not installed"}
             </span>
           </div>
         </div>
@@ -227,7 +209,8 @@ export function SettingsRoute({
           <div className="settings-row">
             <span className="settings-row-label">Ecosystem</span>
             <span className="settings-row-muted">
-              Eidolons answer the call. Junction is where they bind. {BRAND.name} is where you compose them.
+              Eidolons answer the call. Junction is where they bind. {BRAND.name} is where you
+              compose them.
             </span>
           </div>
           <div className="settings-row">

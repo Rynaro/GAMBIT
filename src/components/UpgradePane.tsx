@@ -9,8 +9,8 @@
 // Mounted by App.tsx whenever upgrade state !== "idle".
 
 import { basename } from "@/lib/pathUtils";
-import type { UseUpgradeResult } from "@/lib/useUpgrade";
 import type { UpgradeMember } from "@/lib/upgrade.types";
+import type { UseUpgradeResult } from "@/lib/useUpgrade";
 import "./UpgradePane.css";
 
 // ---------------------------------------------------------------------------
@@ -76,9 +76,7 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
         <span className="upgrade-pane-status" data-state={state}>
           {STATE_LABELS[state] ?? state}
         </span>
-        {isActive && (
-          <span className="upgrade-pane-spinner" aria-hidden="true" />
-        )}
+        {isActive && <span className="upgrade-pane-spinner" aria-hidden="true" />}
         <span className="upgrade-pane-spacer" />
         {state === "applying" && (
           <button
@@ -104,7 +102,6 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
 
       {/* Body */}
       <div className="upgrade-pane-body">
-
         {/* ---- checking ---- */}
         {state === "checking" && (
           <div className="upgrade-pane-checking">
@@ -119,7 +116,8 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
             <div className="upgrade-pane-summary">
               <div className="upgrade-pane-summary-item">
                 <strong>{plan.summary.member_upgrades_available}</strong>
-                &nbsp;member upgrade{plan.summary.member_upgrades_available !== 1 ? "s" : ""} available
+                &nbsp;member upgrade{plan.summary.member_upgrades_available !== 1 ? "s" : ""}{" "}
+                available
               </div>
               {plan.summary.member_upgrades_pinned_out > 0 && (
                 <div className="upgrade-pane-summary-item">
@@ -149,7 +147,9 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
                   <td className="mono">{plan.nexus.current.tag}</td>
                   <td className="mono">{plan.nexus.latest.tag}</td>
                   <td className="mono">—</td>
-                  <td><StatusBadge status={plan.nexus.status} /></td>
+                  <td>
+                    <StatusBadge status={plan.nexus.status} />
+                  </td>
                 </tr>
                 {/* Member rows */}
                 {plan.members.map((member: UpgradeMember) => (
@@ -158,7 +158,9 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
                     <td className="mono">{member.installed}</td>
                     <td className="mono">{member.latest}</td>
                     <td className="mono">{member.constraint}</td>
-                    <td><StatusBadge status={member.status} /></td>
+                    <td>
+                      <StatusBadge status={member.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -208,7 +210,9 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
                 {lines.map((line, i) => (
                   <div
                     key={i}
-                    className={line.stream === "stderr" ? "upgrade-pane-log-line--stderr" : undefined}
+                    className={
+                      line.stream === "stderr" ? "upgrade-pane-log-line--stderr" : undefined
+                    }
                   >
                     {line.text}
                   </div>
@@ -217,7 +221,6 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
             )}
           </>
         )}
-
       </div>
 
       {/* Footer */}
@@ -264,12 +267,16 @@ export function UpgradePane({ projectPath, upgrade }: UpgradePaneProps) {
         )}
         {state === "applying" && (
           <>
-            <span>{lines.length} line{lines.length !== 1 ? "s" : ""}</span>
+            <span>
+              {lines.length} line{lines.length !== 1 ? "s" : ""}
+            </span>
           </>
         )}
         {isTerminal && exitCode !== null && (
           <>
-            <span>{lines.length} line{lines.length !== 1 ? "s" : ""}</span>
+            <span>
+              {lines.length} line{lines.length !== 1 ? "s" : ""}
+            </span>
             <span className="upgrade-pane-footer-spacer" />
             <span
               className="upgrade-pane-footer-exit"

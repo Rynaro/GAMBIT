@@ -5,11 +5,11 @@
 // NOTE: This route adds `yaml@^2` to parse eidolons.yaml/lock properly.
 // See package.json — yaml is listed in dependencies.
 
-import { useState, useEffect } from "react";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import { parse as parseYaml } from "yaml";
 import { RouteHeader } from "@/components/RouteHeader";
 import { getRoute } from "@/routes/index";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { useEffect, useState } from "react";
+import { parse as parseYaml } from "yaml";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,14 +79,10 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
         if (cancelled) return;
 
         const parsedYaml =
-          rawYaml.status === "fulfilled"
-            ? (parseYaml(rawYaml.value) as EidolonsYaml)
-            : null;
+          rawYaml.status === "fulfilled" ? (parseYaml(rawYaml.value) as EidolonsYaml) : null;
 
         const parsedLock =
-          rawLock.status === "fulfilled"
-            ? (parseYaml(rawLock.value) as EidolonsLock)
-            : null;
+          rawLock.status === "fulfilled" ? (parseYaml(rawLock.value) as EidolonsLock) : null;
 
         setYamlData(parsedYaml);
         setLockData(parsedLock);
@@ -104,7 +100,9 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
     }
 
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectPath]);
 
   // No project selected
@@ -115,13 +113,11 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
         <div className="route-empty">
           <p className="route-empty-heading">No project picked yet.</p>
           <p className="route-empty-body">
-            Pick a folder that contains an <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.yaml</code> to see declared members, installed reality, and drift signals.
+            Pick a folder that contains an{" "}
+            <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.yaml</code> to see declared
+            members, installed reality, and drift signals.
           </p>
-          <button
-            type="button"
-            className="route-verb-btn primary"
-            onClick={onPickProject}
-          >
+          <button type="button" className="route-verb-btn primary" onClick={onPickProject}>
             Pick a folder
           </button>
         </div>
@@ -146,7 +142,8 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
           <div className="route-empty">
             <p className="route-empty-heading">Couldn't read this project.</p>
             <p className="route-empty-body">
-              No <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.yaml</code> found at the selected path.
+              No <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.yaml</code> found at the
+              selected path.
             </p>
             <span className="route-empty-note">{projectPath}</span>
             <button
@@ -167,9 +164,7 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
   const lockMembers = lockData?.members ?? [];
   const declaredByName = new Map(declaredMembers.map((m) => [m.name, m]));
   const lockByName = new Map(lockMembers.map((m) => [m.name, m]));
-  const allNames = Array.from(
-    new Set([...declaredByName.keys(), ...lockByName.keys()])
-  );
+  const allNames = Array.from(new Set([...declaredByName.keys(), ...lockByName.keys()]));
 
   return (
     <div className="route-pane">
@@ -188,11 +183,7 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
                 Upgrade…
               </button>
             )}
-            <button
-              type="button"
-              className="route-verb-btn"
-              onClick={onPickProject}
-            >
+            <button type="button" className="route-verb-btn" onClick={onPickProject}>
               Switch project
             </button>
           </>
@@ -224,7 +215,10 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
           <div className="route-empty" style={{ padding: "var(--space-7) 0" }}>
             <p className="route-empty-body">
               No members declared yet. Add some with{" "}
-              <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>eidolons add &lt;name&gt;</code>.
+              <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+                eidolons add &lt;name&gt;
+              </code>
+              .
             </p>
           </div>
         ) : (
@@ -244,9 +238,7 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
                 const verification = lockEntry?.verification;
                 return (
                   <tr key={name}>
-                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                      {name}
-                    </td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{name}</td>
                     <td>
                       {inYaml ? (
                         <span className="badge badge-ok">yes</span>
@@ -254,9 +246,7 @@ export function ProjectRoute({ projectPath, onPickProject, onCheckUpgrades }: Pr
                         <span className="badge badge-warn">lock-only</span>
                       )}
                     </td>
-                    <td className="mono">
-                      {lockEntry?.version ?? "—"}
-                    </td>
+                    <td className="mono">{lockEntry?.version ?? "—"}</td>
                     <td>
                       {verification === "verified" ? (
                         <span className="badge badge-ok">verified</span>

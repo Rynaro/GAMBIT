@@ -3,17 +3,18 @@
 // A RouteErrorBoundary keyed by activeRoute prevents route crashes from tearing
 // down the entire shell.
 
-import { useRouteContext } from "@/lib/RouteContext";
-import { RosterRoute } from "@/routes/RosterRoute";
-import { ProjectRoute } from "@/routes/ProjectRoute";
-import { McpStoreRoute } from "@/routes/McpStoreRoute";
-import { HarnessRoute } from "@/routes/HarnessRoute";
-import { DoctorRoute } from "@/routes/DoctorRoute";
-import { MethodologyRoute } from "@/routes/MethodologyRoute";
-import { SettingsRoute } from "@/routes/SettingsRoute";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { useRouteContext } from "@/lib/RouteContext";
 import type { DoctorResult } from "@/lib/useDoctor";
 import type { UseMcpStoreResult } from "@/lib/useMcpStore";
+import { DoctorRoute } from "@/routes/DoctorRoute";
+import { HarnessRoute } from "@/routes/HarnessRoute";
+import { McpStoreRoute } from "@/routes/McpStoreRoute";
+import { MethodologyRoute } from "@/routes/MethodologyRoute";
+import { ProjectRoute } from "@/routes/ProjectRoute";
+import { RosterRoute } from "@/routes/RosterRoute";
+import { SessionsRoute } from "@/routes/SessionsRoute";
+import { SettingsRoute } from "@/routes/SettingsRoute";
 
 // ---------------------------------------------------------------------------
 // RouteRenderer — maps activeRoute → component
@@ -24,16 +25,29 @@ interface RouteRendererProps {
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
   onCheckUpgrades?: () => void;
+  /** S8 — Roster "Launch" action: pre-select an Eidolon and open Sessions. */
+  onLaunchSession: (eidolonName: string) => void;
+  /** S8 — Eidolon name to seed the Sessions pre-launch picker with, if any. */
+  pendingSessionEidolon: string | null;
   doctor: DoctorResult;
   mcpStore: UseMcpStoreResult;
 }
 
-function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: RouteRendererProps) {
+function RouteRenderer({
+  projectPath,
+  onPickProject,
+  onClearProject,
+  onCheckUpgrades,
+  onLaunchSession,
+  pendingSessionEidolon,
+  doctor,
+  mcpStore,
+}: RouteRendererProps) {
   const { activeRoute } = useRouteContext();
 
   switch (activeRoute) {
     case "roster":
-      return <RosterRoute />;
+      return <RosterRoute projectPath={projectPath} onLaunchSession={onLaunchSession} />;
     case "project":
       return (
         <ProjectRoute
@@ -50,6 +64,8 @@ function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgr
       return <DoctorRoute projectPath={projectPath} doctor={doctor} />;
     case "methodology":
       return <MethodologyRoute projectPath={projectPath} />;
+    case "sessions":
+      return <SessionsRoute projectPath={projectPath} initialEidolonName={pendingSessionEidolon} />;
     case "settings":
       return (
         <SettingsRoute
@@ -79,11 +95,24 @@ interface MainPaneProps {
   onPickProject: () => Promise<void> | void;
   onClearProject: () => void;
   onCheckUpgrades?: () => void;
+  /** S8 — Roster "Launch" action: pre-select an Eidolon and open Sessions. */
+  onLaunchSession: (eidolonName: string) => void;
+  /** S8 — Eidolon name to seed the Sessions pre-launch picker with, if any. */
+  pendingSessionEidolon: string | null;
   doctor: DoctorResult;
   mcpStore: UseMcpStoreResult;
 }
 
-export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: MainPaneProps) {
+export function MainPane({
+  projectPath,
+  onPickProject,
+  onClearProject,
+  onCheckUpgrades,
+  onLaunchSession,
+  pendingSessionEidolon,
+  doctor,
+  mcpStore,
+}: MainPaneProps) {
   const { activeRoute } = useRouteContext();
 
   return (
@@ -94,6 +123,8 @@ export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUp
           onPickProject={onPickProject}
           onClearProject={onClearProject}
           onCheckUpgrades={onCheckUpgrades}
+          onLaunchSession={onLaunchSession}
+          pendingSessionEidolon={pendingSessionEidolon}
           doctor={doctor}
           mcpStore={mcpStore}
         />

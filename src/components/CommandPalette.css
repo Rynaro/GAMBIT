@@ -17,8 +17,12 @@
 }
 
 @keyframes palette-backdrop-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ---- Sheet ---- */
@@ -32,15 +36,19 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow:
-    0 24px 64px var(--shadow-overlay-60),
-    0 4px 16px var(--shadow-overlay-40);
+  box-shadow: 0 24px 64px var(--shadow-overlay-60), 0 4px 16px var(--shadow-overlay-40);
   animation: palette-sheet-in var(--duration-panel) var(--motion-entry) both;
 }
 
 @keyframes palette-sheet-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* ---- Input row ---- */
@@ -72,7 +80,7 @@
 .palette-input-row:focus-within {
   border-bottom-color: transparent;
   background-image: linear-gradient(var(--bg-surface-raised), var(--bg-surface-raised)),
-                    var(--accent-gradient);
+    var(--accent-gradient);
   background-origin: border-box;
   background-clip: padding-box, border-box;
   border-bottom: 1px solid transparent;
@@ -105,9 +113,8 @@
   cursor: pointer;
   position: relative;
   border-left: 3px solid transparent;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    border-left-color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), border-left-color
+    var(--duration-micro) var(--motion-entry);
 }
 
 .palette-item:hover,

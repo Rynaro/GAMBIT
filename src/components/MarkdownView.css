@@ -65,8 +65,8 @@
   color: var(--accent-primary);
   text-decoration: none;
   border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
-  transition: border-color var(--duration-micro) var(--motion-entry),
-              color var(--duration-micro) var(--motion-entry);
+  transition: border-color var(--duration-micro) var(--motion-entry), color var(--duration-micro)
+    var(--motion-entry);
 }
 
 .markdown-view .md-a:hover {

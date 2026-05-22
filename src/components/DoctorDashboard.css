@@ -45,9 +45,8 @@
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 8%, transparent 92%);
   cursor: pointer;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry);
   flex-shrink: 0;
 }
 
@@ -69,9 +68,8 @@
   color: var(--status-error);
   background: color-mix(in srgb, var(--status-error) 8%, transparent 92%);
   cursor: pointer;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry);
   flex-shrink: 0;
 }
 
@@ -147,9 +145,15 @@
   font-weight: 700;
 }
 
-.doctor-rollup-count--pass { color: var(--status-ok); }
-.doctor-rollup-count--warn { color: var(--status-warn); }
-.doctor-rollup-count--fail { color: var(--status-error); }
+.doctor-rollup-count--pass {
+  color: var(--status-ok);
+}
+.doctor-rollup-count--warn {
+  color: var(--status-warn);
+}
+.doctor-rollup-count--fail {
+  color: var(--status-error);
+}
 
 /* ---- Check grid ---- */
 .doctor-checks {
@@ -164,9 +168,8 @@
   border-radius: var(--radius-card);
   background: var(--bg-surface);
   overflow: hidden;
-  transition:
-    border-color var(--duration-micro) var(--motion-entry),
-    background-color var(--duration-micro) var(--motion-entry);
+  transition: border-color var(--duration-micro) var(--motion-entry), background-color
+    var(--duration-micro) var(--motion-entry);
 }
 
 .doctor-check:hover {

@@ -1,8 +1,8 @@
 // parseAnsi.test.ts — Unit tests for the ANSI parser wrapper.
 // Vitest. No Tauri deps. Pure function — straightforward to test.
 
-import { describe, it, expect } from "vitest";
 import { parseAnsi } from "@/lib/parseAnsi";
+import { describe, expect, it } from "vitest";
 
 describe("parseAnsi", () => {
   it("empty string returns a single empty token", () => {

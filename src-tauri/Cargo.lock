@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "gambit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "flate2",
@@ -949,6 +949,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tokio",
  "toml 0.8.2",
+ "uuid",
  "which",
  "window-vibrancy 0.7.1",
 ]

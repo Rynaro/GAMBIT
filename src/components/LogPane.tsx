@@ -8,14 +8,15 @@
 // The panel is mounted by App.tsx whenever sync state !== "idle".
 // Auto-scroll to bottom unless the user has scrolled up (pause auto-scroll).
 
-import { useEffect, useRef } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { LogLine } from "./LogLine";
 import { basename } from "@/lib/pathUtils";
 import type { SyncResult } from "@/lib/useSync";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useRef } from "react";
+import { LogLine } from "./LogLine";
 import "./LogPane.css";
 
-interface LogPaneProps extends Pick<SyncResult, "state" | "lines" | "exitCode" | "projectPath" | "cancel" | "clear"> {}
+interface LogPaneProps
+  extends Pick<SyncResult, "state" | "lines" | "exitCode" | "projectPath" | "cancel" | "clear"> {}
 
 const STATE_LABELS: Record<string, string> = {
   running: "running",
@@ -120,12 +121,11 @@ export function LogPane({ state, lines, exitCode, projectPath, cancel, clear }: 
 
       {/* Footer */}
       <div className="log-pane-footer">
-        <span>{lines.length} line{lines.length !== 1 ? "s" : ""}</span>
+        <span>
+          {lines.length} line{lines.length !== 1 ? "s" : ""}
+        </span>
         {exitCode !== null && (
-          <span
-            className="log-pane-footer-exit"
-            data-ok={String(exitCode === 0)}
-          >
+          <span className="log-pane-footer-exit" data-ok={String(exitCode === 0)}>
             exit {exitCode}
           </span>
         )}

@@ -1,0 +1,545 @@
+/* session.css — Eidolon-themed transcript components for the Sessions route. */
+
+/* ---- SessionCard — session header ---- */
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+
+.session-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.session-card-glyph {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.session-card-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.session-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.session-card-role {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Status pill ---- */
+.session-status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.session-status-pill[data-tone="ok"] {
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent 85%);
+  color: var(--status-ok);
+}
+
+.session-status-pill[data-tone="running"] {
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent 85%);
+  color: var(--accent-primary);
+}
+
+.session-status-pill[data-tone="error"] {
+  background: color-mix(in srgb, var(--status-error) 15%, transparent 85%);
+  color: var(--status-error);
+}
+
+.session-status-pill[data-tone="muted"] {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent 85%);
+  color: var(--text-muted);
+}
+
+/* ---- SessionCard meta row ---- */
+.session-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+.session-card-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.session-card-meta-key {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.session-card-meta-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.session-card-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.session-tool-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* ---- Turn group ---- */
+.session-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.session-turn-marker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.session-turn-marker::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* ---- User turn echo ---- */
+.session-user {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-surface) 88%);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 25%, var(--border-subtle) 75%);
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- AssistantText ---- */
+.session-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.session-assistant-attr {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-assistant-glyph {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--accent-primary);
+}
+
+.session-assistant-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.session-assistant-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+/* ---- ToolUseChip ---- */
+.session-tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-tool-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  width: 100%;
+  text-align: left;
+}
+
+.session-tool-icon {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.session-tool-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.session-tool-peek {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-tool-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.session-tool-dot[data-outcome="ok"] {
+  background: var(--status-ok);
+}
+
+.session-tool-dot[data-outcome="error"] {
+  background: var(--status-error);
+}
+
+.session-tool-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.session-tool-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.session-tool-result {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.session-tool-result[data-error="true"] {
+  color: var(--status-error);
+}
+
+/* ---- ThinkingBlock ---- */
+.session-thinking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.session-thinking-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.session-thinking-chevron {
+  font-size: 10px;
+  transition: transform var(--duration-micro) var(--motion-entry);
+}
+
+.session-thinking-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
+.session-thinking-icon {
+  font-size: 10px;
+  color: var(--accent-primary);
+}
+
+.session-thinking-label {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.session-thinking-body {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: var(--space-4);
+  border-left: 2px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+/* ---- ResultCard ---- */
+.session-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.session-result[data-outcome="ok"] {
+  border-color: color-mix(in srgb, var(--status-ok) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-ok) 6%, var(--bg-surface) 94%);
+}
+
+.session-result[data-outcome="error"] {
+  border-color: color-mix(in srgb, var(--status-error) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-error) 6%, var(--bg-surface) 94%);
+}
+
+.session-result-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-result-glyph {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.session-result[data-outcome="ok"] .session-result-glyph {
+  color: var(--status-ok);
+}
+
+.session-result[data-outcome="error"] .session-result-glyph {
+  color: var(--status-error);
+}
+
+.session-result-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.session-result-subtype {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.session-result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.session-result-stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.session-result-stat-key {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.session-result-stat-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- RawNdjsonToggle ---- */
+.session-raw {
+  margin-top: var(--space-4);
+}
+
+.session-raw-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.session-raw-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.session-raw-body {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-canvas);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.session-raw-line {
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.session-raw-gutter {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 9px;
+  padding-top: 2px;
+}
+
+.session-raw-line[data-source="stderr"] .session-raw-gutter {
+  color: var(--status-warn);
+}
+
+.session-raw-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+/* ---- SessionComposer ---- */
+.session-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+
+.session-composer-input {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.session-composer-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.session-composer-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.session-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.session-send-btn {
+  padding: var(--space-3) var(--space-7);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--accent-primary);
+  color: var(--bg-canvas);
+  background: var(--accent-primary);
+  transition: opacity var(--duration-micro) var(--motion-entry);
+}
+
+.session-send-btn:hover {
+  opacity: 0.88;
+}
+
+.session-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.session-cancel-btn {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--status-error);
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 8%, transparent 92%);
+  transition: background-color var(--duration-micro) var(--motion-entry);
+}
+
+.session-cancel-btn:hover {
+  background-color: color-mix(in srgb, var(--status-error) 16%, transparent 84%);
+}

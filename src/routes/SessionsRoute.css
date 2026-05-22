@@ -1,0 +1,209 @@
+/* SessionsRoute.css — the Sessions route shell: pre-launch panel + transcript. */
+
+/* ---- Pre-launch panel ---- */
+.session-prelaunch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 640px;
+}
+
+/* ---- Auth banner (R2) ---- */
+.session-auth-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.session-auth-banner[data-tone="error"] {
+  border-color: color-mix(in srgb, var(--status-error) 35%, var(--border-subtle) 65%);
+  background: color-mix(in srgb, var(--status-error) 7%, var(--bg-surface) 93%);
+}
+
+.session-auth-banner[data-tone="ok"] {
+  border-color: color-mix(in srgb, var(--status-ok) 30%, var(--border-subtle) 70%);
+  background: color-mix(in srgb, var(--status-ok) 6%, var(--bg-surface) 94%);
+}
+
+.session-auth-glyph {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.session-auth-banner[data-tone="error"] .session-auth-glyph {
+  color: var(--status-error);
+}
+
+.session-auth-banner[data-tone="ok"] .session-auth-glyph {
+  color: var(--status-ok);
+}
+
+.session-auth-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.session-auth-text strong {
+  color: var(--text-primary);
+}
+
+/* ---- Form fields ---- */
+.session-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.session-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.session-field-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.session-field-note[data-tone="warn"] {
+  color: var(--status-warn);
+}
+
+.session-field-note code,
+.session-allowlist-warn code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.session-select {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.session-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* ---- Allow-list block (R1) ---- */
+.session-allowlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.session-allowlist-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.session-allowlist-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.session-allowlist-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.session-allowlist-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.session-allowlist-warn {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--status-warn);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--status-warn) 8%, transparent 92%);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 25%, transparent 75%);
+}
+
+.session-allowlist-warn strong {
+  color: var(--status-warn);
+}
+
+/* ---- Pre-launch actions ---- */
+.session-prelaunch-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- Active session shell ---- */
+.session-active-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.session-active-head .route-header {
+  flex: 1;
+}
+
+.session-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  margin: var(--space-6) 0;
+}
+
+/* ---- stderr line ---- */
+.session-stderr-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--status-warn);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid color-mix(in srgb, var(--status-warn) 40%, var(--border-subtle) 60%);
+  background: color-mix(in srgb, var(--status-warn) 5%, transparent 95%);
+}
+
+/* ---- Pending indicator ---- */
+.session-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.session-pending-glyph {
+  font-size: 18px;
+  color: var(--accent-primary);
+}

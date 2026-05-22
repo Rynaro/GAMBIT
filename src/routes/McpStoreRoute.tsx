@@ -19,11 +19,11 @@
 //   installed !== "" && update !== "no" → Upgrade + Uninstall buttons
 //     (Upgrade calls install() — the CLI install command is idempotent/upgrades)
 
-import { RouteHeader } from "@/components/RouteHeader";
 import { McpInstallPane } from "@/components/McpInstallPane";
+import { RouteHeader } from "@/components/RouteHeader";
+import type { McpListEntry } from "@/lib/mcp.types";
 import type { UseMcpStoreResult } from "@/lib/useMcpStore";
 import { getRoute } from "@/routes/index";
-import type { McpListEntry } from "@/lib/mcp.types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,13 +96,7 @@ interface ActionCellProps {
   onUninstall: (name: string) => void;
 }
 
-function ActionCell({
-  entry,
-  activeMcp,
-  isOperating,
-  onInstall,
-  onUninstall,
-}: ActionCellProps) {
+function ActionCell({ entry, activeMcp, isOperating, onInstall, onUninstall }: ActionCellProps) {
   const thisIsActive = activeMcp === entry.name && isOperating;
   const disabled = isOperating;
 
@@ -200,20 +194,13 @@ interface McpStoreRouteProps {
 
 const ROUTE = getRoute("mcp-store");
 
-const PANE_STATES = new Set([
-  "installing",
-  "uninstalling",
-  "done",
-  "failed",
-  "cancelled",
-]);
+const PANE_STATES = new Set(["installing", "uninstalling", "done", "failed", "cancelled"]);
 
 export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
   const mcp = mcpStore;
   const { state, entries, error, refresh, install, uninstall, activeMcp } = mcp;
 
-  const isOperating =
-    state === "installing" || state === "uninstalling";
+  const isOperating = state === "installing" || state === "uninstalling";
   const showPane = PANE_STATES.has(state);
 
   // ---- No project picked ----
@@ -223,9 +210,7 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
         <div className="route-empty">
           <p className="route-empty-heading">No project selected.</p>
-          <p className="route-empty-body">
-            Pick a project to see its MCP server catalogue.
-          </p>
+          <p className="route-empty-body">Pick a project to see its MCP server catalogue.</p>
         </div>
       </div>
     );
@@ -249,7 +234,10 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
         <div className="route-card">
           <div className="route-empty">
             <p className="route-empty-heading">Could not load MCP catalogue.</p>
-            <p className="route-empty-body" style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+            <p
+              className="route-empty-body"
+              style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}
+            >
               {error ?? "Unknown error"}
             </p>
             <button
@@ -275,10 +263,7 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
   }
 
   // ---- Empty catalogue ----
-  if (
-    (state === "ready" || state === "done") &&
-    entries.length === 0
-  ) {
+  if ((state === "ready" || state === "done") && entries.length === 0) {
     return (
       <div className="route-pane">
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
@@ -317,7 +302,7 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
           <button
             type="button"
             onClick={() => void refresh()}
-            disabled={isOperating || state === "loading"}
+            disabled={isOperating}
             style={{
               fontSize: "11px",
               padding: "3px 10px",
@@ -352,14 +337,11 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
               <tr
                 key={entry.name}
                 style={{
-                  opacity:
-                    isOperating && activeMcp !== entry.name ? 0.55 : 1,
+                  opacity: isOperating && activeMcp !== entry.name ? 0.55 : 1,
                   transition: "opacity 0.15s",
                 }}
               >
-                <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                  {entry.name}
-                </td>
+                <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{entry.name}</td>
                 <td>
                   <span className="badge badge-muted" style={{ fontSize: "10px" }}>
                     {entry.kind}
@@ -397,9 +379,7 @@ export function McpStoreRoute({ projectPath, mcpStore }: McpStoreRouteProps) {
       </div>
 
       {/* McpInstallPane — bottom-anchored when an op is in flight or just completed */}
-      {showPane && (
-        <McpInstallPane projectPath={projectPath} mcp={mcp} />
-      )}
+      {showPane && <McpInstallPane projectPath={projectPath} mcp={mcp} />}
     </div>
   );
 }

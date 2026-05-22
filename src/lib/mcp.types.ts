@@ -10,12 +10,7 @@
 //   - `scope`: "system" | "eidolon:<name>" per documentation.
 //   - Top-level output of `eidolons mcp list --json` is a bare JSON array.
 
-export type McpUpdateState =
-  | "no"
-  | "install"
-  | "upgrade"
-  | "downgrade"
-  | string;
+export type McpUpdateState = "no" | "install" | "upgrade" | "downgrade" | string;
 
 export type McpKind = "oci-image" | "binary" | string;
 

@@ -42,9 +42,6 @@ export function McpInstallPane({ projectPath, mcp }: McpInstallPaneProps) {
   const projectName = projectPath ? basename(projectPath) : "project";
   const isActive = state === "installing" || state === "uninstalling";
   const isTerminal = state === "done" || state === "failed" || state === "cancelled";
-  const opLabel = activeMcp
-    ? `${state === "installing" || state === "done" && mcp.lastAction === "install" ? "installing" : "uninstalling"}: ${activeMcp}`
-    : state;
 
   return (
     <div className="mcp-install-pane" role="region" aria-label="MCP operation output">
@@ -66,9 +63,7 @@ export function McpInstallPane({ projectPath, mcp }: McpInstallPaneProps) {
         <span className="mcp-install-pane-status" data-state={state}>
           {STATE_LABELS[state] ?? state}
         </span>
-        {isActive && (
-          <span className="mcp-install-pane-spinner" aria-hidden="true" />
-        )}
+        {isActive && <span className="mcp-install-pane-spinner" aria-hidden="true" />}
         <span className="mcp-install-pane-spacer" />
         {isActive && (
           <button
@@ -112,9 +107,7 @@ export function McpInstallPane({ projectPath, mcp }: McpInstallPaneProps) {
                 {mcp.lastAction === "install" ? "Install" : "Uninstall"} failed.
               </span>
             )}
-            {exitCode === -2 && (
-              <span style={{ color: "var(--text-muted)" }}>Cancelled.</span>
-            )}
+            {exitCode === -2 && <span style={{ color: "var(--text-muted)" }}>Cancelled.</span>}
           </div>
         )}
 
@@ -126,19 +119,13 @@ export function McpInstallPane({ projectPath, mcp }: McpInstallPaneProps) {
           {lines.map((line, i) => (
             <div
               key={i}
-              className={
-                line.stream === "stderr"
-                  ? "mcp-install-pane-log-line--stderr"
-                  : undefined
-              }
+              className={line.stream === "stderr" ? "mcp-install-pane-log-line--stderr" : undefined}
             >
               {line.text}
             </div>
           ))}
           {lines.length === 0 && isActive && (
-            <div className="mcp-install-pane-log-placeholder">
-              Waiting for output…
-            </div>
+            <div className="mcp-install-pane-log-placeholder">Waiting for output…</div>
           )}
         </pre>
       </div>
@@ -149,10 +136,7 @@ export function McpInstallPane({ projectPath, mcp }: McpInstallPaneProps) {
           {lines.length} line{lines.length !== 1 ? "s" : ""}
         </span>
         {typeof exitCode === "number" && (
-          <span
-            className="mcp-install-pane-exit"
-            data-ok={String(exitCode === 0)}
-          >
+          <span className="mcp-install-pane-exit" data-ok={String(exitCode === 0)}>
             exit {exitCode}
           </span>
         )}

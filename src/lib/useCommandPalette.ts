@@ -1,7 +1,7 @@
 // useCommandPalette.ts — React hook for global ⌘K / Ctrl+K palette toggle.
 
-import { useState, useEffect, useCallback } from "react";
 import { isMacOS } from "@/lib/platform";
+import { useCallback, useEffect, useState } from "react";
 
 export interface CommandPaletteState {
   open: boolean;

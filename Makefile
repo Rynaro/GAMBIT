@@ -8,7 +8,7 @@
 
 COMPOSE_RUN = docker compose run --rm dev
 
-.PHONY: install lint typecheck cargo-check ci shell dev
+.PHONY: install lint typecheck test cargo-check ci shell dev
 
 ## install — resolve pnpm dependencies inside the container
 install:
@@ -26,8 +26,12 @@ typecheck:
 cargo-check:
 	$(COMPOSE_RUN) cargo check --manifest-path src-tauri/Cargo.toml
 
-## ci — full CI parity: install + lint + typecheck + cargo-check (sequentially)
-ci: install lint typecheck cargo-check
+## test — run the Vitest unit suite inside the container
+test:
+	$(COMPOSE_RUN) pnpm test
+
+## ci — full CI parity: install + lint + typecheck + test + cargo-check (sequentially)
+ci: install lint typecheck test cargo-check
 
 ## shell — drop into a bash shell inside the container
 shell:
