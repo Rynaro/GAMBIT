@@ -537,8 +537,12 @@ describe("useSessions", () => {
     emitDelta(SESSION_A, { turn: 1, deltaKind: "text", text: "lo!" });
 
     // Text accumulated into the EPHEMERAL live buffer — not the transcript.
+    // The transcript holds only the R4 turn-1 prompt entry; a delta is never
+    // appended to it.
     expect(result.current.sessions[SESSION_A].live.streamingText).toBe("Hello!");
-    expect(result.current.sessions[SESSION_A].transcript).toHaveLength(0);
+    expect(
+      result.current.sessions[SESSION_A].transcript.filter((e) => e.source !== "prompt"),
+    ).toHaveLength(0);
   });
 
   it("registers a live tool call from session-tool-start and accumulates its input", async () => {
@@ -623,6 +627,88 @@ describe("useSessions", () => {
     expect(live.toolCalls).toEqual({});
     expect(live.usage).toBe(null);
     expect(live.turn).toBe(0);
+  });
+
+  // --- R4: the user's own prompt is captured as a transcript entry ---------
+
+  it("R4: start() seeds the transcript with the turn-1 prompt entry", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+
+    await act(async () => {
+      await result.current.start({
+        projectPath: "/p",
+        eidolonName: "Sage",
+        permissionMode: "default",
+        appendSystemPrompt: "",
+        allowedTools: [],
+        firstPrompt: "refactor the auth module",
+      });
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    expect(transcript).toHaveLength(1);
+    expect(transcript[0].source).toBe("prompt");
+    expect(transcript[0].turn).toBe(1);
+    expect(transcript[0].line).toBe("refactor the auth module");
+  });
+
+  it("R4: sendTurn() appends a prompt entry at the new turn number", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([]);
+      if (cmd === "start_session") return Promise.resolve(sessionInfo(SESSION_A));
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await startSessionA(result);
+
+    act(() => {
+      result.current.sendTurn(SESSION_A, "now write the changelog");
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    // The turn-1 prompt ("go") and the turn-2 prompt both present.
+    const prompts = transcript.filter((e) => e.source === "prompt");
+    expect(prompts).toHaveLength(2);
+    const turn2Prompt = prompts.find((e) => e.turn === 2);
+    expect(turn2Prompt?.line).toBe("now write the changelog");
+  });
+
+  it("R4: a reopened session rebuilds the persisted prompt entry without duplicating", async () => {
+    const recWithPrompt: SessionRecord = {
+      ...record(SESSION_A, true),
+      transcript: [
+        { source: "prompt", turn: 1, kind: undefined, parsed: undefined, line: "the ask", ts: TS },
+        { source: "event", turn: 1, kind: "assistant", parsed: undefined, line: "{}", ts: TS },
+      ],
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_sessions") return Promise.resolve([summary(SESSION_A)]);
+      if (cmd === "reopen_session") return Promise.resolve(sessionInfo(SESSION_A));
+      if (cmd === "load_session") return Promise.resolve(recWithPrompt);
+      return Promise.resolve(undefined);
+    });
+
+    const { result } = renderHook(() => useSessions());
+    await flush();
+    await act(async () => {
+      await result.current.reopen(SESSION_A);
+    });
+
+    const transcript = result.current.sessions[SESSION_A].transcript;
+    // Exactly one prompt entry — `transcriptFromPersisted` maps source 1:1.
+    const prompts = transcript.filter((e) => e.source === "prompt");
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].line).toBe("the ask");
+    expect(transcript).toHaveLength(2);
   });
 
   it("a session-delta for session A does NOT touch session B", async () => {

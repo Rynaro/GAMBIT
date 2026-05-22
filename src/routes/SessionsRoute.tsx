@@ -41,6 +41,7 @@ import { SessionCard } from "@/components/session/SessionCard";
 import { SessionComposer } from "@/components/session/SessionComposer";
 import { SessionList } from "@/components/session/SessionList";
 import { ThinkingBlock } from "@/components/session/ThinkingBlock";
+import type { ExpandSignal } from "@/components/session/ToolUseChip";
 import { ToolUseChip } from "@/components/session/ToolUseChip";
 import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { CORTEX_EIDOLON_NAME, readProjectRoster } from "@/lib/eidolonRoster";
@@ -600,6 +601,19 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
   // bit; an effect re-pins on content change).
   const [atBottom, setAtBottom] = useState(true);
 
+  // P3: a transcript-level bulk expand/collapse. `expandSignal` is a pulse
+  // (`{ value, nonce }`) threaded into every `ToolUseChip` / `ThinkingBlock`;
+  // each treats a fresh `nonce` as a default-sync `useEffect` while still
+  // allowing per-chip toggling afterwards. `nonce` starts at 0 — that initial
+  // value never fires a sync (the effect's guard sees no prior nonce change),
+  // so chips keep their own collapsed default until the user clicks.
+  const [expandSignal, setExpandSignal] = useState<ExpandSignal>({ value: false, nonce: 0 });
+
+  /** Pulse a bulk expand-all (`value: true`) or collapse-all (`value: false`). */
+  function bulkExpand(value: boolean) {
+    setExpandSignal((prev) => ({ value, nonce: prev.nonce + 1 }));
+  }
+
   // Re-pin to the bottom whenever the transcript grows or the live buffer
   // streams — but only while the user has not scrolled up.
   // biome-ignore lint/correctness/useExhaustiveDependencies: live.streamingText / toolCalls drive the streaming re-pin
@@ -665,6 +679,28 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
           `result` (the slice's transcript changes); never polls. */}
       <ContextGauge slice={slice} />
 
+      {/* P3: transcript-level bulk expand/collapse — one click syncs every
+          tool chip + thinking block. Mounted just above the transcript so it
+          reads as a control over the whole conversation. */}
+      <div className="session-transcript-controls">
+        <button
+          type="button"
+          className="session-bulk-toggle"
+          onClick={() => bulkExpand(true)}
+          aria-label="Expand all tool calls and reasoning"
+        >
+          Expand all
+        </button>
+        <button
+          type="button"
+          className="session-bulk-toggle"
+          onClick={() => bulkExpand(false)}
+          aria-label="Collapse all tool calls and reasoning"
+        >
+          Collapse all
+        </button>
+      </div>
+
       <div className="session-transcript">
         {turns.map((group) => (
           <div className="session-turn" key={group.turn}>
@@ -675,6 +711,7 @@ function DetailPane({ session, slice, scrollRef }: DetailPaneProps) {
                 entry={entry}
                 eidolonName={eidolonName}
                 toolResults={toolResults}
+                expandSignal={expandSignal}
               />
             ))}
           </div>
@@ -820,12 +857,37 @@ interface TranscriptRowProps {
   entry: TranscriptEntry;
   eidolonName: string;
   toolResults: Map<string, { text: string; isError: boolean }>;
+  /** P3 bulk expand/collapse pulse — threaded into tool chips + thinking. */
+  expandSignal: ExpandSignal;
 }
 
-function TranscriptRow({ entry, eidolonName, toolResults }: TranscriptRowProps) {
+/**
+ * R4 — the human's own typed prompt, rendered as a right-aligned user bubble.
+ *
+ * The user's prompt is sent to `send_turn` / `start_session` but `claude`
+ * never echoes it back as a renderable event, so without this the user loses
+ * track of what they asked. The bubble heads its turn group (`groupByTurn`
+ * already buckets by `turn`); it is visually distinct from the assistant
+ * cards — accent-tinted and aligned to the trailing edge.
+ */
+function UserPrompt({ prompt }: { prompt: string }) {
+  return (
+    <div className="session-user" aria-label="Your prompt">
+      {prompt}
+    </div>
+  );
+}
+
+function TranscriptRow({ entry, eidolonName, toolResults, expandSignal }: TranscriptRowProps) {
   // stderr — a diagnostics line.
   if (entry.source === "stderr") {
     return <pre className="session-stderr-line">{entry.line}</pre>;
+  }
+
+  // R4 — the human's own typed prompt for the turn: a right-aligned bubble
+  // heading its turn group. `line` carries the raw prompt text.
+  if (entry.source === "prompt") {
+    return <UserPrompt prompt={entry.line} />;
   }
 
   // Switch on the stable lowercase `kind` discriminator (NOT the enum tag).
@@ -839,6 +901,7 @@ function TranscriptRow({ entry, eidolonName, toolResults }: TranscriptRowProps) 
           block={block}
           eidolonName={eidolonName}
           toolResults={toolResults}
+          expandSignal={expandSignal}
         />
       ));
     }
@@ -871,22 +934,28 @@ function AssistantBlock({
   block,
   eidolonName,
   toolResults,
+  expandSignal,
 }: {
   block: ContentBlock;
   eidolonName: string;
   toolResults: Map<string, { text: string; isError: boolean }>;
+  /** P3 bulk expand/collapse pulse — synced into the chip / thinking block. */
+  expandSignal: ExpandSignal;
 }) {
   switch (block.blockType) {
     case "text":
       return block.text ? <AssistantText eidolonName={eidolonName} text={block.text} /> : null;
     case "thinking":
-      return block.thinking ? <ThinkingBlock thinking={block.thinking} /> : null;
+      return block.thinking ? (
+        <ThinkingBlock thinking={block.thinking} expandSignal={expandSignal} />
+      ) : null;
     case "tool_use":
       return (
         <ToolUseChip
           name={block.name ?? "tool"}
           input={block.input}
           result={block.id ? toolResults.get(block.id) : undefined}
+          expandSignal={expandSignal}
         />
       );
     default:

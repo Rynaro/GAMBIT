@@ -469,6 +469,52 @@ describe("SessionsRoute", () => {
     expect(shellBody.getAttribute("data-collapsed")).toBe("false");
   });
 
+  // -------------------------------------------------------------------------
+  // R4 — the user's own prompt rendered in the transcript
+  // -------------------------------------------------------------------------
+
+  it("R4: a prompt transcript entry renders as a right-aligned user bubble", async () => {
+    // A session whose transcript carries the human's own typed prompt (R4).
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.transcript = [
+      {
+        source: "prompt",
+        turn: 1,
+        line: "please refactor the auth module",
+        ts: "2026-05-22T10:00:00+00:00",
+      },
+    ];
+    const store = makeStore({ authStatus: LOGGED_IN, sessions: { s1: slice } });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    // Open the detail view so the transcript renders.
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+
+    // The prompt bubble shows the typed text and is the labelled user prompt.
+    const bubble = screen.getByLabelText("Your prompt");
+    expect(bubble.textContent).toBe("please refactor the auth module");
+    expect(bubble.className).toContain("session-user");
+  });
+
+  // -------------------------------------------------------------------------
+  // P3 — bulk expand/collapse control
+  // -------------------------------------------------------------------------
+
+  it("P3: the detail header mounts Expand-all / Collapse-all controls", async () => {
+    const slice = makeSlice("s1", { title: "Refactor the auth module" });
+    slice.transcript = [
+      { source: "prompt", turn: 1, line: "do the thing", ts: "2026-05-22T10:00:00+00:00" },
+    ];
+    const store = makeStore({ authStatus: LOGGED_IN, sessions: { s1: slice } });
+    render(<SessionsRoute projectPath="/proj" store={store} />);
+    await flush();
+
+    fireEvent.click(screen.getByLabelText("Open session Refactor the auth module"));
+    expect(screen.getByLabelText("Expand all tool calls and reasoning")).toBeDefined();
+    expect(screen.getByLabelText("Collapse all tool calls and reasoning")).toBeDefined();
+  });
+
   it("R1: the collapsed bit is persisted to localStorage and survives a remount", async () => {
     localStorage.clear();
     const { unmount } = render(

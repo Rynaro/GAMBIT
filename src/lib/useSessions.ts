@@ -204,14 +204,26 @@ export interface UseSessionsResult {
  * `TranscriptEntry` types and drops the `null`s `serde` may emit.
  */
 function transcriptFromPersisted(entries: PersistedEntry[]): TranscriptEntry[] {
-  return entries.map((e) => ({
-    source: e.source === "stderr" ? "stderr" : "event",
-    turn: e.turn,
-    kind: e.kind ?? undefined,
-    parsed: e.parsed ?? undefined,
-    line: e.line,
-    ts: e.ts,
-  }));
+  return entries.map((e) => {
+    // R4: a `prompt` PersistedEntry (the user's typed turn prompt) maps to a
+    // `prompt` TranscriptEntry — the SAME shape `start` / `sendTurn` append
+    // live, so a reopened session does not duplicate or mis-render it.
+    const source: TranscriptEntry["source"] =
+      e.source === "stderr" ? "stderr" : e.source === "prompt" ? "prompt" : "event";
+    return {
+      source,
+      turn: e.turn,
+      kind: e.kind ?? undefined,
+      parsed: e.parsed ?? undefined,
+      line: e.line,
+      ts: e.ts,
+    };
+  });
+}
+
+/** Build a `prompt` transcript entry for a turn's typed user prompt (R4). */
+function promptEntry(turn: number, prompt: string): TranscriptEntry {
+  return { source: "prompt", turn, line: prompt, ts: new Date().toISOString() };
 }
 
 /**
@@ -595,7 +607,10 @@ export function useSessions(): UseSessionsResult {
         [info.sessionId]: {
           sessionId: info.sessionId,
           status: "turn-running",
-          transcript: [],
+          // R4: seed the transcript with the turn-1 prompt entry so the user's
+          // own ask heads the turn group. Rust appends the matching persisted
+          // entry in `run_turn`, so a reopen rebuilds the identical entry.
+          transcript: [promptEntry(1, params.firstPrompt)],
           sessionInfo: info,
           summary: null,
           turn: 1,
@@ -632,6 +647,10 @@ export function useSessions(): UseSessionsResult {
         ...s,
         status: "turn-running",
         turn: nextTurn,
+        // R4: append the typed prompt as a transcript entry at the new turn —
+        // it heads the turn group. Rust's `run_turn` appends the matching
+        // persisted entry so a reopen rebuilds the identical entry.
+        transcript: [...s.transcript, promptEntry(nextTurn, prompt)],
         // A fresh turn starts with empty live state — the prior turn's
         // streamed text / tool calls are now persisted entries.
         live: { ...EMPTY_LIVE_STATE, turn: nextTurn },

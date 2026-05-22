@@ -687,6 +687,15 @@ fn handle_from_record(record: &SessionRecord) -> SessionHandle {
 /// a terminal `result`, the crash/SIGKILL safety case), and flushes the FULL
 /// [`SessionRecord`] + `index.json` entry right before the
 /// `session-turn-complete` emit.
+///
+/// R4 — `prompt` is the human's typed prompt for this turn. A `PersistedEntry`
+/// for it is appended to `persist.transcript` here, BEFORE the reader tasks,
+/// so it lands ahead of the turn's `claude` output and survives a reopen. It
+/// is DELIBERATELY not emitted as a live event: the frontend already appends
+/// the matching live `prompt` `TranscriptEntry` on turn dispatch, so emitting
+/// here would double it. The persisted entry is purely for restart durability
+/// — `reopen` replaces the whole transcript via `transcriptFromPersisted`, so
+/// the live and reopened transcripts converge on the SAME `prompt` entry shape.
 #[allow(clippy::too_many_arguments)]
 fn run_turn(
     app: AppHandle,
@@ -697,6 +706,7 @@ fn run_turn(
     meta: SessionMeta,
     persist: PersistState,
     turn: u32,
+    prompt: &str,
 ) {
     let spawn_core::SpawnedChild {
         child,
@@ -705,6 +715,26 @@ fn run_turn(
     } = spawned;
 
     let session_id_str = session_id.to_string();
+
+    // R4 — append the user's typed prompt as a `prompt` PersistedEntry before
+    // the turn's `claude` output. It heads the turn group on a reopen and uses
+    // the SAME shape (`source: "prompt"`, `line` = prompt text) the frontend
+    // appends live, so a reopened transcript neither duplicates nor mis-renders.
+    {
+        let prompt_ts = chrono::Utc::now().to_rfc3339();
+        persist
+            .transcript
+            .lock()
+            .expect("transcript mutex poisoned")
+            .push(PersistedEntry {
+                source: "prompt".to_string(),
+                turn,
+                kind: None,
+                parsed: None,
+                line: prompt.to_string(),
+                ts: prompt_ts,
+            });
+    }
 
     // R6 — shared dual-finalize state.
     //   * `result_seen`  — set by the stdout reader on a terminal `result`.
@@ -1075,6 +1105,7 @@ pub async fn start_session(
         meta,
         persist,
         turn,
+        &params.first_prompt,
     );
 
     Ok(SessionInfo {
@@ -1206,6 +1237,7 @@ pub async fn send_turn(
         meta,
         persist,
         turn,
+        &prompt,
     );
 
     Ok(())
@@ -1832,6 +1864,58 @@ mod tests {
             "First",
             "an already-live session must not be clobbered by reopen"
         );
+    }
+
+    // --- R4: user-prompt transcript entry ------------------------------------
+
+    /// R4 — a `prompt` `PersistedEntry` (the human's typed turn prompt) is the
+    /// shape `run_turn` appends at turn start: `source: "prompt"`, the raw
+    /// prompt in `line`, and no `kind` / `parsed`.
+    #[test]
+    fn prompt_persisted_entry_has_prompt_source_and_carries_text() {
+        // Mirror the entry `run_turn` pushes for a turn's prompt.
+        let entry = PersistedEntry {
+            source: "prompt".to_string(),
+            turn: 2,
+            kind: None,
+            parsed: None,
+            line: "refactor the auth module".to_string(),
+            ts: "2026-05-22T12:00:00+00:00".to_string(),
+        };
+        assert_eq!(entry.source, "prompt");
+        assert_eq!(entry.line, "refactor the auth module");
+        assert!(entry.kind.is_none(), "a prompt entry carries no kind");
+        assert!(entry.parsed.is_none(), "a prompt entry carries no parsed event");
+    }
+
+    /// R4 — a `prompt` `PersistedEntry` round-trips through a `SessionRecord`'s
+    /// transcript: a session persisted with a prompt entry, then read back from
+    /// disk, still carries the typed prompt so a reopened session shows it.
+    #[test]
+    fn prompt_entry_round_trips_through_session_record() {
+        let mut record = sample_record();
+        // Append a turn-3 prompt entry, as `run_turn` does at turn start.
+        record.transcript.push(PersistedEntry {
+            source: "prompt".to_string(),
+            turn: 3,
+            kind: None,
+            parsed: None,
+            line: "and now write the changelog".to_string(),
+            ts: "2026-05-22T13:00:00+00:00".to_string(),
+        });
+
+        let json = serde_json::to_string(&record).expect("SessionRecord serialises");
+        let back: SessionRecord =
+            serde_json::from_str(&json).expect("SessionRecord deserialises");
+
+        let prompt = back
+            .transcript
+            .iter()
+            .find(|e| e.source == "prompt")
+            .expect("the prompt entry survives the round-trip");
+        assert_eq!(prompt.turn, 3);
+        assert_eq!(prompt.line, "and now write the changelog");
+        assert_eq!(record, back, "round-trip must be lossless");
     }
 
     /// The `session-turn-complete` payload serialises to the camelCase IPC
