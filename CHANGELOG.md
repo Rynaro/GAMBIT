@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] — 2026-05-22
+
+The fifth v0.3.x minor — liveness. Completes the v0.3.x session round.
+
+### Added
+
+- **Streaming output** — assistant text now renders token-by-token as the
+  Eidolon generates it, instead of appearing all at once at turn end. Driven by
+  claude-code's `stream_event` partial-message deltas, which the backend parsed
+  but the UI previously dropped.
+- **Live tool feedback** — a `ToolUseChip` shows a running spinner and a ticking
+  elapsed-time readout the moment a tool call starts, and resolves to ok/error
+  when its result lands. Subagent tool activity (cortex/TRANCE self-routed work,
+  tagged by `parent_tool_use_id`) renders nested and indented — the routing is
+  now visible as it happens.
+- The context-temperature gauge updates **live mid-turn** from incremental
+  `message_delta` usage, not only when a turn completes; the authoritative
+  `result` re-baselines it at turn end.
+
 ## [0.3.4] — 2026-05-22
 
 The fourth v0.3.x minor — the context-temperature gauge.
