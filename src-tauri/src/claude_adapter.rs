@@ -307,6 +307,32 @@ pub struct Usage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
+/// A single permission denial carried on the terminal `result` event.
+///
+/// S0 — when a claude-code turn requests a tool that is not pre-approved,
+/// headless mode silently denies the call: the turn still finishes, but the
+/// requested work never happened. claude-code reports each such block in the
+/// `result` event's `permission_denials` array; GAMBIT surfaces it on the
+/// result card so the denial is not invisible.
+///
+/// Deserialised from claude's snake_case wire (`tool_name` / `tool_use_id` /
+/// `tool_input`); serialised to the frontend as camelCase (`toolName` /
+/// `toolUseId` / `toolInput`) to match the TS `PermissionDenial` mirror — the
+/// same split `rename_all` the v0.3.6 `ContentBlock` fix established.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]
+pub struct PermissionDenial {
+    /// The name of the tool whose call was denied (e.g. `"Write"`, `"Bash"`).
+    #[serde(default)]
+    pub tool_name: String,
+    /// The `tool_use` id of the denied call.
+    #[serde(default)]
+    pub tool_use_id: String,
+    /// The tool input the denied call would have run — shape varies per tool.
+    #[serde(default)]
+    pub tool_input: serde_json::Value,
+}
+
 /// The cozy delta pre-extracted from a `stream_event`'s inner `event` (story
 /// S6/S7).
 ///
@@ -441,6 +467,9 @@ pub enum ParsedEvent {
         total_cost_usd: Option<f64>,
         /// Token-usage accounting for the turn.
         usage: Usage,
+        /// S0 — tool calls claude-code silently denied during the turn (a tool
+        /// not pre-approved in headless mode). Empty when nothing was denied.
+        permission_denials: Vec<PermissionDenial>,
     },
     /// A syntactically valid JSON line whose `type` we do not model — carries
     /// the raw line so nothing is silently dropped.
@@ -668,6 +697,8 @@ struct ResultLine {
     total_cost_usd: Option<f64>,
     #[serde(default)]
     usage: Usage,
+    #[serde(default)]
+    permission_denials: Vec<PermissionDenial>,
 }
 
 /// Parse one NDJSON output line into a typed [`ParsedEvent`].
@@ -752,6 +783,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                 duration_ms: r.duration_ms,
                 total_cost_usd: r.total_cost_usd,
                 usage: r.usage,
+                permission_denials: r.permission_denials,
             },
             Err(_) => unknown(line),
         },
@@ -1284,6 +1316,7 @@ mod tests {
                 duration_ms,
                 total_cost_usd,
                 usage,
+                permission_denials,
             } => {
                 assert_eq!(subtype.as_deref(), Some("success"));
                 assert_eq!(result.as_deref(), Some("all done"));
@@ -1294,9 +1327,74 @@ mod tests {
                 assert_eq!(total_cost_usd, Some(0.0123));
                 assert_eq!(usage.input_tokens, Some(1500));
                 assert_eq!(usage.output_tokens, Some(300));
+                // No `permission_denials` field on the line → empty vec.
+                assert!(permission_denials.is_empty());
             }
             other => panic!("expected Result, got {other:?}"),
         }
+    }
+
+    /// S0 — a `result` line carrying `permission_denials` parses each denial
+    /// with its `tool_name` / `tool_use_id` / `tool_input`.
+    #[test]
+    fn parse_line_result_with_permission_denials() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}},{"tool_name":"Bash","tool_use_id":"toolu_2","tool_input":{"command":"ls"}}]}"#;
+        match parse_line(line) {
+            ParsedEvent::Result {
+                permission_denials,
+                ..
+            } => {
+                assert_eq!(permission_denials.len(), 2);
+                assert_eq!(permission_denials[0].tool_name, "Write");
+                assert_eq!(permission_denials[0].tool_use_id, "toolu_1");
+                assert_eq!(
+                    permission_denials[0].tool_input.get("file_path"),
+                    Some(&serde_json::json!("/a"))
+                );
+                assert_eq!(permission_denials[1].tool_name, "Bash");
+            }
+            other => panic!("expected Result, got {other:?}"),
+        }
+    }
+
+    /// S0 — an empty `permission_denials: []` array yields an empty vec, same
+    /// as the field being absent (no regression to the normal result).
+    #[test]
+    fn parse_line_result_empty_permission_denials() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[]}"#;
+        match parse_line(line) {
+            ParsedEvent::Result {
+                permission_denials, ..
+            } => assert!(permission_denials.is_empty()),
+            other => panic!("expected Result, got {other:?}"),
+        }
+    }
+
+    /// S0 REGRESSION (mirrors the v0.3.6 camelCase regression test): each
+    /// denial's INNER fields must serialise as `toolName` / `toolUseId` /
+    /// `toolInput` — the `PermissionDenial` split `rename_all` — so the
+    /// frontend's `PermissionDenial` mirror reads them. The array itself rides
+    /// under `ParsedEvent::Result`'s field name, exactly like `total_cost_usd`.
+    #[test]
+    fn permission_denials_serialise_camelcase_for_the_frontend() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"usage":{},"permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_1","tool_input":{"file_path":"/a"}}]}"#;
+        let value = serde_json::to_value(parse_line(line)).expect("serialise");
+        let denials = value
+            .get("Result")
+            .and_then(|r| r.get("permission_denials"))
+            .and_then(|d| d.as_array())
+            .expect("Result.permission_denials array");
+        let d0 = &denials[0];
+        assert_eq!(d0.get("toolName").and_then(|v| v.as_str()), Some("Write"));
+        assert_eq!(
+            d0.get("toolUseId").and_then(|v| v.as_str()),
+            Some("toolu_1")
+        );
+        assert!(d0.get("toolInput").is_some(), "toolInput present");
+        assert!(
+            d0.get("tool_name").is_none(),
+            "must not serialise as `tool_name`"
+        );
     }
 
     /// A JSON line with an unrecognised `type` → `Unknown`, raw preserved.

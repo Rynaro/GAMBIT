@@ -507,6 +507,40 @@
   color: var(--text-secondary);
 }
 
+/* ---- S0: permission-denial notice on the result card ---- */
+.session-result-denials {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border-subtle) 65%);
+  background: color-mix(in srgb, var(--status-warn) 8%, var(--bg-surface) 92%);
+}
+
+.session-result-denials-glyph {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--status-warn);
+}
+
+.session-result-denials-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.session-result-denials-text strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.session-result-denials-text span {
+  color: var(--text-secondary);
+}
+
 /* ---- RawNdjsonToggle ---- */
 .session-raw {
   margin-top: var(--space-4);

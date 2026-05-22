@@ -1303,6 +1303,7 @@ function TranscriptRow({
           totalCostUsd={r.totalCostUsd ?? null}
           numTurns={r.numTurns ?? null}
           durationMs={r.durationMs ?? null}
+          permissionDenials={r.permissionDenials ?? []}
         />
       );
     }

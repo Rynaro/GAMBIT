@@ -69,6 +69,23 @@ export interface ContentBlock {
   isError?: boolean | null;
 }
 
+/**
+ * A single permission denial carried on the terminal `result` event.
+ *
+ * S0 — when a claude-code turn requests a tool that is not pre-approved,
+ * headless mode silently denies the call: the turn finishes, but the work
+ * never happened. `claude_adapter.rs`'s `PermissionDenial` carries a split
+ * `rename_all` — snake_case in from `claude`, camelCase out to this interface.
+ */
+export interface PermissionDenial {
+  /** The name of the denied tool (e.g. `"Write"` / `"Bash"`). */
+  toolName: string;
+  /** The `tool_use` id of the denied call. */
+  toolUseId: string;
+  /** The tool input the denied call would have run; shape varies per tool. */
+  toolInput?: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // claude_adapter.rs — the ParsedEvent union (externally-tagged)
 // ---------------------------------------------------------------------------
@@ -157,6 +174,11 @@ export interface ParsedResult {
     totalCostUsd?: number | null;
     /** Token-usage accounting for the turn. */
     usage: Usage;
+    /**
+     * S0 — tool calls claude-code silently denied during the turn (a tool not
+     * pre-approved in headless mode). Empty when nothing was denied.
+     */
+    permissionDenials: PermissionDenial[];
   };
 }
 

@@ -1870,6 +1870,7 @@ mod tests {
                 duration_ms: None,
                 total_cost_usd: None,
                 usage: Usage::default(),
+                permission_denials: Vec::new(),
             }),
             "result"
         );
