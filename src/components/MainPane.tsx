@@ -3,17 +3,17 @@
 // A RouteErrorBoundary keyed by activeRoute prevents route crashes from tearing
 // down the entire shell.
 
-import { useRouteContext } from "@/lib/RouteContext";
-import { RosterRoute } from "@/routes/RosterRoute";
-import { ProjectRoute } from "@/routes/ProjectRoute";
-import { McpStoreRoute } from "@/routes/McpStoreRoute";
-import { HarnessRoute } from "@/routes/HarnessRoute";
-import { DoctorRoute } from "@/routes/DoctorRoute";
-import { MethodologyRoute } from "@/routes/MethodologyRoute";
-import { SettingsRoute } from "@/routes/SettingsRoute";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
+import { useRouteContext } from "@/lib/RouteContext";
 import type { DoctorResult } from "@/lib/useDoctor";
 import type { UseMcpStoreResult } from "@/lib/useMcpStore";
+import { DoctorRoute } from "@/routes/DoctorRoute";
+import { HarnessRoute } from "@/routes/HarnessRoute";
+import { McpStoreRoute } from "@/routes/McpStoreRoute";
+import { MethodologyRoute } from "@/routes/MethodologyRoute";
+import { ProjectRoute } from "@/routes/ProjectRoute";
+import { RosterRoute } from "@/routes/RosterRoute";
+import { SettingsRoute } from "@/routes/SettingsRoute";
 
 // ---------------------------------------------------------------------------
 // RouteRenderer — maps activeRoute → component
@@ -28,7 +28,14 @@ interface RouteRendererProps {
   mcpStore: UseMcpStoreResult;
 }
 
-function RouteRenderer({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: RouteRendererProps) {
+function RouteRenderer({
+  projectPath,
+  onPickProject,
+  onClearProject,
+  onCheckUpgrades,
+  doctor,
+  mcpStore,
+}: RouteRendererProps) {
   const { activeRoute } = useRouteContext();
 
   switch (activeRoute) {
@@ -83,7 +90,14 @@ interface MainPaneProps {
   mcpStore: UseMcpStoreResult;
 }
 
-export function MainPane({ projectPath, onPickProject, onClearProject, onCheckUpgrades, doctor, mcpStore }: MainPaneProps) {
+export function MainPane({
+  projectPath,
+  onPickProject,
+  onClearProject,
+  onCheckUpgrades,
+  doctor,
+  mcpStore,
+}: MainPaneProps) {
   const { activeRoute } = useRouteContext();
 
   return (

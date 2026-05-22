@@ -16,13 +16,9 @@ export function RouteHeader({ title, subtitle, actions }: RouteHeaderProps) {
     <header className="route-header">
       <div className="route-header-text">
         <h1 className="route-header-title">{title}</h1>
-        {subtitle && (
-          <p className="route-header-subtitle">{subtitle}</p>
-        )}
+        {subtitle && <p className="route-header-subtitle">{subtitle}</p>}
       </div>
-      {actions && (
-        <div className="route-header-actions">{actions}</div>
-      )}
+      {actions && <div className="route-header-actions">{actions}</div>}
     </header>
   );
 }

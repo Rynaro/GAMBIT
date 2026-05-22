@@ -9,15 +9,11 @@
 //   source repo, installed_at. If sidecar manifest also found, show its extra
 //   fields (features, health) under a "Sidecar details" sub-section.
 
-import { useState, useEffect } from "react";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import { RouteHeader } from "@/components/RouteHeader";
+import { type McpEntry, findJunctionEntry, parseMcpLock } from "@/lib/parseMcpLock";
 import { getRoute } from "@/routes/index";
-import {
-  parseMcpLock,
-  findJunctionEntry,
-  type McpEntry,
-} from "@/lib/parseMcpLock";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,9 +71,7 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
       // --- FALLBACK: .eidolons/harness/manifest.json ---
       let sidecarData: HarnessSidecar | null = null;
       try {
-        const raw = await readTextFile(
-          `${projectPath}/.eidolons/harness/manifest.json`
-        );
+        const raw = await readTextFile(`${projectPath}/.eidolons/harness/manifest.json`);
         sidecarData = JSON.parse(raw) as HarnessSidecar;
       } catch {
         // sidecar absent — that's fine
@@ -106,7 +100,9 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
       if (!cancelled) setLoading(false);
     });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectPath]);
 
   // ------------------------------------------------------------------
@@ -118,9 +114,7 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
         <RouteHeader title={ROUTE.label} subtitle={ROUTE.subtitle} />
         <div className="route-empty">
           <p className="route-empty-heading">No project selected.</p>
-          <p className="route-empty-body">
-            Pick a project to see its Junction harness status.
-          </p>
+          <p className="route-empty-body">Pick a project to see its Junction harness status.</p>
         </div>
       </div>
     );
@@ -151,14 +145,15 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
             <p className="route-empty-body">
               The harness adds reasoning-step tracing to your sessions. Install it with:
             </p>
-            <span className="route-empty-note">
-              eidolons harness install
-            </span>
-            <p className="route-empty-body" style={{ marginTop: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
-              Checked{" "}
-              <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.mcp.lock</code>
-              {" "}and{" "}
-              <code style={{ fontFamily: "var(--font-mono)" }}>.eidolons/harness/manifest.json</code>
+            <span className="route-empty-note">eidolons harness install</span>
+            <p
+              className="route-empty-body"
+              style={{ marginTop: "8px", fontSize: "11px", color: "var(--text-muted)" }}
+            >
+              Checked <code style={{ fontFamily: "var(--font-mono)" }}>eidolons.mcp.lock</code> and{" "}
+              <code style={{ fontFamily: "var(--font-mono)" }}>
+                .eidolons/harness/manifest.json
+              </code>
             </p>
           </div>
         </div>
@@ -180,10 +175,7 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
       <div className="route-card">
         <p className="route-card-title">
           Junction status
-          <span
-            className="badge badge-ok"
-            style={{ marginLeft: "8px", verticalAlign: "middle" }}
-          >
+          <span className="badge badge-ok" style={{ marginLeft: "8px", verticalAlign: "middle" }}>
             registered
           </span>
         </p>
@@ -243,10 +235,13 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
                   <td>
                     <span
                       className={`badge ${
-                        health === "healthy" ? "badge-ok" :
-                        health === "degraded" ? "badge-warn" :
-                        health === "error" ? "badge-error" :
-                        "badge-muted"
+                        health === "healthy"
+                          ? "badge-ok"
+                          : health === "degraded"
+                            ? "badge-warn"
+                            : health === "error"
+                              ? "badge-error"
+                              : "badge-muted"
                       }`}
                     >
                       {health}
@@ -264,7 +259,9 @@ export function HarnessRoute({ projectPath }: HarnessRouteProps) {
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {features.map((f) => (
-                  <span key={f} className="badge badge-ok">{f}</span>
+                  <span key={f} className="badge badge-ok">
+                    {f}
+                  </span>
                 ))}
               </div>
             </>

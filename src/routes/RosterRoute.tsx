@@ -2,11 +2,11 @@
 // Reads from ~/.eidolons/nexus/roster/index.yaml via the Tauri fs plugin.
 // Falls back to an informational panel if the file is unavailable.
 
-import { useState, useEffect } from "react";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import { BaseDirectory } from "@tauri-apps/plugin-fs";
 import { RouteHeader } from "@/components/RouteHeader";
 import { getRoute } from "@/routes/index";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { BaseDirectory } from "@tauri-apps/plugin-fs";
+import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Minimal YAML line parser — extracts roster members from roster/index.yaml.
@@ -60,10 +60,14 @@ function parseRosterYaml(raw: string): RosterMember[] {
 
     // Parse sub-keys within a member (indented, no leading `-`)
     const statusMatch = line.match(/^\s+status\s*:\s*(.+)/);
-    if (statusMatch) { current.status = statusMatch[1].trim().replace(/^['"]|['"]$/g, ""); }
+    if (statusMatch) {
+      current.status = statusMatch[1].trim().replace(/^['"]|['"]$/g, "");
+    }
 
     const repoMatch = line.match(/^\s+repo\s*:\s*(.+)/);
-    if (repoMatch) { current.repo = repoMatch[1].trim().replace(/^['"]|['"]$/g, ""); }
+    if (repoMatch) {
+      current.repo = repoMatch[1].trim().replace(/^['"]|['"]$/g, "");
+    }
 
     const latestMatch = line.match(/^\s+latest\s*:\s*(.+)/);
     if (latestMatch) {
@@ -105,9 +109,7 @@ export function RosterRoute() {
         setMembers(parsed);
       } catch (err) {
         if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : String(err)
-        );
+        setError(err instanceof Error ? err.message : String(err));
         setMembers(null);
       } finally {
         if (!cancelled) setLoading(false);
@@ -115,7 +117,9 @@ export function RosterRoute() {
     }
 
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -138,11 +142,18 @@ export function RosterRoute() {
               Couldn't read the local roster. Maybe the kettle is louder than the wifi.
             </p>
             <p className="route-empty-body">
-              Run <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>eidolons install</code> first to populate the nexus cache.
+              Run{" "}
+              <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+                eidolons install
+              </code>{" "}
+              first to populate the nexus cache.
             </p>
             <span className="route-empty-note">{attemptedPath}</span>
             {error && (
-              <span className="route-empty-note" style={{ marginTop: "4px", color: "var(--status-error)" }}>
+              <span
+                className="route-empty-note"
+                style={{ marginTop: "4px", color: "var(--status-error)" }}
+              >
                 {error}
               </span>
             )}
@@ -189,7 +200,9 @@ export function RosterRoute() {
                 </td>
                 <td>
                   {m.status ? (
-                    <span className={`badge ${m.status === "stable" ? "badge-ok" : m.status === "in_construction" ? "badge-warn" : "badge-muted"}`}>
+                    <span
+                      className={`badge ${m.status === "stable" ? "badge-ok" : m.status === "in_construction" ? "badge-warn" : "badge-muted"}`}
+                    >
                       {m.status}
                     </span>
                   ) : (
@@ -197,11 +210,7 @@ export function RosterRoute() {
                   )}
                 </td>
                 <td className="mono">{m.latestVersion ?? "—"}</td>
-                <td className="mono">
-                  {m.repo ? (
-                    <span title={m.repo}>{m.repo}</span>
-                  ) : "—"}
-                </td>
+                <td className="mono">{m.repo ? <span title={m.repo}>{m.repo}</span> : "—"}</td>
               </tr>
             ))}
           </tbody>

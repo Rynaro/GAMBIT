@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { COMMANDS, GROUP_LABELS, resolveCommand } from "../../src/lib/commands";
 import type { CommandGroup } from "../../src/lib/commands";
 
@@ -85,9 +85,7 @@ describe("3-letter prefix label matching (containment)", () => {
   function topMatchForPrefix(prefix: string): string | undefined {
     const lower = prefix.toLowerCase();
     // First: exact prefix match on the label
-    const exact = COMMANDS.find((c) =>
-      c.label.toLowerCase().startsWith(lower),
-    );
+    const exact = COMMANDS.find((c) => c.label.toLowerCase().startsWith(lower));
     if (exact) return exact.label;
     // Fallback: contains
     return COMMANDS.find((c) => c.label.toLowerCase().includes(lower))?.label;
@@ -148,9 +146,7 @@ describe("resolveCommand", () => {
   });
 
   it("handles all nav destinations without throwing", () => {
-    const navIds = COMMANDS.filter((c) => c.group === "navigate").map(
-      (c) => c.id,
-    );
+    const navIds = COMMANDS.filter((c) => c.group === "navigate").map((c) => c.id);
     for (const id of navIds) {
       expect(() => resolveCommand(id)).not.toThrow();
     }

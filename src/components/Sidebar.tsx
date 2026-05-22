@@ -1,9 +1,9 @@
-import { Fragment } from "react";
+import { type RouteId, useRouteContext } from "@/lib/RouteContext";
 import { BRAND } from "@/lib/brand";
-import { isMacOS } from "@/lib/platform";
 import { basename } from "@/lib/pathUtils";
+import { isMacOS } from "@/lib/platform";
 import type { CommandPaletteState } from "@/lib/useCommandPalette";
-import { useRouteContext, type RouteId } from "@/lib/RouteContext";
+import { Fragment } from "react";
 
 const DESTINATIONS = [
   { id: "roster", label: "Roster" },
@@ -44,9 +44,7 @@ export function Sidebar({ palette, projectPath, onPickProject }: SidebarProps) {
             const isActive = activeRoute === dest.id;
             return (
               <Fragment key={dest.id}>
-                {dest.id === "settings" && (
-                  <li aria-hidden="true" className="sidebar-divider" />
-                )}
+                {dest.id === "settings" && <li aria-hidden="true" className="sidebar-divider" />}
                 <li>
                   <button
                     type="button"
@@ -82,11 +80,7 @@ export function Sidebar({ palette, projectPath, onPickProject }: SidebarProps) {
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            className="sidebar-pick-project"
-            onClick={onPickProject}
-          >
+          <button type="button" className="sidebar-pick-project" onClick={onPickProject}>
             Pick project…
           </button>
         )}

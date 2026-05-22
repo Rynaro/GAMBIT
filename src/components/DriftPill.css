@@ -14,9 +14,8 @@
   padding: 0 var(--space-6);
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--bg-surface);
-  transition:
-    background-color var(--duration-panel) var(--motion-entry),
-    border-color var(--duration-panel) var(--motion-entry);
+  transition: background-color var(--duration-panel) var(--motion-entry), border-color
+    var(--duration-panel) var(--motion-entry);
   user-select: none;
 }
 
@@ -39,24 +38,12 @@
   opacity: 1;
   pointer-events: auto;
   cursor: pointer;
-  background-color: color-mix(
-    in srgb,
-    var(--status-warn) 8%,
-    var(--bg-surface) 92%
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--status-warn) 25%,
-    var(--border-subtle) 75%
-  );
+  background-color: color-mix(in srgb, var(--status-warn) 8%, var(--bg-surface) 92%);
+  border-color: color-mix(in srgb, var(--status-warn) 25%, var(--border-subtle) 75%);
 }
 
 .drift-pill-header[data-state="drift"]:hover {
-  background-color: color-mix(
-    in srgb,
-    var(--status-warn) 14%,
-    var(--bg-surface) 86%
-  );
+  background-color: color-mix(in srgb, var(--status-warn) 14%, var(--bg-surface) 86%);
 }
 
 /* ---- Left cluster: dot + project name ---- */
@@ -117,9 +104,8 @@
   font-size: 11px;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition:
-    color var(--duration-panel) var(--motion-entry),
-    opacity var(--duration-panel) var(--motion-entry);
+  transition: color var(--duration-panel) var(--motion-entry), opacity var(--duration-panel)
+    var(--motion-entry);
 }
 
 .drift-pill-header[data-state="watching"] .drift-pill-right {

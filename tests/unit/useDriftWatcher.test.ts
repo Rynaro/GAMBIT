@@ -5,9 +5,9 @@
 //   @tauri-apps/api/event → vi.fn() for listen; exposes a test helper to
 //                           simulate emitting a drift-detected event.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
-import { useDriftWatcher, DRIFT_TTL_MS } from "@/lib/useDriftWatcher";
+import { DRIFT_TTL_MS, useDriftWatcher } from "@/lib/useDriftWatcher";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------- Tauri API mocks ----------
 
@@ -15,19 +15,23 @@ const mockInvoke = vi.fn().mockResolvedValue(undefined);
 const mockUnlisten = vi.fn();
 
 // Holds the registered drift-detected callback so tests can trigger it.
-let capturedDriftCallback: ((event: { payload: { path: string; timestamp: string } }) => void) | null = null;
+let capturedDriftCallback:
+  | ((event: { payload: { path: string; timestamp: string } }) => void)
+  | null = null;
 
-const mockListen = vi.fn().mockImplementation(
-  (
-    eventName: string,
-    handler: (event: { payload: { path: string; timestamp: string } }) => void
-  ) => {
-    if (eventName === "drift-detected") {
-      capturedDriftCallback = handler;
-    }
-    return Promise.resolve(mockUnlisten);
-  }
-);
+const mockListen = vi
+  .fn()
+  .mockImplementation(
+    (
+      eventName: string,
+      handler: (event: { payload: { path: string; timestamp: string } }) => void,
+    ) => {
+      if (eventName === "drift-detected") {
+        capturedDriftCallback = handler;
+      }
+      return Promise.resolve(mockUnlisten);
+    },
+  );
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
@@ -66,9 +70,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("transitions to watching when a path is provided and invoke resolves", async () => {
-    const { result } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     // Flush async microtasks (invoke + listen promises)
     await act(async () => {
@@ -84,9 +86,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("transitions to drift on drift-detected event emission", async () => {
-    const { result } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     await act(async () => {
       await Promise.resolve();
@@ -102,9 +102,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("auto-clears drift back to watching after DRIFT_TTL_MS", async () => {
-    const { result } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     await act(async () => {
       await Promise.resolve();
@@ -123,9 +121,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("click-to-clear: clearDrift() transitions drift → watching immediately", async () => {
-    const { result } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     await act(async () => {
       await Promise.resolve();
@@ -143,9 +139,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("clearDrift() is a no-op in watching state", async () => {
-    const { result } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     await act(async () => {
       await Promise.resolve();
@@ -162,9 +156,7 @@ describe("useDriftWatcher", () => {
   });
 
   it("calls stop_watching and unlisten on unmount", async () => {
-    const { result, unmount } = renderHook(() =>
-      useDriftWatcher("/Users/alice/my-project")
-    );
+    const { result, unmount } = renderHook(() => useDriftWatcher("/Users/alice/my-project"));
 
     await act(async () => {
       await Promise.resolve();

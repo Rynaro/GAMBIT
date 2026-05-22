@@ -90,8 +90,13 @@
 }
 
 @keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ---- Spinner (only while running) ---- */
@@ -106,7 +111,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---- Action buttons ---- */
@@ -118,10 +125,9 @@
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry),
-    border-color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry), border-color var(--duration-micro)
+    var(--motion-entry);
   background: none;
   flex-shrink: 0;
 }
@@ -187,30 +193,70 @@
    (standardised by ECMA-48 / ISO 6429). They intentionally use hard-coded
    hex values rather than design tokens — terminal colors are a display
    contract, not a theme decision. Do not replace these with var(--…). */
-.ansi-black-fg   { color: #4d4d4d; }
-.ansi-red-fg     { color: var(--status-error); }
-.ansi-green-fg   { color: var(--status-ok); }
-.ansi-yellow-fg  { color: var(--status-warn); }
-.ansi-blue-fg    { color: #7aa2f7; }
-.ansi-magenta-fg { color: #bb9af7; }
-.ansi-cyan-fg    { color: #7dcfff; }
-.ansi-white-fg   { color: var(--text-primary); }
+.ansi-black-fg {
+  color: #4d4d4d;
+}
+.ansi-red-fg {
+  color: var(--status-error);
+}
+.ansi-green-fg {
+  color: var(--status-ok);
+}
+.ansi-yellow-fg {
+  color: var(--status-warn);
+}
+.ansi-blue-fg {
+  color: #7aa2f7;
+}
+.ansi-magenta-fg {
+  color: #bb9af7;
+}
+.ansi-cyan-fg {
+  color: #7dcfff;
+}
+.ansi-white-fg {
+  color: var(--text-primary);
+}
 
 /* Bright variants */
-.ansi-bright-black-fg   { color: var(--text-muted); }
-.ansi-bright-red-fg     { color: #ff9e64; }
-.ansi-bright-green-fg   { color: #9ece6a; }
-.ansi-bright-yellow-fg  { color: #e0af68; }
-.ansi-bright-blue-fg    { color: #a9b1d6; }
-.ansi-bright-magenta-fg { color: #c0caf5; }
-.ansi-bright-cyan-fg    { color: #b4f9f8; }
-.ansi-bright-white-fg   { color: #ffffff; }
+.ansi-bright-black-fg {
+  color: var(--text-muted);
+}
+.ansi-bright-red-fg {
+  color: #ff9e64;
+}
+.ansi-bright-green-fg {
+  color: #9ece6a;
+}
+.ansi-bright-yellow-fg {
+  color: #e0af68;
+}
+.ansi-bright-blue-fg {
+  color: #a9b1d6;
+}
+.ansi-bright-magenta-fg {
+  color: #c0caf5;
+}
+.ansi-bright-cyan-fg {
+  color: #b4f9f8;
+}
+.ansi-bright-white-fg {
+  color: #ffffff;
+}
 
 /* Text decorations */
-.ansi-bold      { font-weight: 700; }
-.ansi-italic    { font-style: italic; }
-.ansi-underline { text-decoration: underline; }
-.ansi-dim       { opacity: 0.6; }
+.ansi-bold {
+  font-weight: 700;
+}
+.ansi-italic {
+  font-style: italic;
+}
+.ansi-underline {
+  text-decoration: underline;
+}
+.ansi-dim {
+  opacity: 0.6;
+}
 
 /* ---- Footer ---- */
 .log-pane-footer {

@@ -114,8 +114,13 @@
 }
 
 @keyframes mcp-status-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ---- Spinner ---- */
@@ -130,7 +135,9 @@
 }
 
 @keyframes mcp-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---- Action buttons ---- */
@@ -142,10 +149,9 @@
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    background-color var(--duration-micro) var(--motion-entry),
-    color var(--duration-micro) var(--motion-entry),
-    border-color var(--duration-micro) var(--motion-entry);
+  transition: background-color var(--duration-micro) var(--motion-entry), color
+    var(--duration-micro) var(--motion-entry), border-color var(--duration-micro)
+    var(--motion-entry);
   background: none;
   flex-shrink: 0;
 }

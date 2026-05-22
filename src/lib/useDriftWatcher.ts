@@ -6,11 +6,11 @@
 //   watching  — watcher running, no recent drift
 //   drift     — drift detected within the last 5 seconds
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { toast } from "sonner";
 import { basename } from "@/lib/pathUtils";
+import { invoke } from "@tauri-apps/api/core";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 export type DriftState = "idle" | "watching" | "drift";
 
@@ -24,9 +24,7 @@ export interface DriftWatcherResult {
 /** Drift auto-clears 5 seconds after the last event. */
 export const DRIFT_TTL_MS = 5_000;
 
-export function useDriftWatcher(
-  projectPath: string | null
-): DriftWatcherResult {
+export function useDriftWatcher(projectPath: string | null): DriftWatcherResult {
   const [state, setState] = useState<DriftState>("idle");
   const [lastEventAt, setLastEventAt] = useState<string | null>(null);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,7 +79,7 @@ export function useDriftWatcher(
           setState((prev) => {
             if (prev !== "drift") {
               const projBasename = projectPath
-                ? projectPath.split("/").filter(Boolean).pop() ?? projectPath
+                ? (projectPath.split("/").filter(Boolean).pop() ?? projectPath)
                 : null;
               toast.info("Drift detected", {
                 description: projBasename
@@ -97,7 +95,7 @@ export function useDriftWatcher(
           clearTimerRef.current = setTimeout(() => {
             if (active) setState("watching");
           }, DRIFT_TTL_MS);
-        }
+        },
       );
 
       if (!active) {
@@ -122,7 +120,7 @@ export function useDriftWatcher(
 
       // Stop the Rust-side watcher
       invoke("stop_watching").catch((err) =>
-        console.warn("[DriftWatcher] stop_watching failed:", err)
+        console.warn("[DriftWatcher] stop_watching failed:", err),
       );
 
       setState("idle");

@@ -16,17 +16,14 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { McpListEntry } from "../../src/lib/mcp.types";
 
 // ---------------------------------------------------------------------------
 // Fixture loading
 // ---------------------------------------------------------------------------
 
-const FIXTURE_PATH = join(
-  __dirname,
-  "../parsers/eidolons-mcp-list.fixture.json"
-);
+const FIXTURE_PATH = join(__dirname, "../parsers/eidolons-mcp-list.fixture.json");
 
 function loadFixture(): McpListEntry[] {
   const raw = readFileSync(FIXTURE_PATH, "utf-8");

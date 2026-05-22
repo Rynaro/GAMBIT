@@ -1,8 +1,8 @@
 // RouteContext.tsx — React context that exposes {activeRoute, setActiveRoute}
 // to any component in the tree without prop-drilling.
 
-import { createContext, useContext, type ReactNode } from "react";
-import { useRoute, type UseRouteResult, type RouteId } from "@/lib/useRoute";
+import { type RouteId, type UseRouteResult, useRoute } from "@/lib/useRoute";
+import { type ReactNode, createContext, useContext } from "react";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -20,11 +20,7 @@ interface RouteProviderProps {
 
 export function RouteProvider({ children }: RouteProviderProps) {
   const route = useRoute();
-  return (
-    <RouteContext.Provider value={route}>
-      {children}
-    </RouteContext.Provider>
-  );
+  return <RouteContext.Provider value={route}>{children}</RouteContext.Provider>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 // MarkdownView.tsx — Renders a markdown string using react-markdown + remark-gfm.
 // Applies GAMBIT design-token CSS classes. Strips YAML front-matter by default.
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
-import type { Components } from "react-markdown";
 import { stripFrontMatter } from "@/lib/stripFrontMatter";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
 import "./MarkdownView.css";
 
 // ---------------------------------------------------------------------------
@@ -72,14 +72,10 @@ const components: Components = {
   },
 
   // Pre (fenced code block wrapper)
-  pre: ({ children }) => (
-    <pre className="md-code-block">{children}</pre>
-  ),
+  pre: ({ children }) => <pre className="md-code-block">{children}</pre>,
 
   // Blockquote
-  blockquote: ({ children }) => (
-    <blockquote className="md-blockquote">{children}</blockquote>
-  ),
+  blockquote: ({ children }) => <blockquote className="md-blockquote">{children}</blockquote>,
 
   // Lists
   ul: ({ children }) => <ul className="md-ul">{children}</ul>,
@@ -104,10 +100,7 @@ const components: Components = {
 // MarkdownView
 // ---------------------------------------------------------------------------
 
-export function MarkdownView({
-  source,
-  stripFrontMatter: shouldStrip = true,
-}: MarkdownViewProps) {
+export function MarkdownView({ source, stripFrontMatter: shouldStrip = true }: MarkdownViewProps) {
   const rendered = shouldStrip ? stripFrontMatter(source) : source;
 
   return (

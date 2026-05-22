@@ -1,6 +1,6 @@
-import { defineConfig } from "vite";
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { resolve } from "path";
+import { defineConfig } from "vitest/config";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,7 +13,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx", "src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: [
+      "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+    ],
     setupFiles: [],
   },
   server: {

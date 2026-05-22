@@ -2,7 +2,7 @@
 // A class component is required by React's error boundary API.
 // Keyed by activeRoute in MainPane so navigation resets the error state.
 
-import { Component, type ReactNode, type ErrorInfo } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -37,8 +37,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
               {this.props.routeId
                 ? `The "${this.props.routeId}" route threw while rendering.`
                 : "The active route threw while rendering."}{" "}
-              Pick a different route from the sidebar, or fix the underlying
-              error and reload.
+              Pick a different route from the sidebar, or fix the underlying error and reload.
             </p>
             <pre
               className="route-empty-note"

@@ -44,11 +44,11 @@ export interface DoctorCheck {
 // Internals
 // ---------------------------------------------------------------------------
 
-const BANNER_RE       = /^[▸>]\s+eidolons doctor\b/;
-const SECTION_RE      = /^===\s+(.+?)\s+===\s*$/;
-const SUMMARY_OK_RE   = /^[✓]\s+All checks passed\.?\s*$/;
+const BANNER_RE = /^[▸>]\s+eidolons doctor\b/;
+const SECTION_RE = /^===\s+(.+?)\s+===\s*$/;
+const SUMMARY_OK_RE = /^[✓]\s+All checks passed\.?\s*$/;
 const SUMMARY_FAIL_RE = /^[!⚠]\s+\d+ issue/;
-const CHECK_ROW_RE    = /^\s{2,}([✓✗·!])\s+(.+?)\s*$/;
+const CHECK_ROW_RE = /^\s{2,}([✓✗·!])\s+(.+?)\s*$/;
 const UPGRADE_TRAILER_RE = /^\s{2,}[·!]\s+Run `eidolons upgrade`/;
 
 /** Strip ANSI escape sequences from a string. */
@@ -90,7 +90,10 @@ export function parseDoctorStderr(raw: string): DoctorCheck[] {
     // Category section heading: === Foo Bar ===
     const section = line.match(SECTION_RE);
     if (section) {
-      if (current) { checks.push(current); current = null; }
+      if (current) {
+        checks.push(current);
+        current = null;
+      }
       currentCategory = section[1].trim();
       continue;
     }
@@ -99,9 +102,7 @@ export function parseDoctorStderr(raw: string): DoctorCheck[] {
     // Attach as message continuation to the previous check if present.
     if (UPGRADE_TRAILER_RE.test(line)) {
       if (current) {
-        current.message = current.message
-          ? `${current.message}\n${line.trim()}`
-          : line.trim();
+        current.message = current.message ? `${current.message}\n${line.trim()}` : line.trim();
       }
       continue;
     }
@@ -113,7 +114,7 @@ export function parseDoctorStderr(raw: string): DoctorCheck[] {
       const [, glyph, name] = row;
       current = {
         index: checks.length + 1, // placeholder; corrected below
-        total: 0,                  // placeholder; corrected below
+        total: 0, // placeholder; corrected below
         category: currentCategory,
         name: name.trim(),
         status: glyphToStatus(glyph),
@@ -124,9 +125,7 @@ export function parseDoctorStderr(raw: string): DoctorCheck[] {
 
     // Indented continuation / detail line (no glyph at start).
     if (current && /^\s{2,}\S/.test(line)) {
-      current.message = current.message
-        ? `${current.message}\n${line.trim()}`
-        : line.trim();
+      current.message = current.message ? `${current.message}\n${line.trim()}` : line.trim();
     }
   }
 

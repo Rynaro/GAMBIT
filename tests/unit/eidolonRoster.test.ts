@@ -13,7 +13,7 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // --- Stub the Tauri fs plugin before importing the module under test. -------
 const readTextFileMock = vi.fn<(path: string) => Promise<string>>();
@@ -21,16 +21,9 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (path: string) => readTextFileMock(path),
 }));
 
-import {
-  parseMemberNames,
-  parseAgentMd,
-  readProjectEidolons,
-} from "../../src/lib/eidolonRoster";
+import { parseAgentMd, parseMemberNames, readProjectEidolons } from "../../src/lib/eidolonRoster";
 
-const FIXTURE_AGENT_MD = readFileSync(
-  join(__dirname, "../parsers/agent-md.fixture.md"),
-  "utf-8",
-);
+const FIXTURE_AGENT_MD = readFileSync(join(__dirname, "../parsers/agent-md.fixture.md"), "utf-8");
 
 // ---------------------------------------------------------------------------
 // parseMemberNames
@@ -43,7 +36,7 @@ describe("parseMemberNames", () => {
       "hosts:",
       "  wire: [claude-code]",
       "members:",
-      '  - name: atlas',
+      "  - name: atlas",
       '    version: "^1.5.3"',
       "  - name: spectra",
       '    version: "^4.3.3"',
@@ -61,7 +54,7 @@ describe("parseMemberNames", () => {
   });
 
   it("strips surrounding quotes from member names", () => {
-    const raw = 'members:\n  - name: "atlas"\n  - name: \'spectra\'\n';
+    const raw = "members:\n  - name: \"atlas\"\n  - name: 'spectra'\n";
     expect(parseMemberNames(raw)).toEqual(["atlas", "spectra"]);
   });
 });

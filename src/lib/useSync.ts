@@ -14,9 +14,9 @@
 //   Commands: start_sync    (projectPath: string) → void
 //             cancel_sync   ()                    → void
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
@@ -111,27 +111,24 @@ export function useSync(): SyncResult {
         ]);
       });
 
-      const unlistenComplete = await listen<CompletePayload>(
-        "sync-complete",
-        (ev) => {
-          const code = ev.payload.exitCode;
-          setExitCode(code);
-          setState(code === 0 ? "done" : "failed");
-          detachListeners();
+      const unlistenComplete = await listen<CompletePayload>("sync-complete", (ev) => {
+        const code = ev.payload.exitCode;
+        setExitCode(code);
+        setState(code === 0 ? "done" : "failed");
+        detachListeners();
 
-          const basename = path.split("/").filter(Boolean).pop() ?? path;
-          if (code === 0) {
-            toast.success("Sync complete", {
-              description: `${basename} · exit 0`,
-            });
-          } else {
-            toast.error("Sync failed", {
-              description: `exit ${code}`,
-              duration: Infinity,
-            });
-          }
+        const basename = path.split("/").filter(Boolean).pop() ?? path;
+        if (code === 0) {
+          toast.success("Sync complete", {
+            description: `${basename} · exit 0`,
+          });
+        } else {
+          toast.error("Sync failed", {
+            description: `exit ${code}`,
+            duration: Number.POSITIVE_INFINITY,
+          });
         }
-      );
+      });
 
       unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
 

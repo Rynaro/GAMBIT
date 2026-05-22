@@ -1,8 +1,8 @@
-import type { MouseEvent } from "react";
-import { Command } from "cmdk";
 import { COMMANDS, GROUP_LABELS, resolveCommand } from "@/lib/commands";
 import type { CommandGroup, CommandId } from "@/lib/commands";
 import type { CommandPaletteState } from "@/lib/useCommandPalette";
+import { Command } from "cmdk";
+import type { MouseEvent } from "react";
 import "./CommandPalette.css";
 
 const GROUPS: CommandGroup[] = ["navigate", "actions", "about"];
@@ -20,17 +20,8 @@ export function CommandPalette({ open, setOpen }: CommandPaletteState) {
   }
 
   return (
-    <div
-      className="palette-backdrop"
-      role="presentation"
-      onClick={handleBackdropClick}
-    >
-      <Command
-        className="palette-sheet"
-        role="dialog"
-        aria-label="GAMBIT command palette"
-        loop
-      >
+    <div className="palette-backdrop" role="presentation" onClick={handleBackdropClick}>
+      <Command className="palette-sheet" role="dialog" aria-label="GAMBIT command palette" loop>
         <div className="palette-input-row">
           <Command.Input
             className="palette-input"
@@ -40,9 +31,7 @@ export function CommandPalette({ open, setOpen }: CommandPaletteState) {
         </div>
 
         <Command.List className="palette-list">
-          <Command.Empty className="palette-empty">
-            No commands found.
-          </Command.Empty>
+          <Command.Empty className="palette-empty">No commands found.</Command.Empty>
 
           {GROUPS.map((group) => {
             const items = COMMANDS.filter((c) => c.group === group);
@@ -50,11 +39,7 @@ export function CommandPalette({ open, setOpen }: CommandPaletteState) {
             return (
               <Command.Group
                 key={group}
-                heading={
-                  <span className="palette-group-label">
-                    {GROUP_LABELS[group]}
-                  </span>
-                }
+                heading={<span className="palette-group-label">{GROUP_LABELS[group]}</span>}
               >
                 {items.map((cmd) => (
                   <Command.Item

@@ -17,11 +17,11 @@
 // The hook parses stderr lines incrementally with parseDoctorStderr so the
 // dashboard can render checks as they stream rather than waiting for complete.
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { parseDoctorStderr, type DoctorCheck } from "./parseDoctorStderr";
+import { type DoctorCheck, parseDoctorStderr } from "./parseDoctorStderr";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,9 +101,7 @@ export function useDoctor(): DoctorResult {
       // the full combined output. Check rows are on stdout; banner + summary
       // are on stderr.
       const appendLine = (text: string) => {
-        rawStderrRef.current = rawStderrRef.current
-          ? `${rawStderrRef.current}\n${text}`
-          : text;
+        rawStderrRef.current = rawStderrRef.current ? `${rawStderrRef.current}\n${text}` : text;
         setRawStderr(rawStderrRef.current);
         // Re-parse on every line for incremental dashboard updates.
         setChecks(parseDoctorStderr(rawStderrRef.current));
@@ -117,40 +115,34 @@ export function useDoctor(): DoctorResult {
         appendLine(ev.payload.line);
       });
 
-      const unlistenComplete = await listen<CompletePayload>(
-        "doctor-complete",
-        (ev) => {
-          const code = ev.payload.exitCode;
-          setExitCode(code);
-          // Final parse to ensure we didn't miss anything.
-          const finalChecks = parseDoctorStderr(rawStderrRef.current);
-          setChecks(finalChecks);
-          // doctor exits 1 when there are errors, 0 when all pass.
-          // Both are valid "done" states from the UI perspective — the checks
-          // themselves carry the pass/fail semantics.
-          setState(code === -2 ? "cancelled" : "done");
-          detachListeners();
+      const unlistenComplete = await listen<CompletePayload>("doctor-complete", (ev) => {
+        const code = ev.payload.exitCode;
+        setExitCode(code);
+        // Final parse to ensure we didn't miss anything.
+        const finalChecks = parseDoctorStderr(rawStderrRef.current);
+        setChecks(finalChecks);
+        // doctor exits 1 when there are errors, 0 when all pass.
+        // Both are valid "done" states from the UI perspective — the checks
+        // themselves carry the pass/fail semantics.
+        setState(code === -2 ? "cancelled" : "done");
+        detachListeners();
 
-          if (code === -2) {
-            toast.info("Doctor cancelled");
-          } else if (code === 0 || code !== null) {
-            const failedCount = finalChecks.filter(c => c.status === "fail").length;
-            const warnCount = finalChecks.filter(c => c.status === "warn").length;
-            if (failedCount > 0) {
-              toast.error(
-                `Doctor found ${failedCount} failed check${failedCount > 1 ? "s" : ""}`,
-                { duration: Infinity },
-              );
-            } else if (warnCount > 0) {
-              toast.info(
-                `Doctor found ${warnCount} warning${warnCount > 1 ? "s" : ""}`,
-              );
-            } else {
-              toast.success(`Doctor passed all ${finalChecks.length} checks`);
-            }
+        if (code === -2) {
+          toast.info("Doctor cancelled");
+        } else if (code === 0 || code !== null) {
+          const failedCount = finalChecks.filter((c) => c.status === "fail").length;
+          const warnCount = finalChecks.filter((c) => c.status === "warn").length;
+          if (failedCount > 0) {
+            toast.error(`Doctor found ${failedCount} failed check${failedCount > 1 ? "s" : ""}`, {
+              duration: Number.POSITIVE_INFINITY,
+            });
+          } else if (warnCount > 0) {
+            toast.info(`Doctor found ${warnCount} warning${warnCount > 1 ? "s" : ""}`);
+          } else {
+            toast.success(`Doctor passed all ${finalChecks.length} checks`);
           }
-        },
-      );
+        }
+      });
 
       unlistenRefs.current = [unlistenStdout, unlistenStderr, unlistenComplete];
 

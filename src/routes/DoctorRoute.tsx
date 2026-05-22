@@ -8,9 +8,9 @@
 // duplicate localStorage read at mount. Matches the prop pattern of all other
 // routes.
 
-import { useState } from "react";
-import type { DoctorResult } from "@/lib/useDoctor";
 import { DoctorDashboard } from "@/components/DoctorDashboard";
+import type { DoctorResult } from "@/lib/useDoctor";
+import { useState } from "react";
 
 interface DoctorRouteProps {
   projectPath: string | null;
@@ -81,10 +81,7 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
               <span
                 style={{
                   marginLeft: "var(--space-3)",
-                  color:
-                    doctor.exitCode === 0
-                      ? "var(--status-ok)"
-                      : "var(--status-error)",
+                  color: doctor.exitCode === 0 ? "var(--status-ok)" : "var(--status-error)",
                 }}
               >
                 exit {doctor.exitCode}
@@ -94,8 +91,8 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
         )}
 
         {/* Run / Cancel button */}
-        {hasProject && (
-          isRunning ? (
+        {hasProject &&
+          (isRunning ? (
             <button
               type="button"
               className="doctor-cancel-btn"
@@ -113,8 +110,7 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
             >
               Run checks
             </button>
-          )
-        )}
+          ))}
       </div>
 
       {/* Main content area */}
@@ -133,10 +129,7 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
               margin: "0 auto",
             }}
           >
-            <span
-              style={{ fontSize: "34px", lineHeight: 1 }}
-              aria-hidden="true"
-            >
+            <span style={{ fontSize: "34px", lineHeight: 1 }} aria-hidden="true">
               ⬡
             </span>
             <h2
@@ -156,9 +149,8 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
                 lineHeight: 1.55,
               }}
             >
-              Pick a project folder from the sidebar to run doctor checks. The
-              dashboard will surface all 9 Eidolon health checks once a project
-              is loaded.
+              Pick a project folder from the sidebar to run doctor checks. The dashboard will
+              surface all 9 Eidolon health checks once a project is loaded.
             </p>
           </div>
         ) : doctor.state === "idle" && doctor.checks.length === 0 ? (
@@ -175,10 +167,7 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
               margin: "0 auto",
             }}
           >
-            <span
-              style={{ fontSize: "34px", lineHeight: 1 }}
-              aria-hidden="true"
-            >
+            <span style={{ fontSize: "34px", lineHeight: 1 }} aria-hidden="true">
               ✦
             </span>
             <h2
@@ -198,9 +187,9 @@ export function DoctorRoute({ projectPath, doctor }: DoctorRouteProps) {
                 lineHeight: 1.55,
               }}
             >
-              Press <strong>Run checks</strong> to analyse your project's
-              Eidolon installation across 9 health checks — from lock files and
-              host wiring to cache hygiene and pending upgrades.
+              Press <strong>Run checks</strong> to analyse your project's Eidolon installation
+              across 9 health checks — from lock files and host wiring to cache hygiene and pending
+              upgrades.
             </p>
             <button
               type="button"

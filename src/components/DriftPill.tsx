@@ -12,10 +12,7 @@
 import "./DriftPill.css";
 import type { DriftWatcherResult } from "@/lib/useDriftWatcher";
 
-type Props = Pick<
-  DriftWatcherResult,
-  "state" | "projectBasename" | "clearDrift"
->;
+type Props = Pick<DriftWatcherResult, "state" | "projectBasename" | "clearDrift">;
 
 export function DriftPill({ state, projectBasename, clearDrift }: Props) {
   function handleClick() {
@@ -51,9 +48,7 @@ export function DriftPill({ state, projectBasename, clearDrift }: Props) {
     >
       <div className="drift-pill-left">
         <span className="drift-pill-dot" aria-hidden="true" />
-        <span className="drift-pill-basename">
-          {projectBasename ?? ""}
-        </span>
+        <span className="drift-pill-basename">{projectBasename ?? ""}</span>
       </div>
 
       <span className="drift-pill-right">

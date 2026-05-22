@@ -45,22 +45,32 @@ export interface Command {
 
 export const COMMANDS: Command[] = [
   // Navigate group
-  { id: "nav:roster",      group: "navigate", label: "Roster" },
-  { id: "nav:project",     group: "navigate", label: "Project" },
-  { id: "nav:mcp-store",   group: "navigate", label: "MCP Store" },
-  { id: "nav:harness",     group: "navigate", label: "Harness" },
-  { id: "nav:doctor",      group: "navigate", label: "Doctor" },
+  { id: "nav:roster", group: "navigate", label: "Roster" },
+  { id: "nav:project", group: "navigate", label: "Project" },
+  { id: "nav:mcp-store", group: "navigate", label: "MCP Store" },
+  { id: "nav:harness", group: "navigate", label: "Harness" },
+  { id: "nav:doctor", group: "navigate", label: "Doctor" },
   { id: "nav:methodology", group: "navigate", label: "Methodology" },
-  { id: "nav:settings",    group: "navigate", label: "Settings" },
+  { id: "nav:settings", group: "navigate", label: "Settings" },
 
   // Actions group
-  { id: "action:sync",        group: "actions",  label: "Sync project",       description: "Run eidolons sync" },
-  { id: "action:doctor",      group: "actions",  label: "Doctor",             description: "Run eidolons doctor" },
-  { id: "action:upgrades",    group: "actions",  label: "Check upgrades",     description: "Run eidolons upgrade --check" },
-  { id: "action:mcp-refresh", group: "actions",  label: "Refresh MCP Store",  description: "Reload eidolons mcp list" },
+  { id: "action:sync", group: "actions", label: "Sync project", description: "Run eidolons sync" },
+  { id: "action:doctor", group: "actions", label: "Doctor", description: "Run eidolons doctor" },
+  {
+    id: "action:upgrades",
+    group: "actions",
+    label: "Check upgrades",
+    description: "Run eidolons upgrade --check",
+  },
+  {
+    id: "action:mcp-refresh",
+    group: "actions",
+    label: "Refresh MCP Store",
+    description: "Reload eidolons mcp list",
+  },
 
   // About group
-  { id: "about:gambit",    group: "about",    label: `About ${BRAND.name}`, description: BRAND.tagline },
+  { id: "about:gambit", group: "about", label: `About ${BRAND.name}`, description: BRAND.tagline },
 ];
 
 // ---------------------------------------------------------------------------
@@ -165,12 +175,7 @@ export function resolveCommand(id: CommandId, closePalette?: () => void): void {
   }
 
   if (id === "about:gambit") {
-    console.info(
-      "[palette] about →",
-      BRAND.tagline,
-      "|",
-      FF_LINEAGE,
-    );
+    console.info("[palette] about →", BRAND.tagline, "|", FF_LINEAGE);
     return;
   }
 }

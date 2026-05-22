@@ -28,9 +28,9 @@
 // throw — that member is returned with empty identity fields (matching how
 // the rest of the app degrades on partial data, e.g. HarnessRoute).
 
+import type { ProjectEidolon } from "@/lib/eidolon.types";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { parse as parseYaml } from "yaml";
-import type { ProjectEidolon } from "@/lib/eidolon.types";
 
 // ---------------------------------------------------------------------------
 // eidolons.yaml — members list
@@ -166,9 +166,7 @@ export function parseAgentMd(
  * with empty identity fields rather than aborting the whole roster. If
  * `eidolons.yaml` itself is missing/unreadable, returns `[]`.
  */
-export async function readProjectEidolons(
-  projectPath: string,
-): Promise<ProjectEidolon[]> {
+export async function readProjectEidolons(projectPath: string): Promise<ProjectEidolon[]> {
   let memberNames: string[];
   try {
     const manifest = await readTextFile(`${projectPath}/eidolons.yaml`);

@@ -30,6 +30,8 @@ export function parseAnsi(line: string): AnsiToken[] {
 
   return spans.map((span) => ({
     text: span.content,
-    class: span.classes ?? "",
+    // `use_classes: true` makes anser emit a `.classes` string; the bundled
+    // `AnserJsonEntry` type does not declare it, so narrow it explicitly.
+    class: (span as { classes?: string }).classes ?? "",
   }));
 }

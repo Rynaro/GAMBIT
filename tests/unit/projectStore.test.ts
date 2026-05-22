@@ -1,12 +1,8 @@
 // projectStore.test.ts — unit tests for the localStorage project-path helpers.
 // Environment: jsdom (localStorage is available).
 
-import { describe, it, expect, beforeEach } from "vitest";
-import {
-  getProjectPath,
-  setProjectPath,
-  clearProjectPath,
-} from "@/lib/projectStore";
+import { clearProjectPath, getProjectPath, setProjectPath } from "@/lib/projectStore";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // Clear localStorage before each test to guarantee isolation.
 beforeEach(() => {
